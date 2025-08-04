@@ -2,7 +2,7 @@
 #define _MUI_CLASSES_LIST_H
 
 /*
-    Copyright © 2002-2013, The AROS Development Team. All rights reserved.
+    Copyright Â© 2002-2013, The AROS Development Team. All rights reserved.
     $Id$
 */
 

@@ -2,7 +2,7 @@
 #define _LOCALE_H_
 
 /*
-    Copyright © 1995-2020, The AROS Development Team. All rights reserved.
+    Copyright Â© 1995-2020, The AROS Development Team. All rights reserved.
 */
 
 #include <exec/types.h>

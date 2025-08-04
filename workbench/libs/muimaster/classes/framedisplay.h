@@ -2,7 +2,7 @@
 #define _MUI_CLASSES_FRAMEDISPLAY_H
 
 /*
-    Copyright © 2003, The AROS Development Team. All rights reserved.
+    Copyright Â© 2003, The AROS Development Team. All rights reserved.
     $Id$
 */
 

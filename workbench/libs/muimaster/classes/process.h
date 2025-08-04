@@ -2,7 +2,7 @@
 #define _MUI_CLASSES_PROCESS_H
 
 /*
-    Copyright © 2012, The AROS Development Team. All rights reserved.
+    Copyright Â© 2012, The AROS Development Team. All rights reserved.
     $Id$
 */
 

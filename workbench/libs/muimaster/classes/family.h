@@ -2,8 +2,8 @@
 #define _CLASSES_FAMILY_H
 
 /* 
-    Copyright © 1999, David Le Corfec.
-    Copyright © 2002-2012, The AROS Development Team.
+    Copyright Â© 1999, David Le Corfec.
+    Copyright Â© 2002-2012, The AROS Development Team.
     All rights reserved.
 
     $Id$

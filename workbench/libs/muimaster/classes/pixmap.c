@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2011, Thore Böckelmann. All rights reserved.
+    Copyright (C) 2011, Thore BÃ¶ckelmann. All rights reserved.
     Copyright (C) 2012, The AROS Development Team. All rights reserved.
 */
 

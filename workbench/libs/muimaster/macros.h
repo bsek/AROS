@@ -2,13 +2,16 @@
 #define _MUI_MACROS_H
 
 /*
-    Copyright © 2002-2014, The AROS Development Team. All rights reserved.
+    Copyright Â© 2002-2014, The AROS Development Team. All rights reserved.
     $Id$
 
     Macros available in original MUI and also some additional ones.
 */
 
 /* Some nice macrodefinitions for creating your object tree */
+#define PanelObject         MUIOBJMACRO_START(MUIC_Panel)
+#define HPanel              MUIOBJMACRO_START(MUIC_Panel)
+#define VPanel              MUIOBJMACRO_START(MUIC_Panel)
 #define MenustripObject     MUIOBJMACRO_START(MUIC_Menustrip)
 #define MenuObject          MUIOBJMACRO_START(MUIC_Menu)
 #define MenuObjectT(name)   MUIOBJMACRO_START(MUIC_Menu), MUIA_Menu_Title, name

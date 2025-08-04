@@ -28,7 +28,7 @@ BOOL init_gui(void)
     app = ApplicationObject,
               MUIA_Application_Title      , (IPTR) "VHGroup",
               MUIA_Application_Version    , (IPTR) "$VER: VHGroup 0.1 (14.01.03)",
-              MUIA_Application_Copyright  , (IPTR) "© 2003-2011, The AROS Development Team",
+              MUIA_Application_Copyright  , (IPTR) "Â© 2003-2011, The AROS Development Team",
               MUIA_Application_Author     , (IPTR) "The AROS Development Team",
               MUIA_Application_Description, (IPTR) "Layout with VGroup + HGroup",
               MUIA_Application_Base       , (IPTR) "VGroup",
@@ -46,7 +46,7 @@ BOOL init_gui(void)
                       /*
                           Layout: VGroup + HGroup for a more complex layout
 
-                          | Button 1.1 |  | Button 1.2 |  | Button 1.3 |
+                          | Button 1.1 |  | Button 1.2 |Â  | Button 1.3 |
                           | Button 2.1 |  | Button 2.2 |  | Button 2.3 |
                           | Button 3.1 |  | Button 3.2 |  | Button 3.3 |
                       */

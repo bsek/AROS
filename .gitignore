@@ -17,6 +17,9 @@
 /.externalToolBuilders
 /autom4te.cache
 /.vscode
+/.zed/ 
+/.clangd/
+/.cache/
 
 # /arch/.unmaintained/amiga/workbench/hidds/graphics/intuition/
 /arch/.unmaintained/amiga/workbench/hidds/graphics/intuition/*.bak

@@ -1,0 +1,163 @@
+# AROS .clangd Configuration Template
+#
+# This is a template file for configuring clangd with AROS cross-compilation.
+# Copy this to .clangd and customize the paths below for your build environment.
+#
+# Variables to customize:
+# - AROS_BUILD_DIR: Your AROS build directory (e.g., /home/user/src/abiv1)
+# - AROS_TOOLCHAIN_DIR: Your AROS toolchain directory (e.g., /home/user/src/abiv1-toolchain)
+# - AROS_TARGET_ARCH: Target architecture (e.g., linux-x86_64)
+#
+# Usage:
+# 1. Copy this file to .clangd
+# 2. Replace the placeholder paths with your actual build paths
+# 3. Adjust target architecture if needed
+
+CompileFlags:
+  # Remove problematic GCC-specific flags that clangd doesn't understand
+  Remove:
+    - "-mcmodel=large"
+    - "-mno-red-zone"
+    - "-mno-ms-bitfields"
+    - "-fno-omit-frame-pointer"
+    - "-fno-common"
+    - "--sysroot"
+    - "-Wno-pointer-sign"
+    - "-Wno-parentheses"
+
+  # Add essential compiler flags for AROS
+  Add:
+    # Target architecture - adjust for your target
+    - "-target"
+    - "x86_64-unknown-linux-gnu"
+
+    # Essential AROS defines
+    - "-D__AROS__"
+    - "-DAROS_BUILD_TYPE=AROS_BUILD_TYPE_PERSONAL"
+    - "-D__STDC_LIMIT_MACROS"
+    - "-D__STDC_FORMAT_MACROS"
+    - "-D__STDC_CONSTANT_MACROS"
+    - "-D_GNU_SOURCE"
+
+    # Source tree includes (relative paths from AROS source root)
+    - "-Icompiler/include"
+    - "-Icompiler/include/aros"
+    - "-Icompiler/include/exec"
+    - "-Icompiler/include/proto"
+    - "-Icompiler/include/inline"
+    - "-Icompiler/include/defines"
+    - "-Icompiler/include/clib"
+    - "-Icompiler/include/libraries"
+    - "-Icompiler/include/devices"
+    - "-Icompiler/include/resources"
+    - "-Icompiler/include/graphics"
+    - "-Icompiler/include/intuition"
+    - "-Icompiler/include/utility"
+    - "-Icompiler/include/workbench"
+    - "-Icompiler/include/dos"
+    - "-Icompiler/include/prefs"
+    - "-Icompiler/include/gadgets"
+    - "-Icompiler/include/datatypes"
+    - "-Icompiler/include/hardware"
+    - "-Icompiler/include/SDI"
+
+    # TODO: CUSTOMIZE THESE PATHS FOR YOUR BUILD ENVIRONMENT
+    # Generated includes from build directory
+    # Replace ${AROS_BUILD_DIR} with your actual build directory path
+    # Replace ${AROS_TARGET_ARCH} with your target (e.g., linux-x86_64)
+
+    # Main sysroot includes
+    - "-I${AROS_BUILD_DIR}/bin/${AROS_TARGET_ARCH}/AROS/Developer/include"
+    - "-I${AROS_BUILD_DIR}/bin/${AROS_TARGET_ARCH}/AROS/Developer/include/aros"
+    - "-I${AROS_BUILD_DIR}/bin/${AROS_TARGET_ARCH}/AROS/Developer/include/exec"
+    - "-I${AROS_BUILD_DIR}/bin/${AROS_TARGET_ARCH}/AROS/Developer/include/proto"
+    - "-I${AROS_BUILD_DIR}/bin/${AROS_TARGET_ARCH}/AROS/Developer/include/inline"
+    - "-I${AROS_BUILD_DIR}/bin/${AROS_TARGET_ARCH}/AROS/Developer/include/defines"
+    - "-I${AROS_BUILD_DIR}/bin/${AROS_TARGET_ARCH}/AROS/Developer/include/clib"
+    - "-I${AROS_BUILD_DIR}/bin/${AROS_TARGET_ARCH}/AROS/Developer/include/libraries"
+    - "-I${AROS_BUILD_DIR}/bin/${AROS_TARGET_ARCH}/AROS/Developer/include/devices"
+    - "-I${AROS_BUILD_DIR}/bin/${AROS_TARGET_ARCH}/AROS/Developer/include/resources"
+    - "-I${AROS_BUILD_DIR}/bin/${AROS_TARGET_ARCH}/AROS/Developer/include/graphics"
+    - "-I${AROS_BUILD_DIR}/bin/${AROS_TARGET_ARCH}/AROS/Developer/include/intuition"
+    - "-I${AROS_BUILD_DIR}/bin/${AROS_TARGET_ARCH}/AROS/Developer/include/utility"
+    - "-I${AROS_BUILD_DIR}/bin/${AROS_TARGET_ARCH}/AROS/Developer/include/workbench"
+    - "-I${AROS_BUILD_DIR}/bin/${AROS_TARGET_ARCH}/AROS/Developer/include/dos"
+    - "-I${AROS_BUILD_DIR}/bin/${AROS_TARGET_ARCH}/AROS/Developer/include/prefs"
+    - "-I${AROS_BUILD_DIR}/bin/${AROS_TARGET_ARCH}/AROS/Developer/include/gadgets"
+    - "-I${AROS_BUILD_DIR}/bin/${AROS_TARGET_ARCH}/AROS/Developer/include/datatypes"
+    - "-I${AROS_BUILD_DIR}/bin/${AROS_TARGET_ARCH}/AROS/Developer/include/hardware"
+    - "-I${AROS_BUILD_DIR}/bin/${AROS_TARGET_ARCH}/AROS/Developer/include/SDI"
+
+    # Generated config and include paths
+    - "-I${AROS_BUILD_DIR}/bin/${AROS_TARGET_ARCH}/gen/config"
+    - "-I${AROS_BUILD_DIR}/bin/${AROS_TARGET_ARCH}/gen/include"
+
+    # Standard C library compatibility for host system
+    - "-isystem"
+    - "/usr/include"
+    - "-isystem"
+    - "/usr/include/x86_64-linux-gnu"
+
+    # Additional common includes that might be needed
+    - "-I."
+    - "-I.."
+
+# Diagnostics configuration
+Diagnostics:
+  # Suppress common AROS-specific warnings that clangd might not understand
+  Suppress:
+    - "unknown-pragmas"
+    - "gnu-statement-expression"
+    - "gnu-zero-variadic-macro-arguments"
+    - "deprecated-declarations"
+
+  # ClangTidy configuration
+  ClangTidy:
+    Add:
+      - "readability-*"
+      - "bugprone-*"
+      - "performance-*"
+    Remove:
+      - "readability-magic-numbers"
+      - "readability-function-cognitive-complexity"
+      - "readability-identifier-length"
+
+# Index configuration for better performance
+Index:
+  # Skip indexing standard library to improve performance
+  StandardLibrary: No
+
+  # Background indexing priority
+  Background: Low
+
+# Completion configuration
+Completion:
+  # Enable all-scopes completion for better AROS API discovery
+  AllScopes: Yes
+
+---
+
+# INSTRUCTIONS FOR CUSTOMIZATION:
+#
+# 1. Replace ${AROS_BUILD_DIR} with your actual AROS build directory
+#    Example: /home/username/src/abiv1
+#
+# 2. Replace ${AROS_TARGET_ARCH} with your target architecture
+#    Common values: linux-x86_64, pc-i386, pc-x86_64
+#
+# 3. If you have a different toolchain location, you may need to add
+#    additional include paths for the cross-compiler headers
+#
+# 4. For different target architectures, adjust the "-target" flag
+#    Examples:
+#    - For i386: "-target", "i386-unknown-linux-gnu"
+#    - For ARM: "-target", "arm-unknown-linux-gnu"
+#
+# 5. If you're working on specific subsystems (like Zune/MUI), you may
+#    want to add additional include paths for those specific components
+#
+# Example customized paths for a typical setup:
+# - Build dir: /home/user/src/abiv1
+# - Target: linux-x86_64
+# - Replace: ${AROS_BUILD_DIR} → /home/user/src/abiv1
+# - Replace: ${AROS_TARGET_ARCH} → linux-x86_64

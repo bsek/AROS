@@ -31,7 +31,7 @@ LONG xget(Object * obj, ULONG attr);
 
 #define getstring(obj) (char *) xget(obj, MUIA_String_Contents)
 
-#define SimpleText(text) TextObject, MUIA_Text_Contents, (IPTR) text, End
+#define SimpleText(text) TextObject, MUIA_Text_Contents, (IPTR) (text), End
 
 
 #ifndef __AROS__

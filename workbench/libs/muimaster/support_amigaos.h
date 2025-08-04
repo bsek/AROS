@@ -50,6 +50,8 @@
 #define ZUNE_BUILTIN_SCROLLGROUP 1
 #define ZUNE_BUILTIN_SETTINGSGROUP 1
 #define ZUNE_BUILTIN_VIRTGROUP 1
+#define ZUNE_BUILTIN_PANEL 1
+
 
 #ifdef __SASC
 #include <dos.h>
