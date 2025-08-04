@@ -2,7 +2,7 @@
 #define _MUI_CLASSES_DTPIC_H
 
 /*
-    Copyright © 2002-2014, The AROS Development Team. All rights reserved.
+    Copyright Â© 2002-2014, The AROS Development Team. All rights reserved.
     $Id$
 */
 

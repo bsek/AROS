@@ -1,11 +1,13 @@
 /*
-    Copyright (C) 2003, The AROS Development Team. 
+    Copyright (C) 2003, The AROS Development Team.
     All rights reserved.
-    
+
 */
 
 #ifndef _MUIMASTER_SUPPORT_AROS_H_
 #define _MUIMASTER_SUPPORT_AROS_H_
+
+#include "exec/types.h"
 
 /*** OS4 VARARGS support ****************************************************/
 #ifndef VARARGS68K

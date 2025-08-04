@@ -144,6 +144,12 @@ struct ZunePrefsNew
     /* Zune registers */
     RegisterLook register_look; /* yet unused, remove this comment when handled */
     BOOL         register_truncate_titles; /* ok, waiting for prefs editor */
+    WORD         register_tab_height_extra; /* Extra height added to font height for tabs */
+    WORD         register_text_spacing; /* Horizontal text padding within tabs */
+    WORD         register_intertab_spacing; /* Space between tabs */
+    WORD         register_frame_x; /* Horizontal frame margin */
+    WORD         register_frame_bottom; /* Bottom frame margin */
+    WORD         register_frame_top; /* Top frame margin */
 
     /* Buttons */
     WORD     radiobutton_hspacing;

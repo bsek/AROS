@@ -2,8 +2,8 @@
 #define _PIXMAP_PRIVATE_H_
 
 /*
-    Copyright © 2011, Thore Böckelmann. All rights reserved.
-    Copyright © 2012, The AROS Development Team. All rights reserved.
+    Copyright Â© 2011, Thore BÃ¶ckelmann. All rights reserved.
+    Copyright Â© 2012, The AROS Development Team. All rights reserved.
     $Id$
 */
 

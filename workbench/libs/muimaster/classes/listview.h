@@ -2,7 +2,7 @@
 #define _CLASSES_LISTVIEW_H
 
 /*
-    Copyright © 2002-2003, The AROS Development Team. All rights reserved.
+    Copyright Â© 2002-2003, The AROS Development Team. All rights reserved.
     $Id$
 */
 

@@ -141,6 +141,12 @@
 #define MUICFG_String_MarkedText        0x402
 #define MUICFG_Register_TruncateTitles  0x403
 #define MUICFG_Window_Refresh           0x404
+#define MUICFG_Register_TabHeightExtra  0x405
+#define MUICFG_Register_TextSpacing     0x406
+#define MUICFG_Register_IntertabSpacing 0x407
+#define MUICFG_Register_FrameX          0x408
+#define MUICFG_Register_FrameBottom     0x409
+#define MUICFG_Register_FrameTop        0x40a
 #define MUICFG_Screen_Mode              0x505
 #define MUICFG_Screen_Mode_ID           0x506
 #define MUICFG_Screen_Width             0x507

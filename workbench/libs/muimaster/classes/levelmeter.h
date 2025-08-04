@@ -2,7 +2,7 @@
 #define _MUI_CLASSES_LEVELMETER_H
 
 /*
-    Copyright © 2002-2006, The AROS Development Team. All rights reserved.
+    Copyright Â© 2002-2006, The AROS Development Team. All rights reserved.
     $Id$
 */
 

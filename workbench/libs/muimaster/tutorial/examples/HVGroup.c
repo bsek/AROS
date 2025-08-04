@@ -27,7 +27,7 @@ BOOL init_gui(void)
     app = ApplicationObject,
               MUIA_Application_Title      , (IPTR) "HVGroup",
               MUIA_Application_Version    , (IPTR) "$VER: HVGroup 0.1 (14.01.03)",
-              MUIA_Application_Copyright  , (IPTR) "© 2003-2011, The AROS Development Team",
+              MUIA_Application_Copyright  , (IPTR) "Â© 2003-2011, The AROS Development Team",
               MUIA_Application_Author     , (IPTR) "The AROS Development Team",
               MUIA_Application_Description, (IPTR) "Layout with HGroup + VGroup",
               MUIA_Application_Base       , (IPTR) "HVGroup",

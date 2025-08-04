@@ -26,7 +26,7 @@ BOOL init_gui(void)
     app = ApplicationObject,
               MUIA_Application_Title      , (IPTR) "HelloZune",
               MUIA_Application_Version    , (IPTR) "$VER: HelloZune 0.1 (14.01.03)",
-              MUIA_Application_Copyright  , (IPTR) "© 2003-2011, The AROS Development Team",
+              MUIA_Application_Copyright  , (IPTR) "Â© 2003-2011, The AROS Development Team",
               MUIA_Application_Author     , (IPTR) "The AROS Development Team",
               MUIA_Application_Description, (IPTR) "Show basic structure of a MUI/Zune application",
               MUIA_Application_Base       , (IPTR) "HELLOZUNE",

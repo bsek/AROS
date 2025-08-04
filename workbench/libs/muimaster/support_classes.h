@@ -211,6 +211,12 @@
 #   define ZUNE_PALETTE_DESC
 #endif
 
+#if ZUNE_BUILTIN_PANEL
+#   define ZUNE_PANEL_DESC (&_MUI_Panel_desc),
+#else
+#   define ZUNE_PANEL_DESC
+#endif
+
 Class *ZUNE_GetBuiltinClass(ClassID className, struct Library *mb);
 Class *ZUNE_GetExternalClass(ClassID className, struct Library *mb);
 
@@ -262,7 +268,7 @@ AROS_UFP3
         _ret; \
 })
 
-#else 
+#else
 
 struct MUI_CustomClass *MCC_Query(ULONG d0);
 #pragma  libcall mcclib MCC_Query 01e 001
@@ -273,4 +279,3 @@ struct MUI_CustomClass *MCC_Query(ULONG d0);
 
 
 #endif /* _MUIMASTER_SUPPORT_CLASSES_H */
-
