@@ -8,8 +8,6 @@
 /*** Instance data **********************************************************/
 struct Panel_DATA
 {
-    ULONG style;               /* Panel frame style */
-    ULONG spacing;             /* Spacing between children */
     ULONG padding;             /* Internal padding */
     BOOL  expand_children;     /* Children expand to fill available space */
     STRPTR title;              /* Optional panel title */

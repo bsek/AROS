@@ -11,7 +11,8 @@ FILES  := \
     VHGroup2  \
     HVGroup   \
     Notify    \
-    Panel
+    Panel     \
+    PanelGroup
 
 #MM workbench-libs-muimaster-examples : includes linklibs
 

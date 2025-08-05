@@ -12,6 +12,9 @@
 #define PanelObject         MUIOBJMACRO_START(MUIC_Panel)
 #define HPanel              MUIOBJMACRO_START(MUIC_Panel)
 #define VPanel              MUIOBJMACRO_START(MUIC_Panel)
+#define PanelGroupObject    MUIOBJMACRO_START(MUIC_PanelGroup)
+#define HPanelGroup         MUIOBJMACRO_START(MUIC_PanelGroup)
+#define VPanelGroup         MUIOBJMACRO_START(MUIC_PanelGroup)
 #define MenustripObject     MUIOBJMACRO_START(MUIC_Menustrip)
 #define MenuObject          MUIOBJMACRO_START(MUIC_Menu)
 #define MenuObjectT(name)   MUIOBJMACRO_START(MUIC_Menu), MUIA_Menu_Title, name

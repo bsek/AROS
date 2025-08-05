@@ -6,6 +6,7 @@
 
 #include "libraries/mui.h"
 #include "muizunesupport.h"
+#include <stdio.h>
 
 /* Objects */
 Object *app;
@@ -14,21 +15,17 @@ Object *WD_Demo;
 Object *demo_panel;
 
 /* Control buttons */
-Object *BT_StylePlain, *BT_StyleRaised, *BT_StyleRecessed, *BT_StyleGroove,
-    *BT_StyleRidge;
 Object *BT_TitleNone, *BT_TitleTop, *BT_TitleBottom, *BT_TitleLeft,
     *BT_TitleRight;
 Object *BT_TextLeft, *BT_TextCenter, *BT_TextRight;
-Object *BT_SpacingDec, *BT_SpacingInc, *BT_PaddingDec, *BT_PaddingInc;
+Object *BT_PaddingDec, *BT_PaddingInc;
 Object *BT_VerticalToggle;
 Object *ST_Title;
 Object *TX_Status;
 
 /* Current settings */
-static LONG current_style = MUIV_Panel_Style_Raised;
 static LONG current_title_pos = MUIV_Panel_Title_Top;
 static LONG current_text_pos = MUIV_Panel_Title_Text_Centered;
-static LONG current_spacing = 4;
 static LONG current_padding = 8;
 static BOOL current_vertical = FALSE;
 static char current_title[256] = "Demo Panel";
@@ -41,17 +38,13 @@ static STRPTR sample_items[] = {"Item 1", "Item 2", "Item 3", "Item 4", NULL};
 *****************************************************************/
 void UpdateStatus(void) {
   static char status_text[512];
-  static char *style_names[] = {"Plain", "Raised", "Recessed", "Groove",
-                                "Ridge"};
   static char *pos_names[] = {"None", "Top", "Bottom", "Left", "Right"};
   static char *text_names[] = {"Centered", "Left", "Right"};
 
   snprintf(status_text, sizeof(status_text),
-           "Style: %s | Title: %s | Text: %s | Spacing: %ld | Padding: %ld | "
-           "Vertical: %s",
-           style_names[current_style], pos_names[current_title_pos],
-           text_names[current_text_pos], current_spacing, current_padding,
-           current_vertical ? "Yes" : "No");
+           "Title: %s | Text: %s | Padding: %ld | Vertical: %s",
+           pos_names[current_title_pos], text_names[current_text_pos],
+           current_padding, current_vertical ? "Yes" : "No");
 
   set(TX_Status, MUIA_Text_Contents, status_text);
 }
@@ -65,11 +58,10 @@ void RecreatePanel(void) {
   Object *new_panel;
 
   /* Create new panel with current settings */
-  new_panel = VPanel, MUIA_Panel_Style, current_style, MUIA_Panel_Title,
-  current_title, MUIA_Panel_TitlePosition, current_title_pos,
-  MUIA_Panel_TitleTextPosition, current_text_pos, MUIA_Panel_TitleVertical,
-  current_vertical, MUIA_Panel_Spacing, current_spacing, MUIA_Panel_Padding,
-  current_padding, MUIA_Frame, MUIV_Frame_Group,
+  new_panel = VPanel, MUIA_Panel_Title, current_title, MUIA_Panel_TitlePosition,
+  current_title_pos, MUIA_Panel_TitleTextPosition, current_text_pos,
+  MUIA_Panel_TitleVertical, current_vertical, MUIA_Panel_Padding,
+  current_padding, MUIA_Panel_Collapsible, TRUE,
 
   Child, TextObject, MUIA_Text_Contents, "Sample Content", MUIA_Text_PreParse,
   MUIX_C, End, Child, HGroup, Child, SimpleButton("OK"), Child,
@@ -104,14 +96,6 @@ Object *CreateControlPanel(void) {
          "demo window for live updates!",
          MUIA_Text_PreParse, MUIX_C, MUIA_Frame, MUIV_Frame_Text, End,
 
-         /* Style controls */
-         Child, VGroup, GroupFrameT("Panel Style"), Child, HGroup, Child,
-         BT_StylePlain = SimpleButton("Plain"), Child,
-         BT_StyleRaised = SimpleButton("Raised"), Child,
-         BT_StyleRecessed = SimpleButton("Recessed"), Child,
-         BT_StyleGroove = SimpleButton("Groove"), Child,
-         BT_StyleRidge = SimpleButton("Ridge"), End, End,
-
          /* Title controls */
          Child, VGroup, GroupFrameT("Title Position"), Child, HGroup, Child,
          BT_TitleNone = SimpleButton("None"), Child,
@@ -128,9 +112,7 @@ Object *CreateControlPanel(void) {
 
          /* Layout controls */
          Child, VGroup, GroupFrameT("Layout"), Child, HGroup, Child,
-         MakeLabel("Spacing:"), Child, BT_SpacingDec = SimpleButton("-"), Child,
-         BT_SpacingInc = SimpleButton("+"), Child, MakeLabel("Padding:"), Child,
-         BT_PaddingDec = SimpleButton("-"), Child,
+         MakeLabel("Padding:"), Child, BT_PaddingDec = SimpleButton("-"), Child,
          BT_PaddingInc = SimpleButton("+"), End, Child, HGroup, Child,
          BT_VerticalToggle = SimpleButton("Toggle Vertical Title"), End, End,
 
@@ -146,12 +128,10 @@ Object *CreateControlPanel(void) {
 Object *CreateInitialPanel(void) {
   return demo_panel = VPanel,
          // Panel configuration
-         MUIA_Panel_Style, current_style, MUIA_Panel_Title, current_title,
-         MUIA_Panel_TitlePosition, current_title_pos,
-         MUIA_Panel_TitleTextPosition, current_text_pos,
-         MUIA_Panel_TitleVertical, current_vertical, MUIA_Panel_Spacing,
-         current_spacing, MUIA_Panel_Padding, current_padding, MUIA_Frame,
-         MUIV_Frame_Group,
+         MUIA_Panel_Title, current_title, MUIA_Panel_TitlePosition,
+         current_title_pos, MUIA_Panel_TitleTextPosition, current_text_pos,
+         MUIA_Panel_TitleVertical, current_vertical, MUIA_Panel_Padding,
+         current_padding, MUIA_Panel_Collapsible, TRUE,
 
          // Panel contents (vertical layout)
          Child, TextObject, MUIA_Text_Contents, "Sample Content",
@@ -173,18 +153,6 @@ Object *CreateInitialPanel(void) {
  Setup button notifications
 *****************************************************************/
 void SetupNotifications(void) {
-  /* Style buttons */
-  DoMethod(BT_StylePlain, MUIM_Notify, MUIA_Pressed, FALSE, app, 2,
-           MUIM_Application_ReturnID, 1);
-  DoMethod(BT_StyleRaised, MUIM_Notify, MUIA_Pressed, FALSE, app, 2,
-           MUIM_Application_ReturnID, 2);
-  DoMethod(BT_StyleRecessed, MUIM_Notify, MUIA_Pressed, FALSE, app, 2,
-           MUIM_Application_ReturnID, 3);
-  DoMethod(BT_StyleGroove, MUIM_Notify, MUIA_Pressed, FALSE, app, 2,
-           MUIM_Application_ReturnID, 4);
-  DoMethod(BT_StyleRidge, MUIM_Notify, MUIA_Pressed, FALSE, app, 2,
-           MUIM_Application_ReturnID, 5);
-
   /* Title position buttons */
   DoMethod(BT_TitleNone, MUIM_Notify, MUIA_Pressed, FALSE, app, 2,
            MUIM_Application_ReturnID, 10);
@@ -205,11 +173,7 @@ void SetupNotifications(void) {
   DoMethod(BT_TextRight, MUIM_Notify, MUIA_Pressed, FALSE, app, 2,
            MUIM_Application_ReturnID, 22);
 
-  /* Spacing/Padding buttons */
-  DoMethod(BT_SpacingDec, MUIM_Notify, MUIA_Pressed, FALSE, app, 2,
-           MUIM_Application_ReturnID, 30);
-  DoMethod(BT_SpacingInc, MUIM_Notify, MUIA_Pressed, FALSE, app, 2,
-           MUIM_Application_ReturnID, 31);
+  /* Padding buttons */
   DoMethod(BT_PaddingDec, MUIM_Notify, MUIA_Pressed, FALSE, app, 2,
            MUIM_Application_ReturnID, 32);
   DoMethod(BT_PaddingInc, MUIM_Notify, MUIA_Pressed, FALSE, app, 2,
@@ -217,9 +181,9 @@ void SetupNotifications(void) {
 
   /* Toggle buttons */
   DoMethod(BT_VerticalToggle, MUIM_Notify, MUIA_Pressed, FALSE, app, 2,
-           MUIM_Application_ReturnID, 42);
+           MUIM_Application_ReturnID, 40);
 
-  /* Title string */
+  /* String notification for title changes */
   DoMethod(ST_Title, MUIM_Notify, MUIA_String_Acknowledge, MUIV_EveryTime, app,
            2, MUIM_Application_ReturnID, 50);
 }
@@ -229,23 +193,6 @@ void SetupNotifications(void) {
 *****************************************************************/
 void HandleButtons(ULONG id) {
   switch (id) {
-  /* Style changes */
-  case 1:
-    current_style = MUIV_Panel_Style_Plain;
-    break;
-  case 2:
-    current_style = MUIV_Panel_Style_Raised;
-    break;
-  case 3:
-    current_style = MUIV_Panel_Style_Recessed;
-    break;
-  case 4:
-    current_style = MUIV_Panel_Style_Groove;
-    break;
-  case 5:
-    current_style = MUIV_Panel_Style_Ridge;
-    break;
-
   /* Title position changes */
   case 10:
     current_title_pos = MUIV_Panel_Title_None;
@@ -274,15 +221,7 @@ void HandleButtons(ULONG id) {
     current_text_pos = MUIV_Panel_Title_Text_Right;
     break;
 
-  /* Spacing/Padding changes */
-  case 30:
-    if (current_spacing > 0)
-      current_spacing--;
-    break;
-  case 31:
-    if (current_spacing < 20)
-      current_spacing++;
-    break;
+  /* Padding changes */
   case 32:
     if (current_padding > 0)
       current_padding--;
@@ -293,7 +232,7 @@ void HandleButtons(ULONG id) {
     break;
 
   /* Toggle changes */
-  case 42:
+  case 40:
     current_vertical = !current_vertical;
     break;
 
@@ -305,7 +244,7 @@ void HandleButtons(ULONG id) {
     break;
 
   default:
-    return; /* Unknown ID, don't recreate panel */
+    return;
   }
 
   RecreatePanel();

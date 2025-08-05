@@ -217,6 +217,12 @@
 #   define ZUNE_PANEL_DESC
 #endif
 
+#if ZUNE_BUILTIN_PANELGROUP
+#   define ZUNE_PANELGROUP_DESC (&_MUI_PanelGroup_desc),
+#else
+#   define ZUNE_PANELGROUP_DESC
+#endif
+
 Class *ZUNE_GetBuiltinClass(ClassID className, struct Library *mb);
 Class *ZUNE_GetExternalClass(ClassID className, struct Library *mb);
 

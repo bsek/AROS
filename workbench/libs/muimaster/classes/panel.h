@@ -15,8 +15,6 @@
 #define MUIC_Panel "Panel.mui"
 
 /* Panel attributes */
-#define MUIA_Panel_Style                (TAG_USER | 0x40000001)
-#define MUIA_Panel_Spacing              (TAG_USER | 0x40000003)
 #define MUIA_Panel_Padding              (TAG_USER | 0x40000004)
 #define MUIA_Panel_Title                (TAG_USER | 0x40000007)
 #define MUIA_Panel_TitlePosition        (TAG_USER | 0x40000008)
@@ -24,13 +22,6 @@
 #define MUIA_Panel_TitleVertical        (TAG_USER | 0x4000000A)
 #define MUIA_Panel_Collapsible          (TAG_USER | 0x4000000B)
 #define MUIA_Panel_Collapsed            (TAG_USER | 0x4000000C)
-
-/* Panel style values */
-#define MUIV_Panel_Style_Plain      0
-#define MUIV_Panel_Style_Raised     1
-#define MUIV_Panel_Style_Recessed   2
-#define MUIV_Panel_Style_Groove     3
-#define MUIV_Panel_Style_Ridge      4
 
 /* Title position values */
 #define MUIV_Panel_Title_None       0

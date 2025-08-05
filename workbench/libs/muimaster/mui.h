@@ -577,6 +577,10 @@ struct MUI_AlphaData
 #include "classes/panel.h"
 #endif
 
+#ifndef _MUI_CLASSES_PANELGROUP_H
+#include "classes/panelgroup.h"
+#endif
+
 /**************************************************************************
  Zune/MUI Image and Background definition
 **************************************************************************/
