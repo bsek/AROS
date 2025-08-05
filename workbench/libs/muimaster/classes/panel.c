@@ -4,6 +4,7 @@
     Panel class - A flexible container widget for organizing UI elements
 */
 
+#include "graphics/rastport.h"
 #include "intuition/intuition.h"
 #include "libraries/mui.h"
 #include <stdio.h>
@@ -21,6 +22,7 @@
 
 #include "muimaster_intern.h"
 
+#include "classes/window.h"
 #include "mui.h"
 #include "panel.h"
 #include "panel_private.h"
@@ -30,17 +32,111 @@
 
 #define DEBUG 1
 
-#define MADF_SETUP (1 << 28) /* PRIV - zune-specific */
-
 /* Title drawing constants */
 #define TITLE_TEXT_PADDING 4    /* Padding around text within title area */
 #define TITLE_VERTICAL_OFFSET 2 /* Vertical offset for text baseline */
+#define TITLE_CONTENT_SPACING 4 /* Spacing between title and content areas */
+
+/* Temporary style constants until panel.h is updated */
+#ifndef MUIV_Panel_Style_UltraRounded
+#define MUIV_Panel_Style_UltraRounded 5
+#endif
+#ifndef MUIV_Panel_Style_EnhancedRounded
+#define MUIV_Panel_Style_EnhancedRounded 6
+#endif
 
 #include <aros/debug.h>
 
 extern struct Library *MUIMasterBase;
 
-/*** Helper functions *******************************************************/
+/** Helper functions *******************************************************/
+
+static void Panel_CalculateTextSize(BOOL use_vertical, Object *obj,
+                                    STRPTR title, UWORD *actual_title_width,
+                                    UWORD *actual_title_height) {
+  /* Calculate actual title dimensions based on vertical setting */
+  if (use_vertical) {
+    struct TextExtent te;
+    struct RastPort *rp = _rp(obj);
+
+    if (!rp) {
+      *actual_title_width = *actual_title_height = 0;
+      return;
+    }
+    /* For vertical text, measure single character and multiply by string length
+     */
+    TextExtent(rp, "A", 1, &te);
+    *actual_title_width = te.te_Width;
+    *actual_title_height = te.te_Height * strlen(title);
+  } else {
+    /* Create ZText object for horizontal text */
+    ZText *ztext = zune_text_new(NULL, title, ZTEXT_ARG_NONE, 0);
+    if (!ztext) {
+      *actual_title_width = *actual_title_height = 0;
+      return;
+    }
+
+    /* Get text bounds */
+    zune_text_get_bounds(ztext, obj);
+    *actual_title_width = ztext->width;
+    *actual_title_height = ztext->height;
+    zune_text_destroy(ztext);
+  }
+}
+
+static void Panel_CalculateTitleBounds(struct IClass *cl, Object *obj,
+                                       struct Panel_DATA *data,
+                                       LONG *title_left, LONG *title_top,
+                                       LONG *title_right, LONG *title_bottom,
+                                       UWORD *actual_title_width,
+                                       UWORD *actual_title_height) {
+  STRPTR title = data->title;
+  BOOL use_vertical =
+      data->title_vertical && (data->title_position == MUIV_Panel_Title_Left ||
+                               data->title_position == MUIV_Panel_Title_Right);
+
+  if (!title) {
+    *title_left = *title_top = *title_right = *title_bottom = 0;
+    *actual_title_width = *actual_title_height = 0;
+    return;
+  }
+
+  Panel_CalculateTextSize(use_vertical, obj, title, actual_title_width,
+                          actual_title_height);
+
+  /* Calculate title area bounds for background using actual dimensions */
+  switch (data->title_position) {
+  case MUIV_Panel_Title_Top:
+    *title_left = _left(obj) + data->padding;
+    *title_top = _top(obj) + data->padding;
+    *title_right = _right(obj) - data->padding;
+    *title_bottom = *title_top + *actual_title_height;
+    break;
+  case MUIV_Panel_Title_Bottom:
+    *title_left = _left(obj) + data->padding;
+    *title_top = _bottom(obj) - *actual_title_height - data->padding;
+    *title_right = _right(obj) - data->padding;
+    *title_bottom = *title_top + *actual_title_height;
+    break;
+  case MUIV_Panel_Title_Left:
+    *title_left = _left(obj) + data->padding;
+    *title_top = _top(obj) + data->padding;
+    *title_right = *title_left + *actual_title_width + (TITLE_TEXT_PADDING * 2);
+    *title_bottom = _bottom(obj) - data->padding;
+    break;
+  case MUIV_Panel_Title_Right:
+    *title_left = _right(obj) - data->padding - *actual_title_width -
+                  (TITLE_TEXT_PADDING * 2);
+    *title_top = _top(obj) + data->padding;
+    *title_right = _right(obj) - data->padding;
+    *title_bottom = _bottom(obj) - data->padding;
+    break;
+  default:
+    *title_left = *title_top = *title_right = *title_bottom = 0;
+    *actual_title_width = *actual_title_height = 0;
+    break;
+  }
+}
 
 /*
  * Handle mouse clicks on the panel
@@ -53,69 +149,18 @@ static IPTR Panel_HandleClick(struct IClass *cl, Object *obj, WORD x, WORD y) {
 
   /* Check if we have a title and if the click was on it */
   if (data->title && data->title_position != MUIV_Panel_Title_None) {
-
     LONG title_left, title_top, title_right, title_bottom;
+    UWORD actual_title_width, actual_title_height;
 
-    /* Calculate actual title dimensions from text */
-    struct RastPort *rp = _rp(obj);
-    if (!rp)
+    /* Use shared function to calculate title bounds */
+    Panel_CalculateTitleBounds(cl, obj, data, &title_left, &title_top,
+                               &title_right, &title_bottom, &actual_title_width,
+                               &actual_title_height);
+
+    /* Check if we got valid bounds */
+    if (title_left == 0 && title_top == 0 && title_right == 0 &&
+        title_bottom == 0)
       goto general_click;
-
-    STRPTR title = data->title;
-    char prefixed_title[256]; /* Buffer for title with '+' prefix */
-
-    /* Create title with '+' prefix */
-    prefixed_title[0] = '+';
-    strcpy(&prefixed_title[1], title);
-
-    /* Create ZText object to get dimensions */
-    ZText *ztext = zune_text_new(NULL, prefixed_title, ZTEXT_ARG_NONE, 0);
-    if (!ztext)
-      goto general_click;
-
-    zune_text_get_bounds(ztext, obj);
-
-    UWORD actual_title_width = ztext->width + 8;   /* Text width + padding */
-    UWORD actual_title_height = ztext->height + 4; /* Text height + padding */
-
-    /* Clean up ZText object */
-    zune_text_destroy(ztext);
-
-    /* Calculate exact title area bounds based on position */
-    /* Use margin-adjusted coordinates to match _isinobject() behavior */
-    switch (data->title_position) {
-    case MUIV_Panel_Title_Top:
-      title_left = _mleft(obj) + data->padding;
-      title_top = _mtop(obj);
-      title_right = title_left + actual_title_width;
-      title_bottom = title_top + actual_title_height;
-      break;
-
-    case MUIV_Panel_Title_Bottom:
-      title_left = _mleft(obj) + data->padding;
-      title_top = _mbottom(obj) - actual_title_height + 1;
-      title_right = title_left + actual_title_width;
-      title_bottom = _mbottom(obj) + 1;
-      break;
-
-    case MUIV_Panel_Title_Left:
-      title_left = _mleft(obj);
-      title_top = _mtop(obj) + data->padding;
-      title_right = title_left + actual_title_width;
-      title_bottom = title_top + actual_title_height;
-      break;
-
-    case MUIV_Panel_Title_Right:
-      title_left = _mright(obj) - actual_title_width;
-      title_top = _mtop(obj) + data->padding;
-      title_right = _mright(obj);
-      title_bottom = title_top + actual_title_height;
-      break;
-
-    default:
-      /* Invalid position, fall through to general click handling */
-      goto general_click;
-    }
 
     /* Check if click is within title bounds */
     if (x >= title_left && x < title_right && y >= title_top &&
@@ -126,14 +171,13 @@ static IPTR Panel_HandleClick(struct IClass *cl, Object *obj, WORD x, WORD y) {
 
       /* If panel is collapsible, toggle collapsed state */
       if (data->collapsible) {
-        data->collapsed = !data->collapsed;
-        data->layout_dirty = TRUE;
+        D(bug("Panel_HandleClick: Title clicked will set collapsed to: %d\n",
+              !data->collapsed));
 
-        /* Trigger relayout */
-        MUI_Redraw(obj, MADF_DRAWOBJECT);
-
-        /* Notify about state change */
-        set(obj, MUIA_Panel_Collapsed, data->collapsed);
+        /* Use Group change methods to trigger proper relayout */
+        DoMethod(obj, MUIM_Group_InitChange);
+        set(obj, MUIA_Panel_Collapsed, !data->collapsed);
+        DoMethod(obj, MUIM_Group_ExitChange);
 
         return MUI_EventHandlerRC_Eat;
       }
@@ -159,14 +203,7 @@ general_click:
 static void Panel_DrawTitle(struct IClass *cl, Object *obj,
                             struct Panel_DATA *data) {
   struct RastPort *rp = _rp(obj);
-
   STRPTR title = data->title;
-  char prefixed_title[256]; /* Buffer for title with '+' prefix */
-
-  /* Create title with '+' prefix */
-  prefixed_title[0] = '+';
-  strcpy(&prefixed_title[1], title);
-
   ZText *ztext;
   LONG title_left, title_top, title_right, title_bottom;
   LONG text_left, text_right;
@@ -178,56 +215,15 @@ static void Panel_DrawTitle(struct IClass *cl, Object *obj,
   if (!rp || !title)
     return;
 
-  /* Calculate actual title dimensions based on vertical setting */
-  if (use_vertical) {
-    struct TextExtent te;
-    /* For vertical text, measure single character and multiply by string length
-     */
-    TextExtent(rp, "A", 1, &te);
-    actual_title_width = te.te_Width;
-    actual_title_height = te.te_Height * strlen(title);
-  } else {
-    /* Create ZText object for horizontal text */
-    ztext = zune_text_new(NULL, prefixed_title, ZTEXT_ARG_NONE, 0);
-    if (!ztext)
-      return;
+  /* Use shared function to calculate title bounds */
+  Panel_CalculateTitleBounds(cl, obj, data, &title_left, &title_top,
+                             &title_right, &title_bottom, &actual_title_width,
+                             &actual_title_height);
 
-    /* Get text bounds */
-    zune_text_get_bounds(ztext, obj);
-    actual_title_width = ztext->width;
-    actual_title_height = ztext->height;
-  }
-
-  /* Calculate title area bounds for background using actual dimensions */
-  switch (data->title_position) {
-  case MUIV_Panel_Title_Top:
-    title_left = _left(obj) + data->padding;
-    title_top = _top(obj) + data->padding;
-    title_right = _right(obj) - data->padding;
-    title_bottom = title_top + actual_title_height;
-    break;
-  case MUIV_Panel_Title_Bottom:
-    title_left = _left(obj) + data->padding;
-    title_top = _bottom(obj) - actual_title_height - data->padding;
-    title_right = _right(obj) - data->padding;
-    title_bottom = title_top + actual_title_height;
-    break;
-  case MUIV_Panel_Title_Left:
-    title_left = _left(obj) + data->padding;
-    title_top = _top(obj) + data->padding;
-    title_right = title_left + actual_title_width + (TITLE_TEXT_PADDING * 2);
-    title_bottom = _bottom(obj) - data->padding;
-    break;
-  case MUIV_Panel_Title_Right:
-    title_left = _right(obj) - data->padding - actual_title_width -
-                 (TITLE_TEXT_PADDING * 2);
-    title_top = _top(obj) + data->padding;
-    title_right = _right(obj) - data->padding;
-    title_bottom = _bottom(obj) - data->padding;
-    break;
-  default:
+  /* Check if we got valid bounds */
+  if (title_left == 0 && title_top == 0 && title_right == 0 &&
+      title_bottom == 0)
     return;
-  }
 
   /* Debug: Print title bounds */
   D(bug("Panel_DrawTitle: title bounds [%d,%d,%d,%d], actual_width=%d, "
@@ -288,6 +284,11 @@ static void Panel_DrawTitle(struct IClass *cl, Object *obj,
     }
   } else {
     /* Render text horizontally using ZText engine */
+    /* Create ZText object for horizontal text */
+    ztext = zune_text_new(NULL, title, ZTEXT_ARG_NONE, 0);
+    if (!ztext)
+      return;
+
     /* Calculate text positioning based on title_text_position */
     switch (data->title_text_position) {
     case MUIV_Panel_Title_Text_Left:
@@ -318,61 +319,7 @@ static void Panel_DrawTitle(struct IClass *cl, Object *obj,
 }
 
 /* Helper functions for drawing different frame styles */
-static void DrawRaisedFrame(struct RastPort *rp, WORD x, WORD y, WORD w, WORD h,
-                            WORD thickness) {
-  WORD i;
-
-  for (i = 0; i < thickness; i++) {
-    SetAPen(rp, 2); /* Light pen */
-    Move(rp, x + i, y + h - 1 - i);
-    Draw(rp, x + i, y + i);
-    Draw(rp, x + w - 1 - i, y + i);
-
-    SetAPen(rp, 1); /* Dark pen */
-    Move(rp, x + w - 1 - i, y + i + 1);
-    Draw(rp, x + w - 1 - i, y + h - 1 - i);
-    Draw(rp, x + i + 1, y + h - 1 - i);
-  }
-}
-
-static void DrawRecessedFrame(struct RastPort *rp, WORD x, WORD y, WORD w,
-                              WORD h, WORD thickness) {
-  WORD i;
-
-  for (i = 0; i < thickness; i++) {
-    SetAPen(rp, 1); /* Dark pen */
-    Move(rp, x + i, y + h - 1 - i);
-    Draw(rp, x + i, y + i);
-    Draw(rp, x + w - 1 - i, y + i);
-
-    SetAPen(rp, 2); /* Light pen */
-    Move(rp, x + w - 1 - i, y + i + 1);
-    Draw(rp, x + w - 1 - i, y + h - 1 - i);
-    Draw(rp, x + i + 1, y + h - 1 - i);
-  }
-}
-
-static void DrawGrooveFrame(struct RastPort *rp, WORD x, WORD y, WORD w, WORD h,
-                            WORD thickness) {
-  WORD half = thickness / 2;
-
-  /* Outer recessed */
-  DrawRecessedFrame(rp, x, y, w, h, half);
-  /* Inner raised */
-  DrawRaisedFrame(rp, x + half, y + half, w - thickness, h - thickness,
-                  thickness - half);
-}
-
-static void DrawRidgeFrame(struct RastPort *rp, WORD x, WORD y, WORD w, WORD h,
-                           WORD thickness) {
-  WORD half = thickness / 2;
-
-  /* Outer raised */
-  DrawRaisedFrame(rp, x, y, w, h, half);
-  /* Inner recessed */
-  DrawRecessedFrame(rp, x + half, y + half, w - thickness, h - thickness,
-                    thickness - half);
-}
+/* Frame drawing functions removed - now using Area superclass frame system */
 
 /*** Methods ****************************************************************/
 
@@ -380,18 +327,16 @@ IPTR Panel__OM_NEW(struct IClass *cl, Object *obj, struct opSet *msg) {
   struct Panel_DATA *data;
   struct TagItem *tags, *tag;
 
+  D(bug("Panel__OM_NEW: obj=%p\n", obj));
+
   obj = (Object *)DoSuperMethodA(cl, obj, (Msg)msg);
   if (!obj)
     return 0;
 
-  /* Initialize instance data */
   data = INST_DATA(cl, obj);
 
   /* Set default values */
-  data->style = MUIV_Panel_Style_Plain;
-  data->spacing = 4;
   data->padding = 4;
-  data->expand_children = TRUE;
   data->title = NULL;
   data->title_position = MUIV_Panel_Title_None;
   data->title_vertical = FALSE;
@@ -400,12 +345,6 @@ IPTR Panel__OM_NEW(struct IClass *cl, Object *obj, struct opSet *msg) {
   /* Parse initial taglist */
   for (tags = msg->ops_AttrList; (tag = NextTagItem(&tags));) {
     switch (tag->ti_Tag) {
-    case MUIA_Panel_Style:
-      data->style = tag->ti_Data;
-      break;
-    case MUIA_Panel_Spacing:
-      data->spacing = tag->ti_Data;
-      break;
     case MUIA_Panel_Padding:
       data->padding = tag->ti_Data;
       break;
@@ -421,11 +360,14 @@ IPTR Panel__OM_NEW(struct IClass *cl, Object *obj, struct opSet *msg) {
     case MUIA_Panel_TitleVertical:
       data->title_vertical = tag->ti_Data;
       break;
+    case MUIA_Panel_Collapsible:
+      data->collapsible = tag->ti_Data;
+      break;
+    case MUIA_Panel_Collapsed:
+      data->collapsed = tag->ti_Data;
+      break;
     }
   }
-
-  /* Configure the Group class spacing */
-  set(obj, MUIA_Group_Spacing, data->spacing);
 
   D(bug("Panel created at %p\n", obj));
   return (IPTR)obj;
@@ -447,21 +389,7 @@ IPTR Panel__OM_SET(struct IClass *cl, Object *obj, struct opSet *msg) {
 
   for (tags = msg->ops_AttrList; (tag = NextTagItem(&tags));) {
     switch (tag->ti_Tag) {
-    case MUIA_Panel_Style:
-      if (data->style != tag->ti_Data) {
-        data->style = tag->ti_Data;
-        redraw = TRUE;
-      }
-      break;
 
-    case MUIA_Panel_Spacing:
-      if (data->spacing != tag->ti_Data) {
-        data->spacing = tag->ti_Data;
-        set(obj, MUIA_Group_Spacing, data->spacing);
-        data->layout_dirty = TRUE;
-        redraw = TRUE;
-      }
-      break;
     case MUIA_Panel_Padding:
       if (data->padding != tag->ti_Data) {
         data->padding = tag->ti_Data;
@@ -493,10 +421,33 @@ IPTR Panel__OM_SET(struct IClass *cl, Object *obj, struct opSet *msg) {
         redraw = TRUE;
       }
       break;
+    case MUIA_Panel_Collapsible:
+      if (data->collapsible != tag->ti_Data) {
+        data->collapsible = tag->ti_Data;
+      }
+      break;
+    case MUIA_Panel_Collapsed:
+      if (data->collapsed != tag->ti_Data) {
+        data->collapsed = tag->ti_Data;
+        data->layout_dirty = TRUE;
+        redraw = TRUE;
+
+        /* Hide/show children based on collapsed state */
+        struct MinList *children = NULL;
+        get(obj, MUIA_Group_ChildList, &children);
+        if (children) {
+          Object *child;
+          APTR cstate = children->mlh_Head;
+          while ((child = NextObject(&cstate))) {
+            set(child, MUIA_ShowMe, !data->collapsed);
+          }
+        }
+      }
+      break;
     }
   }
 
-  if (redraw && (_flags(obj) & MADF_SETUP))
+  if (redraw)
     MUI_Redraw(obj, MADF_DRAWOBJECT);
 
   return DoSuperMethodA(cl, obj, (Msg)msg);
@@ -506,12 +457,6 @@ IPTR Panel__OM_GET(struct IClass *cl, Object *obj, struct opGet *msg) {
   struct Panel_DATA *data = INST_DATA(cl, obj);
 
   switch (msg->opg_AttrID) {
-  case MUIA_Panel_Style:
-    *msg->opg_Storage = data->style;
-    return TRUE;
-  case MUIA_Panel_Spacing:
-    *msg->opg_Storage = data->spacing;
-    return TRUE;
   case MUIA_Panel_Padding:
     *msg->opg_Storage = data->padding;
     return TRUE;
@@ -527,6 +472,12 @@ IPTR Panel__OM_GET(struct IClass *cl, Object *obj, struct opGet *msg) {
   case MUIA_Panel_TitleVertical:
     *msg->opg_Storage = data->title_vertical;
     return TRUE;
+  case MUIA_Panel_Collapsible:
+    *msg->opg_Storage = data->collapsible;
+    return TRUE;
+  case MUIA_Panel_Collapsed:
+    *msg->opg_Storage = data->collapsed;
+    return TRUE;
   }
 
   return DoSuperMethodA(cl, obj, (Msg)msg);
@@ -539,42 +490,31 @@ IPTR Panel__MUIM_AskMinMax(struct IClass *cl, Object *obj,
   UWORD title_width = 0, title_height = 0;
 
   /* Let the Group superclass calculate the children's requirements first */
-  DoSuperMethodA(cl, obj, (Msg)msg);
+  if (!data->collapsed) {
+    DoSuperMethodA(cl, obj, (Msg)msg);
+  } else {
+    /* For collapsed panels, initialize MinMaxInfo to minimal values */
+    mi = msg->MinMaxInfo;
+    mi->MinWidth = 0;
+    mi->MinHeight = 0;
+    mi->DefWidth = 0;
+    mi->DefHeight = 0;
+    mi->MaxWidth = 0;
+    mi->MaxHeight = 0;
+  }
   mi = msg->MinMaxInfo;
 
   /* Calculate title dimensions if present */
   if (data->title && data->title_position != MUIV_Panel_Title_None) {
-    struct TextExtent te;
-    struct RastPort *rp = _rp(obj);
-
-    if (rp) {
-      TextExtent(rp, data->title, strlen(data->title), &te);
-      title_width = te.te_Width;
-      title_height = te.te_Height;
-
-      /* Adjust dimensions for vertical text rendering */
-      if (data->title_vertical &&
-          (data->title_position == MUIV_Panel_Title_Left ||
-           data->title_position == MUIV_Panel_Title_Right)) {
-        /* For vertical text, width is single character, height is all
-         * characters */
-        TextExtent(rp, "A", 1, &te); /* Get single character dimensions */
-        title_width = te.te_Width;
-        title_height = te.te_Height * strlen(data->title);
-      }
-    } else {
-      /* Fallback estimation */
-      title_width = strlen(data->title) * 8;
-      title_height = 8;
-
-      /* Adjust for vertical text */
-      if (data->title_vertical &&
-          (data->title_position == MUIV_Panel_Title_Left ||
-           data->title_position == MUIV_Panel_Title_Right)) {
-        title_width = 8;                        /* Single character width */
-        title_height = 8 * strlen(data->title); /* All characters stacked */
-      }
+    BOOL use_vertical = FALSE;
+    if (data->title_vertical &&
+        (data->title_position == MUIV_Panel_Title_Left ||
+         data->title_position == MUIV_Panel_Title_Right)) {
+      use_vertical = TRUE;
     }
+
+    Panel_CalculateTextSize(use_vertical, obj, data->title, &title_width,
+                            &title_height);
   }
 
   /* Add padding to the Group's calculated sizes */
@@ -601,15 +541,27 @@ IPTR Panel__MUIM_AskMinMax(struct IClass *cl, Object *obj,
       break;
     case MUIV_Panel_Title_Left:
     case MUIV_Panel_Title_Right:
-      mi->MinWidth += title_width + (TITLE_TEXT_PADDING * 2);
-      mi->DefWidth += title_width + (TITLE_TEXT_PADDING * 2);
+      mi->MinWidth +=
+          title_width + (TITLE_TEXT_PADDING * 2) + TITLE_CONTENT_SPACING;
+      mi->DefWidth +=
+          title_width + (TITLE_TEXT_PADDING * 2) + TITLE_CONTENT_SPACING;
       if (mi->MaxWidth != MUI_MAXMAX)
-        mi->MaxWidth += title_width + (TITLE_TEXT_PADDING * 2);
+        mi->MaxWidth +=
+            title_width + (TITLE_TEXT_PADDING * 2) + TITLE_CONTENT_SPACING;
       mi->MinHeight = MAX(mi->MinHeight, title_height + data->padding * 2);
       mi->DefHeight = MAX(mi->DefHeight, title_height + data->padding * 2);
       break;
     }
   }
+  /* Debug output for calculated sizes */
+  D(bug("Panel__MUIM_AskMinMax: Group calculated sizes:\n"));
+  D(bug("  MinWidth=%d, MinHeight=%d\n", mi->MinWidth, mi->MinHeight));
+  D(bug("  DefWidth=%d, DefHeight=%d\n", mi->DefWidth, mi->DefHeight));
+  D(bug("  MaxWidth=%d, MaxHeight=%d\n", mi->MaxWidth, mi->MaxHeight));
+  D(bug("  Title dimensions: width=%d, height=%d\n", title_width,
+        title_height));
+  D(bug("  Padding=%d, Title position=%d\n", data->padding,
+        data->title_position));
 
   return 0;
 }
@@ -620,33 +572,28 @@ IPTR Panel__MUIM_Layout(struct IClass *cl, Object *obj,
   WORD title_space = 0;
   WORD orig_left, orig_top, orig_width, orig_height;
 
-  /* Calculate title space if present */
+  /* Calculate title dimensions if present */
   if (data->title && data->title_position != MUIV_Panel_Title_None) {
-    struct TextExtent te;
-    struct RastPort *rp = _rp(obj);
+    BOOL use_vertical = FALSE;
+    WORD title_width = 0, title_height = 0;
+    if (data->title_vertical &&
+        (data->title_position == MUIV_Panel_Title_Left ||
+         data->title_position == MUIV_Panel_Title_Right)) {
+      use_vertical = TRUE;
+    }
 
-    if (rp) {
-      TextExtent(rp, data->title, strlen(data->title), &te);
-      switch (data->title_position) {
-      case MUIV_Panel_Title_Top:
-      case MUIV_Panel_Title_Bottom:
-        title_space = te.te_Height + (TITLE_TEXT_PADDING * 2);
-        break;
-      case MUIV_Panel_Title_Left:
-      case MUIV_Panel_Title_Right:
-        if (data->title_vertical) {
-          /* For vertical text, width is single character */
-          TextExtent(rp, "A", 1, &te);
-          title_space = te.te_Width + (TITLE_TEXT_PADDING * 2);
-        } else {
-          title_space = te.te_Width + (TITLE_TEXT_PADDING * 2);
-        }
-        break;
-      }
-    } else {
-      title_space = (data->title_position <= MUIV_Panel_Title_Bottom)
-                        ? 8 + (TITLE_TEXT_PADDING * 2)
-                        : strlen(data->title) * 8 + (TITLE_TEXT_PADDING * 2);
+    Panel_CalculateTextSize(use_vertical, obj, data->title, &title_width,
+                            &title_height);
+    switch (data->title_position) {
+    case MUIV_Panel_Title_Top:
+    case MUIV_Panel_Title_Bottom:
+      title_space = title_height + (TITLE_TEXT_PADDING * 2);
+      break;
+    case MUIV_Panel_Title_Left:
+    case MUIV_Panel_Title_Right:
+      title_space =
+          title_width + (TITLE_TEXT_PADDING * 2) + TITLE_CONTENT_SPACING;
+      break;
     }
   }
 
@@ -692,7 +639,11 @@ IPTR Panel__MUIM_Layout(struct IClass *cl, Object *obj,
   }
 
   /* Let the Group class handle the actual layout of children */
-  IPTR result = DoSuperMethodA(cl, obj, (Msg)msg);
+  IPTR result = 0;
+
+  if (!data->collapsed) {
+    result = DoSuperMethodA(cl, obj, (Msg)msg);
+  }
 
   /* Restore original bounds */
   _left(obj) = orig_left;
@@ -705,46 +656,18 @@ IPTR Panel__MUIM_Layout(struct IClass *cl, Object *obj,
 
 IPTR Panel__MUIM_Draw(struct IClass *cl, Object *obj, struct MUIP_Draw *msg) {
   struct Panel_DATA *data = INST_DATA(cl, obj);
-  UWORD frame_left = _left(obj);
-  UWORD frame_top = _top(obj);
-  UWORD frame_width = _width(obj);
-  UWORD frame_height = _height(obj);
+  IPTR result;
 
-  DoSuperMethodA(cl, obj, (Msg)msg);
+  /* Let superclass handle frame, background, and children drawing */
+  result = DoSuperMethodA(cl, obj, (Msg)msg);
 
-  if (!(msg->flags & MADF_DRAWOBJECT))
-    return 0;
-
-  /* Draw panel frame based on style */
-  switch (data->style) {
-  case MUIV_Panel_Style_Raised:
-    DrawRaisedFrame(_rp(obj), frame_left, frame_top, frame_width, frame_height,
-                    2);
-    break;
-  case MUIV_Panel_Style_Recessed:
-    DrawRecessedFrame(_rp(obj), frame_left, frame_top, frame_width,
-                      frame_height, 2);
-    break;
-  case MUIV_Panel_Style_Groove:
-    DrawGrooveFrame(_rp(obj), frame_left, frame_top, frame_width, frame_height,
-                    2);
-    break;
-  case MUIV_Panel_Style_Ridge:
-    DrawRidgeFrame(_rp(obj), frame_left, frame_top, frame_width, frame_height,
-                   2);
-    break;
-  case MUIV_Panel_Style_Plain:
-  default:
-    /* No frame drawing for plain style */
-    break;
-  }
-
-  /* Draw title if present */
-  if (data->title && data->title_position != MUIV_Panel_Title_None) {
+  /* Draw title if present and we're drawing the object */
+  if ((msg->flags & MADF_DRAWOBJECT) && data->title &&
+      data->title_position != MUIV_Panel_Title_None) {
     Panel_DrawTitle(cl, obj, data);
   }
 
-  return 0;
+  return result;
 }
 
 IPTR Panel__MUIM_Setup(struct IClass *cl, Object *obj, struct MUIP_Setup *msg) {
@@ -754,6 +677,19 @@ IPTR Panel__MUIM_Setup(struct IClass *cl, Object *obj, struct MUIP_Setup *msg) {
     return FALSE;
 
   data->layout_dirty = TRUE;
+
+  /* Set initial child visibility based on collapsed state */
+  if (data->collapsed) {
+    struct MinList *children = NULL;
+    get(obj, MUIA_Group_ChildList, &children);
+    if (children) {
+      Object *child;
+      APTR cstate = children->mlh_Head;
+      while ((child = NextObject(&cstate))) {
+        set(child, MUIA_ShowMe, FALSE);
+      }
+    }
+  }
 
   /* Set up event handler for mouse clicks */
   data->ehn.ehn_Events = IDCMP_MOUSEBUTTONS;
@@ -817,9 +753,15 @@ IPTR Panel__MUIM_Group_ExitChange(struct IClass *cl, Object *obj, Msg msg) {
   result = DoSuperMethodA(cl, obj, msg);
 
   if (data->layout_dirty) {
-    /* Trigger layout recalculation */
-    if ((_flags(obj) & MADF_SETUP))
-      MUI_Redraw(obj, MADF_DRAWOBJECT);
+    /* Trigger layout recalculation by forcing parent relayout */
+    if (_parent(obj)) {
+      Object *parent = _parent(obj);
+      /* Hide, relayout, and show to trigger AskMinMax */
+      DoMethod(parent, MUIM_Hide);
+      DoMethod(parent, MUIM_Layout);
+      DoMethod(parent, MUIM_Show);
+      MUI_Redraw(parent, MADF_DRAWOBJECT);
+    }
     data->layout_dirty = FALSE;
   }
 

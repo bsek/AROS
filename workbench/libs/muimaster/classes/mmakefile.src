@@ -71,6 +71,7 @@ USER_LDFLAGS := -static
 #MM	workbench-classes-zune-title-clean \
 #MM	workbench-classes-zune-process-clean \
 #MM	workbench-classes-zune-panel-clean \
+#MM	workbench-classes-zune-panelgroup-clean \
 #MM	workbench-classes-zune-pixmap-clean
 
 
@@ -139,6 +140,13 @@ USER_LDFLAGS := -static
     modname=Panel modtype=mui files=panel \
     conffile=panel.conf \
     cflags="$(CFLAGS) -DZUNE_BUILTIN_PANEL=0"
+
+#MM workbench-classes-zune-panelgroup : includes
+%build_module \
+    mmake=workbench-classes-zune-panelgroup \
+    modname=PanelGroup modtype=mui files=panelgroup \
+    conffile=panelgroup.conf \
+    cflags="$(CFLAGS) -DZUNE_BUILTIN_PANELGROUP=0"
 
 #MM workbench-classes-zune-imageadjust : includes
 %build_module \
