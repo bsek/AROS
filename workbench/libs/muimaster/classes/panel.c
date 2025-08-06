@@ -26,11 +26,12 @@
 #include "mui.h"
 #include "panel.h"
 #include "panel_private.h"
+#include "panelgroup.h"
 #include "prefs.h"
 #include "support.h"
 #include "textengine.h"
 
-#define DEBUG 1
+#define DEBUG 0
 
 /* Title drawing constants */
 #define TITLE_TEXT_PADDING 4    /* Padding around text within title area */
@@ -144,6 +145,7 @@ static void Panel_CalculateTitleBounds(struct IClass *cl, Object *obj,
  */
 static IPTR Panel_HandleClick(struct IClass *cl, Object *obj, WORD x, WORD y) {
   struct Panel_DATA *data = INST_DATA(cl, obj);
+  Object *parent;
 
   D(bug("Panel_HandleClick: x=%d, y=%d\n", x, y));
 
@@ -169,12 +171,43 @@ static IPTR Panel_HandleClick(struct IClass *cl, Object *obj, WORD x, WORD y) {
             "[%d,%d,%d,%d]\n",
             x, y, title_left, title_top, title_right, title_bottom));
 
-      /* If panel is collapsible, toggle collapsed state */
+      /* If panel is collapsible, use delegation pattern to PanelGroup
+       *
+       * This architectural approach has several benefits:
+       * 1. Centralized state management in PanelGroup
+       * 2. Top-down layout management avoids parent relayout calls
+       * 3. Better support for accordion-style behavior
+       * 4. Cleaner separation of concerns
+       */
       if (data->collapsible) {
-        D(bug("Panel_HandleClick: Title clicked will set collapsed to: %d\n",
-              !data->collapsed));
+        D(bug("Panel_HandleClick: Title clicked, delegating to PanelGroup\n"));
 
-        /* Use Group change methods to trigger proper relayout */
+        /* Find parent and attempt delegation */
+        get(obj, MUIA_Parent, &parent);
+        if (parent) {
+          IPTR result = 0;
+
+          /* Try to toggle panel through PanelGroup - this will only succeed
+           * if the parent is actually a PanelGroup and this panel is managed
+           * by it */
+          result = DoMethod(parent, MUIM_PanelGroup_TogglePanel, obj);
+
+          if (result) {
+            D(bug(
+                "Panel_HandleClick: PanelGroup handled toggle successfully\n"));
+            return MUI_EventHandlerRC_Eat;
+          }
+
+          D(bug("Panel_HandleClick: PanelGroup couldn't handle toggle "
+                "(result=%ld)\n",
+                result));
+        } else {
+          D(bug("Panel_HandleClick: No parent found\n"));
+        }
+
+        /* Fallback: handle locally if parent doesn't support PanelGroup methods
+         * This maintains backward compatibility for standalone panels */
+        D(bug("Panel_HandleClick: Handling collapse/expand locally\n"));
         DoMethod(obj, MUIM_Group_InitChange);
         set(obj, MUIA_Panel_Collapsed, !data->collapsed);
         DoMethod(obj, MUIM_Group_ExitChange);

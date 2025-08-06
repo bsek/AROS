@@ -88,9 +88,6 @@ Object *CreatePanel2(void) {
          Child, VGroup, Child, HGroup, Child, MakeLabel("Theme:"), Child,
          CycleObject, MUIA_Cycle_Entries, list_items2, End, End,
 
-         Child, HGroup, Child, MakeLabel("Auto-save:"), Child, CheckMark(TRUE),
-         End,
-
          Child, HGroup, Child, MakeLabel("Backup count:"), Child, StringObject,
          StringFrame, MUIA_String_Contents, "5", MUIA_String_Integer, 5, End,
          End, End,
@@ -316,22 +313,24 @@ void deinit_gui(void) {
 }
 
 /****************************************************************
- Main event loop
+ The message loop
 *****************************************************************/
 void loop(void) {
   ULONG sigs = 0;
+  LONG id;
 
-  while (DoMethod(app, MUIM_Application_NewInput, &sigs) !=
+  while ((id = DoMethod(app, MUIM_Application_NewInput, &sigs)) !=
          MUIV_Application_ReturnID_Quit) {
-    if (sigs) {
-      sigs = Wait(sigs | SIGBREAKF_CTRL_C);
-      if (sigs & SIGBREAKF_CTRL_C)
-        break;
+    if (id > 0) {
+      HandleButtons(id);
     }
 
-    ULONG id = (ULONG)xget(app, MUIA_Application_ReturnID);
-    if (id != MUIV_Application_ReturnID_Quit) {
-      HandleButtons(id);
+    if (sigs) {
+      sigs = Wait(sigs | SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_D);
+      if (sigs & SIGBREAKF_CTRL_C)
+        break;
+      if (sigs & SIGBREAKF_CTRL_D)
+        break;
     }
   }
 }

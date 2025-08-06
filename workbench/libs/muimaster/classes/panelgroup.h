@@ -26,6 +26,7 @@
 #define MUIM_PanelGroup_ExpandPanel     (TAG_USER | 0x41000102)
 #define MUIM_PanelGroup_TogglePanel     (TAG_USER | 0x41000103)
 #define MUIM_PanelGroup_GetPanelState   (TAG_USER | 0x41000104)
+#define MUIM_PanelGroup_ScanPanels      (TAG_USER | 0x41000105)
 
 /* Method parameter structures */
 struct MUIP_PanelGroup_CollapsePanel {
