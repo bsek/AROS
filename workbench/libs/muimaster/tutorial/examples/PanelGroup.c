@@ -5,14 +5,19 @@
    collapsible panels
 */
 
+#include "intuition/classes.h"
 #include "libraries/mui.h"
 #include "muizunesupport.h"
 #include <stdio.h>
+
+#define DEBUG 1
+#include <aros/debug.h>
 
 /* Objects */
 Object *app;
 Object *WD_Main;
 Object *demo_panelgroup;
+Object *scrollgroup;
 
 /* Control buttons */
 Object *BT_CollapseAll, *BT_ExpandAll, *BT_ToggleMultiple;
@@ -33,6 +38,27 @@ static STRPTR list_items2[] = {"Option A", "Option B", "Option C", "Option D",
                                NULL};
 static STRPTR list_items3[] = {"Task 1: Complete", "Task 2: In Progress",
                                "Task 3: Pending", NULL};
+
+/****************************************************************
+ Hook function to update scrollgroup layout
+*****************************************************************/
+AROS_UFH3(IPTR, UpdateScrollGroupHook, AROS_UFHA(struct Hook *, hook, A0),
+          AROS_UFHA(Object *, obj, A2), AROS_UFHA(APTR, msg, A1)) {
+  AROS_USERFUNC_INIT
+
+  if (scrollgroup) {
+    DoMethod(scrollgroup, MUIM_Group_InitChange);
+    DoMethod(scrollgroup, MUIM_Group_ExitChange);
+  }
+
+  AROS_USERFUNC_EXIT
+  return 0;
+}
+
+static struct Hook update_scrollgroup_hook = {
+    .h_Entry = (HOOKFUNC)AROS_ASMSYMNAME(UpdateScrollGroupHook),
+    .h_SubEntry = NULL,
+    .h_Data = NULL};
 
 /****************************************************************
  Update status display
@@ -61,58 +87,62 @@ void UpdateStatus(void) {
  Create the panels for the demo
 *****************************************************************/
 Object *CreatePanel1(void) {
-  return panel1 = VPanel, MUIA_Panel_Title, "Files", MUIA_Panel_TitlePosition,
-         MUIV_Panel_Title_Top, MUIA_Panel_Collapsible, TRUE, MUIA_Panel_Padding,
-         8,
+  return (VPanel, MUIA_Panel_Title, "Files", MUIA_Panel_TitlePosition,
+          MUIV_Panel_Title_Top, MUIA_Panel_Collapsible, TRUE,
+          MUIA_Panel_Padding, 2, MUIA_Background, "r8b8b8b8b,45454545,13131313",
+          MUIA_Panel_TitleClickedHook, &update_scrollgroup_hook,
 
-         Child, TextObject, MUIA_Text_Contents,
-         "Document files in project folder:", MUIA_Text_PreParse, MUIX_L, End,
+          Child, TextObject, MUIA_Text_Contents,
+          "Document files in project folder:", MUIA_Text_PreParse, MUIX_L, End,
 
-         Child, ListviewObject, MUIA_Listview_List, ListObject,
-         MUIA_List_SourceArray, list_items1, End, End,
+          Child, ListviewObject, MUIA_Listview_List, ListObject,
+          MUIA_List_SourceArray, list_items1, End, End,
 
-         Child, HGroup, Child, SimpleButton("Open"), Child,
-         SimpleButton("Delete"), Child, SimpleButton("Rename"), End,
+          Child, HGroup, Child, SimpleButton("Open"), Child,
+          SimpleButton("Delete"), Child, SimpleButton("Rename"), End,
 
-         End;
+          End);
 }
 
 Object *CreatePanel2(void) {
-  return panel2 = VPanel, MUIA_Panel_Title, "Settings",
-         MUIA_Panel_TitlePosition, MUIV_Panel_Title_Top, MUIA_Panel_Collapsible,
-         TRUE, MUIA_Panel_Padding, 8,
+  return (VPanel, MUIA_Panel_Title, "Settings", MUIA_Panel_TitlePosition,
+          MUIV_Panel_Title_Top, MUIA_Panel_Collapsible, TRUE,
+          MUIA_Panel_Padding, 2, MUIA_Background, "r46464646,82828282,b4b4b4b4",
+          MUIA_Panel_TitleClickedHook, &update_scrollgroup_hook,
 
-         Child, TextObject, MUIA_Text_Contents,
-         "Configuration Options:", MUIA_Text_PreParse, MUIX_L, End,
+          Child, TextObject, MUIA_Text_Contents,
+          "Configuration Options:", MUIA_Text_PreParse, MUIX_L, End,
 
-         Child, VGroup, Child, HGroup, Child, MakeLabel("Theme:"), Child,
-         CycleObject, MUIA_Cycle_Entries, list_items2, End, End,
+          Child, VGroup, Child, HGroup, Child, MakeLabel("Theme:"), Child,
+          CycleObject, MUIA_Cycle_Entries, list_items2, End, End,
 
-         Child, HGroup, Child, MakeLabel("Backup count:"), Child, StringObject,
-         StringFrame, MUIA_String_Contents, "5", MUIA_String_Integer, 5, End,
-         End, End,
+          Child, HGroup, Child, MakeLabel("Backup count:"), Child, StringObject,
+          StringFrame, MUIA_String_Contents, "5", MUIA_String_Integer, 5, End,
+          End, End,
 
-         Child, HGroup, Child, SimpleButton("Apply"), Child,
-         SimpleButton("Reset"), End,
+          Child, HGroup, Child, SimpleButton("Apply"), Child,
+          SimpleButton("Reset"), End,
 
-         End;
+          End);
 }
 
 Object *CreatePanel3(void) {
-  return panel3 = VPanel, MUIA_Panel_Title, "Tasks", MUIA_Panel_TitlePosition,
-         MUIV_Panel_Title_Top, MUIA_Panel_Collapsible, TRUE, MUIA_Panel_Padding,
-         8, MUIA_Panel_Collapsed, TRUE, // Start collapsed
+  return (VPanel, MUIA_Panel_Title, "Tasks", MUIA_Panel_TitlePosition,
+          MUIV_Panel_Title_Top, MUIA_Panel_Collapsible, TRUE,
+          MUIA_Panel_Padding, 2, MUIA_Panel_Collapsed, TRUE, MUIA_Background,
+          "r93939393,70707070,dbdbdbdb", MUIA_Panel_TitleClickedHook,
+          &update_scrollgroup_hook,
 
-         Child, TextObject, MUIA_Text_Contents,
-         "Current project tasks:", MUIA_Text_PreParse, MUIX_L, End,
+          Child, TextObject, MUIA_Text_Contents,
+          "Current project tasks:", MUIA_Text_PreParse, MUIX_L, End,
 
-         Child, ListviewObject, MUIA_Listview_List, ListObject,
-         MUIA_List_SourceArray, list_items3, End, End,
+          Child, ListviewObject, MUIA_Listview_List, ListObject,
+          MUIA_List_SourceArray, list_items3, End, End,
 
-         Child, HGroup, Child, SimpleButton("Add Task"), Child,
-         SimpleButton("Mark Done"), Child, SimpleButton("Edit"), End,
+          Child, HGroup, Child, SimpleButton("Add Task"), Child,
+          SimpleButton("Mark Done"), Child, SimpleButton("Edit"), End,
 
-         End;
+          End);
 }
 
 /****************************************************************
@@ -159,12 +189,16 @@ Object *CreateControlPanel(void) {
  Create the demo panel group
 *****************************************************************/
 Object *CreateDemoPanelGroup(void) {
-  return demo_panelgroup = VPanelGroup, MUIA_PanelGroup_AllowMultiple,
-         allow_multiple,
+  panel1 = CreatePanel1();
+  panel2 = CreatePanel2();
+  panel3 = CreatePanel3();
 
-         Child, CreatePanel1(), Child, CreatePanel2(), Child, CreatePanel3(),
+  return demo_panelgroup =
+             (VPanelGroup, MUIA_PanelGroup_AllowMultiple, allow_multiple,
 
-         End;
+              Child, panel1, Child, panel2, Child, panel3,
+
+              End);
 }
 
 /****************************************************************
@@ -277,19 +311,23 @@ BOOL init_gui(void) {
   MAKE_ID('M', 'A', 'I', 'N'), MUIA_Window_CloseGadget, TRUE, MUIA_Window_Width,
   800, MUIA_Window_Height, 600,
 
-  WindowContents, HGroup,
+  WindowContents, HGroup, MUIA_Group_HorizSpacing, 10,
   /* Control panel on the left */
       Child, VGroup, GroupFrameT("Controls"), MUIA_Weight, 40, Child,
   CreateControlPanel(), End,
 
   /* Demo panel group on the right */
       Child, VGroup, GroupFrameT("PanelGroup Demo"), MUIA_Weight, 60, Child,
-  ScrollgroupObject, MUIA_Scrollgroup_Contents, VGroupV, VirtualFrame, Child,
-  CreateDemoPanelGroup(), End, End, End, End, End, End;
+  scrollgroup = ScrollgroupObject, MUIA_Scrollgroup_Contents, VGroupV,
+  VirtualFrame, Child, CreateDemoPanelGroup(), End, End, End, End, End, End;
 
   if (!app) {
     return FALSE;
   }
+
+  /* Quit application if either window's close gadget is pressed */
+  DoMethod(WD_Main, MUIM_Notify, MUIA_Window_CloseRequest, TRUE, app, 2,
+           MUIM_Application_ReturnID, MUIV_Application_ReturnID_Quit);
 
   /* Setup notifications */
   SetupNotifications();

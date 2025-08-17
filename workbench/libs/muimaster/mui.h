@@ -321,6 +321,30 @@ struct MUI_AlphaData
     LONG data[0];
 };
 
+/* Structure for frame clipping information */
+struct MUI_FrameClipInfo
+{
+    UWORD frame_width;      /* Border width in pixels */
+    UWORD border_radius;    /* Corner radius in pixels (0 = no rounded corners) */
+    BOOL has_rounded_corners; /* TRUE if frame has rounded corners */
+};
+
+/* Hook message structure for frame clipping */
+struct MUIP_FrameClippingHook
+{
+    ULONG MethodID;
+    Object *obj;                         /* The object being drawn */
+    struct MUI_FrameClipInfo *clipinfo; /* Frame clipping information */
+    struct Region **clipregion;         /* OUT: Clipping region to install (can be NULL) */
+};
+
+/* Message structure for querying frame clipping information */
+struct MUIP_QueryFrameClipping
+{
+    ULONG MethodID;
+    struct MUI_FrameClipInfo *clipinfo; /* OUT: Frame clipping information */
+};
+
 #ifndef _MUI_CLASSES_NOTIFY_H
 #include "classes/notify.h"
 #endif
@@ -673,5 +697,13 @@ struct MUI_Command
 #ifndef _MUI_MACROS_H
 #include "macros.h"
 #endif
+
+
+
+/* Frame clipping hook attribute */
+#define MUIA_FrameClippingHook          0x80420008  /* isg struct Hook * */
+
+/* Frame clipping method */
+#define MUIM_QueryFrameClipping         0x80420009  /* Query frame clipping info */
 
 #endif /* LIBRARIES_MUI_H */

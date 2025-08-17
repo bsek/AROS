@@ -18,6 +18,7 @@ struct PanelGroup_DATA
 
     /* Runtime state */
     BOOL  layout_dirty;        /* Layout needs refresh */
+    BOOL  states_current;      /* Panel states in tracking nodes are current */
     BOOL  in_collapse_all;     /* Flag to prevent recursion during collapse all */
     BOOL  in_expand_all;       /* Flag to prevent recursion during expand all */
 

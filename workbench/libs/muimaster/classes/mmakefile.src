@@ -137,7 +137,7 @@ USER_LDFLAGS := -static
 #MM workbench-classes-zune-panel : includes
 %build_module \
     mmake=workbench-classes-zune-panel \
-    modname=Panel modtype=mui files=panel \
+    modname=Panel modtype=mui files="panel panel_title" \
     conffile=panel.conf \
     cflags="$(CFLAGS) -DZUNE_BUILTIN_PANEL=0"
 

@@ -9,12 +9,9 @@
 */
 
 /* Some nice macrodefinitions for creating your object tree */
+#include "classes/group.h"
 #define PanelObject         MUIOBJMACRO_START(MUIC_Panel)
-#define HPanel              MUIOBJMACRO_START(MUIC_Panel)
-#define VPanel              MUIOBJMACRO_START(MUIC_Panel)
 #define PanelGroupObject    MUIOBJMACRO_START(MUIC_PanelGroup)
-#define HPanelGroup         MUIOBJMACRO_START(MUIC_PanelGroup)
-#define VPanelGroup         MUIOBJMACRO_START(MUIC_PanelGroup)
 #define MenustripObject     MUIOBJMACRO_START(MUIC_Menustrip)
 #define MenuObject          MUIOBJMACRO_START(MUIC_Menu)
 #define MenuObjectT(name)   MUIOBJMACRO_START(MUIC_Menu), MUIA_Menu_Title, name
@@ -91,7 +88,12 @@
     MUIOBJMACRO_START(MUIC_Virtgroup), MUIA_Group_PageMode, TRUE
 #define RegisterGroup(ts) \
     MUIOBJMACRO_START(MUIC_Register), MUIA_Register_Titles, ((IPTR) (ts))
-
+#define VPanel              MUIOBJMACRO_START(MUIC_Panel)
+#define HPanel \
+    MUIOBJMACRO_START(MUIC_Panel), MUIA_Group_Horiz, TRUE
+#define VPanelGroup         MUIOBJMACRO_START(MUIC_PanelGroup)
+#define HPanelGroup \
+    MUIOBJMACRO_START(MUIC_PanelGroup), MUIA_Group_Horiz, TRUE
 #define End                 OBJMACRO_END
 
 #define Child               MUIA_Group_Child

@@ -1350,125 +1350,125 @@ static void safe_frame_draw_wrapper(
 **************************************************************************/
 static const struct ZuneFrameGfx __builtinFrameGfx[] = {
     /* type 0 : FST_NONE */
-    {frame_none_draw, 0, 0, 0, 0, 0},
-    {frame_none_draw, 0, 0, 0, 0, 0},
+    {frame_none_draw, 0, 0, 0, 0, 0, NULL, FALSE, 0, 0},
+    {frame_none_draw, 0, 0, 0, 0, 0, NULL, FALSE, 0, 0},
 
     /* monochrome border */
     /* 1 : FST_RECT */
-    {frame_white_rect_draw, 0, 1, 1, 1, 1},
-    {frame_black_rect_draw, 0, 1, 1, 1, 1},
+    {frame_white_rect_draw, 0, 1, 1, 1, 1, NULL, FALSE, 1, 0},
+    {frame_black_rect_draw, 0, 1, 1, 1, 1, NULL, FALSE, 1, 0},
 
     /* clean 3D look */
     /* 2 : FST_BEVEL */
-    {frame_bevelled_draw, 0, 1, 1, 1, 1},
-    {frame_recessed_draw, 0, 1, 1, 1, 1},
+    {frame_bevelled_draw, 0, 1, 1, 1, 1, NULL, FALSE, 1, 0},
+    {frame_recessed_draw, 0, 1, 1, 1, 1, NULL, FALSE, 1, 0},
 
     /* thin relief border */
     /* 3 : FST_THIN_BORDER */
-    {frame_thin_border_up_draw, 0, 2, 2, 2, 2},
-    {frame_thin_border_down_draw, 0, 2, 2, 2, 2},
+    {frame_thin_border_up_draw, 0, 2, 2, 2, 2, NULL, FALSE, 2, 0},
+    {frame_thin_border_down_draw, 0, 2, 2, 2, 2, NULL, FALSE, 2, 0},
 
     /* thick relief border */
     /* 4 : FST_THICK_BORDER */
-    {frame_thick_border_up_draw, 0, 3, 3, 3, 3},
-    {frame_thick_border_down_draw, 0, 3, 3, 3, 3},
+    {frame_thick_border_up_draw, 0, 3, 3, 3, 3, NULL, FALSE, 3, 0},
+    {frame_thick_border_down_draw, 0, 3, 3, 3, 3, NULL, FALSE, 3, 0},
 
     /* rounded bevel */
     /* 5 : FST_ROUND_BEVEL */
-    {frame_round_bevel_up_draw, 0, 4, 4, 1, 1},
-    {frame_round_bevel_down_draw, 0, 4, 4, 1, 1},
+    {frame_round_bevel_up_draw, 0, 4, 4, 1, 1, NULL, FALSE, 2, 2},
+    {frame_round_bevel_down_draw, 0, 4, 4, 1, 1, NULL, FALSE, 2, 2},
 
     /* zin31/xen look */
     /* 6 : FST_WIN_BEVEL */
-    {frame_border_button_up_draw, 0, 2, 2, 2, 2},
-    {frame_border_button_down_draw, 0, 3, 1, 3, 1},
+    {frame_border_button_up_draw, 0, 2, 2, 2, 2, NULL, FALSE, 2, 0},
+    {frame_border_button_down_draw, 0, 3, 1, 3, 1, NULL, FALSE, 2, 0},
 
     /* rounded thick border */
     /* 7 : FST_ROUND_THICK_BORDER */
-    {frame_round_thick_border_up_draw, 0, 4, 4, 4, 4},
-    {frame_round_thick_border_down_draw, 0, 4, 4, 4, 4},
+    {frame_round_thick_border_up_draw, 0, 4, 4, 4, 4, NULL, FALSE, 4, 3},
+    {frame_round_thick_border_down_draw, 0, 4, 4, 4, 4, NULL, FALSE, 4, 3},
 
     /* rounded thin border */
     /* 8 : FST_ROUND_THIN_BORDER */
-    {frame_round_thin_border_up_draw, 0, 4, 4, 4, 4},
-    {frame_round_thin_border_down_draw, 0, 4, 4, 4, 4},
+    {frame_round_thin_border_up_draw, 0, 4, 4, 4, 4, NULL, FALSE, 2, 2},
+    {frame_round_thin_border_down_draw, 0, 4, 4, 4, 4, NULL, FALSE, 2, 2},
 
     /* strange gray border */
     /* 9 : FST_GRAY_BORDER */
-    {frame_gray_border_up_draw, 0, 2, 2, 2, 2},
-    {frame_gray_border_down_draw, 0, 2, 2, 2, 2},
+    {frame_gray_border_up_draw, 0, 2, 2, 2, 2, NULL, FALSE, 2, 0},
+    {frame_gray_border_down_draw, 0, 2, 2, 2, 2, NULL, FALSE, 2, 0},
 
     /* semi rounded bevel */
     /* A : FST_SEMIROUND_BEVEL */
-    {frame_semiround_bevel_up_draw, 0, 2, 2, 2, 2},
-    {frame_semiround_bevel_down_draw, 0, 2, 2, 2, 2},
+    {frame_semiround_bevel_up_draw, 0, 2, 2, 2, 2, NULL, FALSE, 2, 1},
+    {frame_semiround_bevel_down_draw, 0, 2, 2, 2, 2, NULL, FALSE, 2, 1},
 
     /* modern frame styles */
     /* B : FST_FLAT_BORDER */
-    {frame_flat_border_draw, 0, 1, 1, 1, 1},
-    {frame_flat_border_draw, 0, 1, 1, 1, 1},
+    {frame_flat_border_draw, 0, 1, 1, 1, 1, NULL, FALSE, 1, 0},
+    {frame_flat_border_draw, 0, 1, 1, 1, 1, NULL, FALSE, 1, 0},
 
     /* C : FST_SUBTLE_BORDER */
-    {frame_subtle_border_draw, 0, 1, 1, 1, 1},
-    {frame_subtle_border_draw, 0, 1, 1, 1, 1},
+    {frame_subtle_border_draw, 0, 1, 1, 1, 1, NULL, FALSE, 1, 0},
+    {frame_subtle_border_draw, 0, 1, 1, 1, 1, NULL, FALSE, 1, 0},
 
     /* D : FST_ULTRA_ROUNDED */
-    {frame_ultra_rounded_up_draw, 0, 6, 6, 6, 6},
-    {frame_ultra_rounded_down_draw, 0, 6, 6, 6, 6},
+    {frame_ultra_rounded_up_draw, 0, 6, 6, 6, 6, NULL, FALSE, 2, 6},
+    {frame_ultra_rounded_down_draw, 0, 6, 6, 6, 6, NULL, FALSE, 2, 6},
 
     /* E : FST_ENHANCED_ROUNDED */
-    {frame_enhanced_rounded_up_draw, 0, 8, 8, 8, 8},
-    {frame_enhanced_rounded_down_draw, 0, 8, 8, 8, 8},
+    {frame_enhanced_rounded_up_draw, 0, 8, 8, 8, 8, NULL, FALSE, 3, 8},
+    {frame_enhanced_rounded_down_draw, 0, 8, 8, 8, 8, NULL, FALSE, 3, 8},
 
     /* custom frames */
 
-    {frame_custom_up, 1, 0, 0, 0, 0},
-    {frame_custom_down, 1, 0, 0, 0, 0},
+    {frame_custom_up, 1, 0, 0, 0, 0, NULL, FALSE, 0, 0},
+    {frame_custom_down, 1, 0, 0, 0, 0, NULL, FALSE, 0, 0},
 
-    {frame_custom_up, 2, 0, 0, 0, 0},
-    {frame_custom_down, 2, 0, 0, 0, 0},
+    {frame_custom_up, 2, 0, 0, 0, 0, NULL, FALSE, 0, 0},
+    {frame_custom_down, 2, 0, 0, 0, 0, NULL, FALSE, 0, 0},
 
-    {frame_custom_up, 3, 0, 0, 0, 0},
-    {frame_custom_down, 3, 0, 0, 0, 0},
+    {frame_custom_up, 3, 0, 0, 0, 0, NULL, FALSE, 0, 0},
+    {frame_custom_down, 3, 0, 0, 0, 0, NULL, FALSE, 0, 0},
 
-    {frame_custom_up, 4, 0, 0, 0, 0},
-    {frame_custom_down, 4, 0, 0, 0, 0},
+    {frame_custom_up, 4, 0, 0, 0, 0, NULL, FALSE, 0, 0},
+    {frame_custom_down, 4, 0, 0, 0, 0, NULL, FALSE, 0, 0},
 
-    {frame_custom_up, 5, 0, 0, 0, 0},
-    {frame_custom_down, 5, 0, 0, 0, 0},
+    {frame_custom_up, 5, 0, 0, 0, 0, NULL, FALSE, 0, 0},
+    {frame_custom_down, 5, 0, 0, 0, 0, NULL, FALSE, 0, 0},
 
-    {frame_custom_up, 6, 0, 0, 0, 0},
-    {frame_custom_down, 6, 0, 0, 0, 0},
+    {frame_custom_up, 6, 0, 0, 0, 0, NULL, FALSE, 0, 0},
+    {frame_custom_down, 6, 0, 0, 0, 0, NULL, FALSE, 0, 0},
 
-    {frame_custom_up, 7, 0, 0, 0, 0},
-    {frame_custom_down, 7, 0, 0, 0, 0},
+    {frame_custom_up, 7, 0, 0, 0, 0, NULL, FALSE, 0, 0},
+    {frame_custom_down, 7, 0, 0, 0, 0, NULL, FALSE, 0, 0},
 
-    {frame_custom_up, 8, 0, 0, 0, 0},
-    {frame_custom_down, 8, 0, 0, 0, 0},
+    {frame_custom_up, 8, 0, 0, 0, 0, NULL, FALSE, 0, 0},
+    {frame_custom_down, 8, 0, 0, 0, 0, NULL, FALSE, 0, 0},
 
-    {frame_custom_up, 9, 0, 0, 0, 0},
-    {frame_custom_down, 9, 0, 0, 0, 0},
+    {frame_custom_up, 9, 0, 0, 0, 0, NULL, FALSE, 0, 0},
+    {frame_custom_down, 9, 0, 0, 0, 0, NULL, FALSE, 0, 0},
 
-    {frame_custom_up, 10, 0, 0, 0, 0},
-    {frame_custom_down, 10, 0, 0, 0, 0},
+    {frame_custom_up, 10, 0, 0, 0, 0, NULL, FALSE, 0, 0},
+    {frame_custom_down, 10, 0, 0, 0, 0, NULL, FALSE, 0, 0},
 
-    {frame_custom_up, 11, 0, 0, 0, 0},
-    {frame_custom_down, 11, 0, 0, 0, 0},
+    {frame_custom_up, 11, 0, 0, 0, 0, NULL, FALSE, 0, 0},
+    {frame_custom_down, 11, 0, 0, 0, 0, NULL, FALSE, 0, 0},
 
-    {frame_custom_up, 12, 0, 0, 0, 0},
-    {frame_custom_down, 12, 0, 0, 0, 0},
+    {frame_custom_up, 12, 0, 0, 0, 0, NULL, FALSE, 0, 0},
+    {frame_custom_down, 12, 0, 0, 0, 0, NULL, FALSE, 0, 0},
 
-    {frame_custom_up, 13, 0, 0, 0, 0},
-    {frame_custom_down, 13, 0, 0, 0, 0},
+    {frame_custom_up, 13, 0, 0, 0, 0, NULL, FALSE, 0, 0},
+    {frame_custom_down, 13, 0, 0, 0, 0, NULL, FALSE, 0, 0},
 
-    {frame_custom_up, 14, 0, 0, 0, 0},
-    {frame_custom_down, 14, 0, 0, 0, 0},
+    {frame_custom_up, 14, 0, 0, 0, 0, NULL, FALSE, 0, 0},
+    {frame_custom_down, 14, 0, 0, 0, 0, NULL, FALSE, 0, 0},
 
-    {frame_custom_up, 15, 0, 0, 0, 0},
-    {frame_custom_down, 15, 0, 0, 0, 0},
+    {frame_custom_up, 15, 0, 0, 0, 0, NULL, FALSE, 0, 0},
+    {frame_custom_down, 15, 0, 0, 0, 0, NULL, FALSE, 0, 0},
 
-    {frame_custom_up, 16, 0, 0, 0, 0},
-    {frame_custom_down, 16, 0, 0, 0, 0},
+    {frame_custom_up, 16, 0, 0, 0, 0, NULL, FALSE, 0, 0},
+    {frame_custom_down, 16, 0, 0, 0, 0, NULL, FALSE, 0, 0},
 
 };
 
@@ -1609,4 +1609,155 @@ BOOL zune_frame_spec_to_intern(CONST_STRPTR spec,
     return FALSE;
   intern->innerBottom = val;
   return TRUE;
+}
+
+/**************************************************************************
+ Frame Clipping Support for Rounded Corners
+**************************************************************************/
+
+/**
+ * Query frame clipping information including border radius and width
+ * @param obj MUI object
+ * @param frameSpec Frame specification
+ * @param clipinfo Output structure to fill with clipping info
+ * @return TRUE if successful, FALSE on error
+ */
+BOOL zune_frame_get_clip_info(Object *obj,
+                              const struct MUI_FrameSpec_intern *frameSpec,
+                              struct MUI_FrameClipInfo *clipinfo) {
+  const struct ZuneFrameGfx *zframe;
+
+  if (!obj || !frameSpec || !clipinfo)
+    return FALSE;
+
+  /* Get frame graphics information */
+  zframe = zune_zframe_get(obj, frameSpec);
+  if (!zframe)
+    return FALSE;
+
+  /* Fill in clipping information */
+  clipinfo->frame_width = zframe->frame_width;
+  clipinfo->border_radius = zframe->border_radius;
+  clipinfo->has_rounded_corners = (zframe->border_radius > 0);
+
+  return TRUE;
+}
+
+/**
+ * Create a clipping region for rounded corner frames
+ * @param left Left coordinate of frame
+ * @param top Top coordinate of frame
+ * @param width Width of frame
+ * @param height Height of frame
+ * @param clipinfo Frame clipping information
+ * @return Clipping region or NULL on error
+ */
+struct Region *
+zune_frame_create_clip_region(int left, int top, int width, int height,
+                              const struct MUI_FrameClipInfo *clipinfo) {
+  struct Region *region;
+  struct Rectangle rect;
+
+  if (!clipinfo || width <= 0 || height <= 0)
+    return NULL;
+
+  /* For non-rounded frames, return full rectangular region */
+  if (!clipinfo->has_rounded_corners || clipinfo->border_radius == 0) {
+    region = NewRegion();
+    if (region) {
+      rect.MinX = left;
+      rect.MinY = top;
+      rect.MaxX = left + width - 1;
+      rect.MaxY = top + height - 1;
+      OrRectRegion(region, &rect);
+    }
+    return region;
+  }
+
+  /* Create clipping region for rounded corners */
+  region = NewRegion();
+  if (!region)
+    return NULL;
+
+  int radius = clipinfo->border_radius;
+
+  /* Ensure radius doesn't exceed frame dimensions */
+  if (radius * 2 > width)
+    radius = width / 2;
+  if (radius * 2 > height)
+    radius = height / 2;
+
+  /* Add main rectangular area (excluding corner areas) */
+
+  /* Top rectangle (above corners) */
+  if (radius < height / 2) {
+    rect.MinX = left + radius;
+    rect.MinY = top;
+    rect.MaxX = left + width - radius - 1;
+    rect.MaxY = top + radius - 1;
+    if (rect.MinX <= rect.MaxX && rect.MinY <= rect.MaxY)
+      OrRectRegion(region, &rect);
+  }
+
+  /* Middle rectangle (full width between corners) */
+  rect.MinX = left;
+  rect.MinY = top + radius;
+  rect.MaxX = left + width - 1;
+  rect.MaxY = top + height - radius - 1;
+  if (rect.MinX <= rect.MaxX && rect.MinY <= rect.MaxY)
+    OrRectRegion(region, &rect);
+
+  /* Bottom rectangle (below corners) */
+  if (radius < height / 2) {
+    rect.MinX = left + radius;
+    rect.MinY = top + height - radius;
+    rect.MaxX = left + width - radius - 1;
+    rect.MaxY = top + height - 1;
+    if (rect.MinX <= rect.MaxX && rect.MinY <= rect.MaxY)
+      OrRectRegion(region, &rect);
+  }
+
+  /* Add rounded corner pixels using circle algorithm */
+  int x, y;
+  int cx, cy;
+
+  /* For each corner, calculate which pixels are inside the rounded area */
+  for (y = 0; y < radius; y++) {
+    for (x = 0; x < radius; x++) {
+      /* Check if pixel is inside circle using distance formula */
+      int dx = radius - x - 1;
+      int dy = radius - y - 1;
+      if (dx * dx + dy * dy <= radius * radius) {
+        /* Top-left corner */
+        rect.MinX = left + x;
+        rect.MinY = top + y;
+        rect.MaxX = left + x;
+        rect.MaxY = top + y;
+        OrRectRegion(region, &rect);
+
+        /* Top-right corner */
+        rect.MinX = left + width - x - 1;
+        rect.MinY = top + y;
+        rect.MaxX = left + width - x - 1;
+        rect.MaxY = top + y;
+        OrRectRegion(region, &rect);
+
+        /* Bottom-left corner */
+        rect.MinX = left + x;
+        rect.MinY = top + height - y - 1;
+        rect.MaxX = left + x;
+        rect.MaxY = top + height - y - 1;
+        OrRectRegion(region, &rect);
+
+        /* Bottom-right corner */
+        rect.MinX = left + width - x - 1;
+        rect.MinY = top + height - y - 1;
+        rect.MaxX = left + width - x - 1;
+        rect.MaxY = top + height - y - 1;
+        OrRectRegion(region, &rect);
+      }
+    }
+  }
+
+  return region;
 }

@@ -102,7 +102,8 @@ FILES := \
     support \
     support_aros \
     support_classes \
-    textengine
+    textengine \
+    panel_title
 
 FUNCS := \
     mui_addclipping \

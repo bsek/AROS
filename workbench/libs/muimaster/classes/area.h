@@ -1,4 +1,4 @@
-/* 
+/*
     Copyright (C) 1999, David Le Corfec.
     Copyright (C) 2002 - 2014, The AROS Development Team.
     All rights reserved.
@@ -229,7 +229,6 @@ struct MUIP_DrawBackground
 struct MUIP_DrawBackgroundBuffered
 {
     STACKED ULONG MethodID;
-    STACKED struct RastPort *rp;
     STACKED LONG left;
     STACKED LONG top;
     STACKED LONG width;
@@ -518,6 +517,8 @@ struct MUI_AreaData
     struct MUI_EventHandlerNode mad_hiehn;      /* Eventhandler to simulate MUIM_HandleInput */
 
     LONG mad_DisableCount;      /* counts number of disables */
+    struct Hook *mad_FrameClippingHook;         /* Hook called before MUIM_Draw for frame clipping */
+    APTR mad_FrameClipHandle;   /* Handle returned by MUI_AddClipRegion for frame clipping */
     /* END PRIV */
 // only 148 bytes for the struct in MUI !
 };

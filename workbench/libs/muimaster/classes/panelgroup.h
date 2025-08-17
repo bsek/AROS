@@ -2,7 +2,7 @@
 #define _MUI_CLASSES_PANELGROUP_H
 
 /*
-    Copyright (C) 2024, The AROS Development Team. All rights reserved.
+    Copyright (C) 2025, The AROS Development Team. All rights reserved.
 
     PanelGroup class public interface
 */

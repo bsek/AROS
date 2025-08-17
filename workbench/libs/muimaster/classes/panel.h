@@ -22,13 +22,13 @@
 #define MUIA_Panel_TitleVertical        (TAG_USER | 0x4000000A)
 #define MUIA_Panel_Collapsible          (TAG_USER | 0x4000000B)
 #define MUIA_Panel_Collapsed            (TAG_USER | 0x4000000C)
+#define MUIA_Panel_DrawSeparator        (TAG_USER | 0x4000000D)
+#define MUIA_Panel_TitleClickedHook     (TAG_USER | 0x4000000E)
 
 /* Title position values */
 #define MUIV_Panel_Title_None       0
 #define MUIV_Panel_Title_Top        1
-#define MUIV_Panel_Title_Bottom     2
-#define MUIV_Panel_Title_Left       3
-#define MUIV_Panel_Title_Right      4
+#define MUIV_Panel_Title_Left       2
 
 /* Title text position values */
 #define MUIV_Panel_Title_Text_Centered 0

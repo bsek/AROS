@@ -1,4 +1,4 @@
-/* 
+/*
     Copyright  1999, David Le Corfec.
     Copyright  2002, The AROS Development Team.
     All rights reserved.
@@ -8,11 +8,15 @@
 #ifndef _MUI_FRAME_H
 #define _MUI_FRAME_H
 
+#include "intuition/classusr.h"
+#include <proto/graphics.h>
+
 #ifndef EXEC_TYPES_H
 #include <exec/types.h>
 #endif
 
 struct MUI_FrameSpec;
+struct MUI_FrameClipInfo;
 
 /* MUI_*Spec really are ASCII strings.
  */
@@ -71,13 +75,11 @@ struct MUI_FrameSpec_intern
     UBYTE innerBottom;
 };
 
-
 struct MUI_RenderInfo;
 struct dt_frame_image;
 typedef void (*ZFDrawFunc) (struct dt_frame_image *fi,
     struct MUI_RenderInfo *mri, int globleft, int globtop, int globwidth,
     int globheight, int left, int top, int width, int height);
-
 
 struct ZuneFrameGfx
 {
@@ -89,6 +91,8 @@ struct ZuneFrameGfx
     UWORD ibottom;
     struct dt_frame_image *customframe;
     BOOL noalpha;
+    UWORD frame_width;      /* Border width for clipping calculations */
+    UWORD border_radius;    /* Corner radius for rounded frames */
 };
 
 const struct ZuneFrameGfx *zune_zframe_get(Object *obj,
@@ -100,5 +104,13 @@ BOOL zune_frame_intern_to_spec(const struct MUI_FrameSpec_intern *intern,
     STRPTR spec);
 BOOL zune_frame_spec_to_intern(CONST_STRPTR spec,
     struct MUI_FrameSpec_intern *intern);
+
+/* New function to query frame clipping information */
+BOOL zune_frame_get_clip_info(Object *obj, const struct MUI_FrameSpec_intern *frameSpec,
+    struct MUI_FrameClipInfo *clipinfo);
+
+/* Function to create clipping region for rounded corners */
+struct Region *zune_frame_create_clip_region(int left, int top, int width, int height,
+    const struct MUI_FrameClipInfo *clipinfo);
 
 #endif

@@ -126,6 +126,7 @@ Diagnostics:
     - "readability-implicit-bool-conversion"
     - "misc-redundant-expression"
     - "cppcoreguidelines-narrowing-conversions"
+    - "bugprone-easily-swappable-parameters"
 
   # Configure ClangTidy to be less strict for AROS development
   ClangTidy:

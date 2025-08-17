@@ -12,7 +12,10 @@ FILES  := \
     HVGroup   \
     Notify    \
     Panel     \
-    PanelGroup
+    PanelGroup \
+    frame_clipping_example \
+    test_simple \
+    test_frame_clipping
 
 #MM workbench-libs-muimaster-examples : includes linklibs
 
