@@ -42,8 +42,7 @@ typedef enum
     FST_SEMIROUND_BEVEL,
     FST_FLAT_BORDER,            /* 11 - modern flat design */
     FST_SUBTLE_BORDER,          /* 12 - minimal border */
-    FST_ULTRA_ROUNDED,          /* 13 - ultra-smooth rounded corners */
-    FST_ENHANCED_ROUNDED,       /* 14 - anti-aliased rounded corners */
+    FST_ROUNDED,                /* 13 - rounded corners */
     FST_CUSTOM1,
     FST_CUSTOM2,
     FST_CUSTOM3,

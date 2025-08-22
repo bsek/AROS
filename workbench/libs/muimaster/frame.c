@@ -19,8 +19,9 @@
 #include "frame.h"
 #include "mui.h"
 #include "muimaster_intern.h"
-#define MYDEBUG 1
-#include "debug.h"
+
+#define DEBUG 0
+#include <aros/debug.h>
 
 extern struct Library *MUIMasterBase;
 
@@ -385,7 +386,7 @@ static inline void cache_pens(struct MUI_RenderInfo *mri, CachedPens *pens) {
   pens->halfshadow = mri->mri_Pens[MPEN_HALFSHADOW];
 }
 
-/** Optimized horizontal line drawing */
+/** Horizontal line drawing */
 static inline void draw_horizontal_line(struct RastPort *rp, int x1, int x2,
                                         int y, ULONG pen) {
   if (x1 > x2)
@@ -394,7 +395,7 @@ static inline void draw_horizontal_line(struct RastPort *rp, int x1, int x2,
   RectFill(rp, x1, y, x2, y);
 }
 
-/** Optimized vertical line drawing */
+/** Vertical line drawing */
 static inline void draw_vertical_line(struct RastPort *rp, int x, int y1,
                                       int y2, ULONG pen) {
   if (y1 > y2)
@@ -404,7 +405,7 @@ static inline void draw_vertical_line(struct RastPort *rp, int x, int y1,
 }
 
 /**
- * Draw 3D edge effect - optimized version with grouped pen operations
+ * Draw 3D edge effect
  * @param raised TRUE for raised effect, FALSE for recessed
  */
 static void draw_3d_edge(struct MUI_RenderInfo *mri, int left, int top,
@@ -446,7 +447,7 @@ static void frame_none_draw(struct dt_frame_image *fi,
 }
 
 /**************************************************************************
- 1 : FST_RECT - Optimized rectangle border drawing
+ 1 : FST_RECT - Rectangle border drawing
 **************************************************************************/
 static void rect_draw(struct dt_frame_image *fi, struct MUI_RenderInfo *mri,
                       int left, int top, int width, int height,
@@ -458,7 +459,6 @@ static void rect_draw(struct dt_frame_image *fi, struct MUI_RenderInfo *mri,
 
   SetAPen(rp, mri->mri_Pens[preset_color]);
 
-  /* Optimized: Use RectFill for better performance */
   if (width == 1 || height == 1) {
     /* For thin lines, fill the entire area */
     RectFill(rp, left, top, left + width - 1, top + height - 1);
@@ -499,7 +499,7 @@ static void frame_black_rect_draw(struct dt_frame_image *fi,
  Draw a bicolor rectangle
 **************************************************************************/
 /**
- * Draw a basic 3D button effect - optimized version with better error handling
+ * Draw a basic 3D button effect
  * @param ul_preset Upper-left edge pen (light for raised, dark for recessed)
  * @param lr_preset Lower-right edge pen (dark for raised, light for recessed)
  */
@@ -511,7 +511,6 @@ static void button_draw(struct dt_frame_image *fi, struct MUI_RenderInfo *mri,
   if (!rp || width <= 2 || height <= 2)
     return; /* Safety check - need minimum size and valid rastport */
 
-  /* Cache pen values for better performance */
   CachedPens pens;
   cache_pens(mri, &pens);
 
@@ -569,8 +568,6 @@ static void thinborder_draw(struct dt_frame_image *fi,
 
   if (width <= 3 || height <= 3)
     return; /* Safety check */
-
-  /* Group operations by pen for better performance */
 
   /* Draw outer upper-left edges */
   SetAPen(rp, mri->mri_Pens[ul_preset]);
@@ -665,7 +662,7 @@ static void frame_thick_border_down_draw(struct dt_frame_image *fi,
  5 : FST_ROUND_BEVEL
 **************************************************************************/
 /**
- * Draw a rounded bevel frame - improved version with better organization
+ * Draw a rounded bevel frame
  * @param ul Upper-left pen (light for raised, dark for recessed)
  * @param lr Lower-right pen (dark for raised, light for recessed)
  */
@@ -851,8 +848,6 @@ static void round_thin_border_draw(struct dt_frame_image *fi,
   rect_draw(fi, mri, left, top, width - 1, height - 1, pen1);
   rect_draw(fi, mri, left + 1, top + 1, width - 1, height - 1, pen5);
 
-  /* Group corner operations by pen for better performance */
-
   /* Draw outer corners with pen2 */
   SetAPen(rp, mri->mri_Pens[pen2]);
   RectFill(rp, left, top, left + 1, top + 1); /* Top-left outer */
@@ -1008,7 +1003,6 @@ static void frame_semiround_bevel_down_draw(struct dt_frame_image *fi,
  *                 2 = Northwest (top-left corner)
  *                 4 = Southwest (bottom-left corner)
  *                 8 = Southeast (bottom-right corner)
- *                 Use only ONE quadrant per corner for proper frame appearance
  */
 static void draw_smooth_corner(struct RastPort *rp, int cx, int cy, int radius,
                                ULONG pen, int quadrant) {
@@ -1078,142 +1072,12 @@ static void fill_corner_connections(struct RastPort *rp, int left, int top,
 }
 
 /**
- * Ultra-smooth rounded frame with large radius corners
- * Uses Bresenham circle algorithm for mathematically perfect quarter-circles
+ * D: Rounded frame
  */
-static void frame_ultra_rounded_draw(struct dt_frame_image *fi,
-                                     struct MUI_RenderInfo *mri, int gl, int gt,
-                                     int gw, int gh, int left, int top,
-                                     int width, int height, MPen light_pen,
-                                     MPen dark_pen) {
-  struct RastPort *rp = mri->mri_RastPort;
-
-  if (width <= 16 || height <= 16)
-    return; /* Need minimum size for large rounded corners */
-
-  int radius = 6; /* Large corner radius */
-  CachedPens pens;
-  cache_pens(mri, &pens);
-
-  /* Clear corner areas that should not be part of the rounded frame */
-  SetAPen(rp, mri->mri_Pens[MPEN_BACKGROUND]);
-
-  /* Top-left corner */
-  int x, y;
-  for (y = 0; y < radius; y++) {
-    for (x = 0; x < radius; x++) {
-      int dx = radius - x - 1;
-      int dy = radius - y - 1;
-      if (dx * dx + dy * dy > radius * radius) {
-        WritePixel(rp, left + x, top + y);
-      }
-    }
-  }
-
-  /* Top-right corner */
-  for (y = 0; y < radius; y++) {
-    for (x = 0; x < radius; x++) {
-      int dx = x;
-      int dy = radius - y - 1;
-      if (dx * dx + dy * dy > radius * radius) {
-        WritePixel(rp, left + width - radius + x, top + y);
-      }
-    }
-  }
-
-  /* Bottom-left corner */
-  for (y = 0; y < radius; y++) {
-    for (x = 0; x < radius; x++) {
-      int dx = radius - x - 1;
-      int dy = y;
-      if (dx * dx + dy * dy > radius * radius) {
-        WritePixel(rp, left + x, top + height - radius + y);
-      }
-    }
-  }
-
-  /* Bottom-right corner */
-  for (y = 0; y < radius; y++) {
-    for (x = 0; x < radius; x++) {
-      int dx = x;
-      int dy = y;
-      if (dx * dx + dy * dy > radius * radius) {
-        WritePixel(rp, left + width - radius + x, top + height - radius + y);
-      }
-    }
-  }
-
-  /* Draw straight edges with light pen (top and left) */
-  SetAPen(rp, mri->mri_Pens[light_pen]);
-  /* Top edge */
-  RectFill(rp, left + radius + 1, top, left + width - radius - 2, top);
-  /* Left edge */
-  RectFill(rp, left, top + radius + 1, left, top + height - radius - 2);
-
-  /* Draw straight edges with dark pen (bottom and right) */
-  SetAPen(rp, mri->mri_Pens[dark_pen]);
-  /* Bottom edge */
-  RectFill(rp, left + radius + 1, top + height - 1, left + width - radius - 2,
-           top + height - 1);
-  /* Right edge */
-  RectFill(rp, left + width - 1, top + radius + 1, left + width - 1,
-           top + height - radius - 2);
-
-  /* Draw smooth rounded corners - one quarter circle per corner */
-  /* Top-left corner: center at (left+radius, top+radius), draw NW quadrant */
-  draw_smooth_corner(rp, left + radius, top + radius, radius,
-                     mri->mri_Pens[light_pen], 2);
-
-  /* Top-right corner: center at (right-radius, top+radius), draw NE quadrant */
-  draw_smooth_corner(rp, left + width - radius - 1, top + radius, radius,
-                     mri->mri_Pens[light_pen], 1);
-
-  /* Bottom-left corner: center at (left+radius, bottom-radius), draw SW
-   * quadrant */
-  draw_smooth_corner(rp, left + radius, top + height - radius - 1, radius,
-                     mri->mri_Pens[dark_pen], 4);
-
-  /* Bottom-right corner: center at (right-radius, bottom-radius), draw SE
-   * quadrant */
-  draw_smooth_corner(rp, left + width - radius - 1, top + height - radius - 1,
-                     radius, mri->mri_Pens[dark_pen], 8);
-
-  /* Ensure perfect connections between curves and straight lines */
-  fill_corner_connections(rp, left, top, width, height, radius,
-                          mri->mri_Pens[light_pen], mri->mri_Pens[dark_pen]);
-}
-
-/**
- * Ultra-smooth rounded frame (raised state)
- */
-static void frame_ultra_rounded_up_draw(struct dt_frame_image *fi,
-                                        struct MUI_RenderInfo *mri, int gl,
-                                        int gt, int gw, int gh, int left,
-                                        int top, int width, int height) {
-  frame_ultra_rounded_draw(fi, mri, gl, gt, gw, gh, left, top, width, height,
-                           MPEN_SHINE, MPEN_SHADOW);
-}
-
-/**
- * Ultra-smooth rounded frame (pressed state)
- */
-static void frame_ultra_rounded_down_draw(struct dt_frame_image *fi,
-                                          struct MUI_RenderInfo *mri, int gl,
-                                          int gt, int gw, int gh, int left,
-                                          int top, int width, int height) {
-  frame_ultra_rounded_draw(fi, mri, gl, gt, gw, gh, left, top, width, height,
-                           MPEN_SHADOW, MPEN_SHINE);
-}
-
-/**
- * Enhanced anti-aliased rounded frame with smooth gradient effect
- * Fixed to eliminate gaps between curves and straight lines
- */
-static void frame_enhanced_rounded_draw(struct dt_frame_image *fi,
-                                        struct MUI_RenderInfo *mri, int gl,
-                                        int gt, int gw, int gh, int left,
-                                        int top, int width, int height,
-                                        MPen light_pen, MPen dark_pen) {
+static void frame_rounded_draw(struct dt_frame_image *fi,
+                               struct MUI_RenderInfo *mri, int gl, int gt,
+                               int gw, int gh, int left, int top, int width,
+                               int height, MPen light_pen, MPen dark_pen) {
   struct RastPort *rp = mri->mri_RastPort;
 
   if (width <= 20 || height <= 20)
@@ -1319,29 +1183,29 @@ static void frame_enhanced_rounded_draw(struct dt_frame_image *fi,
 }
 
 /**
- * Enhanced anti-aliased rounded frame (raised state)
+ * Rounded frame (raised state)
  */
-static void frame_enhanced_rounded_up_draw(struct dt_frame_image *fi,
-                                           struct MUI_RenderInfo *mri, int gl,
-                                           int gt, int gw, int gh, int left,
-                                           int top, int width, int height) {
-  frame_enhanced_rounded_draw(fi, mri, gl, gt, gw, gh, left, top, width, height,
-                              MPEN_SHINE, MPEN_SHADOW);
+static void frame_rounded_up_draw(struct dt_frame_image *fi,
+                                  struct MUI_RenderInfo *mri, int gl, int gt,
+                                  int gw, int gh, int left, int top, int width,
+                                  int height) {
+  frame_rounded_draw(fi, mri, gl, gt, gw, gh, left, top, width, height,
+                     MPEN_SHINE, MPEN_SHADOW);
 }
 
 /**
- * Enhanced anti-aliased rounded frame (pressed state)
+ * Rounded frame (pressed state)
  */
-static void frame_enhanced_rounded_down_draw(struct dt_frame_image *fi,
-                                             struct MUI_RenderInfo *mri, int gl,
-                                             int gt, int gw, int gh, int left,
-                                             int top, int width, int height) {
-  frame_enhanced_rounded_draw(fi, mri, gl, gt, gw, gh, left, top, width, height,
-                              MPEN_SHADOW, MPEN_SHINE);
+static void frame_rounded_down_draw(struct dt_frame_image *fi,
+                                    struct MUI_RenderInfo *mri, int gl, int gt,
+                                    int gw, int gh, int left, int top,
+                                    int width, int height) {
+  frame_rounded_draw(fi, mri, gl, gt, gw, gh, left, top, width, height,
+                     MPEN_SHADOW, MPEN_SHINE);
 }
 
 /**
- * Modern flat border - single pixel outline
+ * B: Modern flat border - single pixel outline
  */
 static void frame_flat_border_draw(struct dt_frame_image *fi,
                                    struct MUI_RenderInfo *mri, int gl, int gt,
@@ -1354,7 +1218,7 @@ static void frame_flat_border_draw(struct dt_frame_image *fi,
 }
 
 /**
- * Modern subtle border - uses half-tone for minimal appearance
+ * C: Modern subtle border - uses half-tone for minimal appearance
  */
 static void frame_subtle_border_draw(struct dt_frame_image *fi,
                                      struct MUI_RenderInfo *mri, int gl, int gt,
@@ -1364,58 +1228,6 @@ static void frame_subtle_border_draw(struct dt_frame_image *fi,
     return;
 
   rect_draw(fi, mri, left, top, width, height, MPEN_HALFSHADOW);
-}
-
-/**
- * Enhanced error checking wrapper for all frame drawing
- */
-static void safe_frame_draw_wrapper(
-    void (*draw_func)(struct dt_frame_image *, struct MUI_RenderInfo *, int,
-                      int, int, int, int, int, int, int),
-    struct dt_frame_image *fi, struct MUI_RenderInfo *mri, int gl, int gt,
-    int gw, int gh, int left, int top, int width, int height) {
-  /* Validate parameters */
-  if (!mri || !mri->mri_RastPort || !draw_func) {
-    return;
-  }
-
-  /* Validate dimensions */
-  if (width <= 0 || height <= 0 || left < 0 || top < 0) {
-    return;
-  }
-
-  /* Check for reasonable size limits */
-  if (width > 32767 || height > 32767) {
-    return;
-  }
-
-  /* Clip to screen bounds if possible */
-  struct RastPort *rp = mri->mri_RastPort;
-  if (rp->Layer) {
-    struct Layer *layer = rp->Layer;
-    int max_x = layer->bounds.MaxX;
-    int max_y = layer->bounds.MaxY;
-
-    if (left > max_x || top > max_y) {
-      return;
-    }
-
-    /* Adjust dimensions to fit within layer bounds */
-    if (left + width > max_x + 1) {
-      width = max_x - left + 1;
-    }
-    if (top + height > max_y + 1) {
-      height = max_y - top + 1;
-    }
-
-    /* Recheck after clipping */
-    if (width <= 0 || height <= 0) {
-      return;
-    }
-  }
-
-  /* Call the actual drawing function */
-  draw_func(fi, mri, gl, gt, gw, gh, left, top, width, height);
 }
 
 /**************************************************************************
@@ -1485,13 +1297,9 @@ static const struct ZuneFrameGfx __builtinFrameGfx[] = {
     {frame_subtle_border_draw, 0, 1, 1, 1, 1, NULL, FALSE, 1, 0},
     {frame_subtle_border_draw, 0, 1, 1, 1, 1, NULL, FALSE, 1, 0},
 
-    /* D : FST_ULTRA_ROUNDED */
-    {frame_ultra_rounded_up_draw, 0, 6, 6, 6, 6, NULL, FALSE, 2, 6},
-    {frame_ultra_rounded_down_draw, 0, 6, 6, 6, 6, NULL, FALSE, 2, 6},
-
-    /* E : FST_ENHANCED_ROUNDED */
-    {frame_enhanced_rounded_up_draw, 0, 8, 8, 8, 8, NULL, FALSE, 3, 8},
-    {frame_enhanced_rounded_down_draw, 0, 8, 8, 8, 8, NULL, FALSE, 3, 8},
+    /* D : FST_ROUNDED */
+    {frame_rounded_up_draw, 0, 8, 8, 8, 8, NULL, FALSE, 3, 8},
+    {frame_rounded_down_draw, 0, 8, 8, 8, 8, NULL, FALSE, 3, 8},
 
     /* custom frames */
 
@@ -1685,22 +1493,22 @@ BOOL zune_frame_spec_to_intern(CONST_STRPTR spec,
 }
 
 /**************************************************************************
- Frame Clipping Support for Rounded Corners
+ Frame support for rounded corners
 **************************************************************************/
 
 /**
- * Query frame clipping information including border radius and width
+ * Query frame information including border radius and width
  * @param obj MUI object
  * @param frameSpec Frame specification
- * @param clipinfo Output structure to fill with clipping info
+ * @param characteristics Output structure to fill with info
  * @return TRUE if successful, FALSE on error
  */
 BOOL zune_frame_get_characteristics(
     Object *obj, const struct MUI_FrameSpec_intern *frameSpec,
-    struct MUI_FrameCharacteristics *clipinfo) {
+    struct MUI_FrameCharacteristics *characteristics) {
   const struct ZuneFrameGfx *zframe;
 
-  if (!obj || !frameSpec || !clipinfo)
+  if (!obj || !frameSpec || !characteristics)
     return FALSE;
 
   /* Get frame graphics information */
@@ -1708,34 +1516,35 @@ BOOL zune_frame_get_characteristics(
   if (!zframe)
     return FALSE;
 
-  /* Fill in clipping information */
-  clipinfo->frame_width = zframe->frame_width;
-  clipinfo->border_radius = zframe->border_radius;
-  clipinfo->has_rounded_corners = (zframe->border_radius > 0);
+  /* Fill in frame information */
+  characteristics->frame_width = zframe->frame_width;
+  characteristics->border_radius = zframe->border_radius;
+  characteristics->has_rounded_corners = (zframe->border_radius > 0);
 
   return TRUE;
 }
 
 /**
- * Create a clipping region for rounded corner frames
+ * Create a clipping region for rounded frames
  * @param left Left coordinate of frame
  * @param top Top coordinate of frame
  * @param width Width of frame
  * @param height Height of frame
- * @param clipinfo Frame clipping information
+ * @param clipinfo Output Frame clipping information
  * @return Clipping region or NULL on error
  */
-struct Region *
-zune_frame_create_clip_region(int left, int top, int width, int height,
-                              const struct MUI_FrameCharacteristics *clipinfo) {
+struct Region *zune_frame_create_clip_region(
+    int left, int top, int width, int height,
+    const struct MUI_FrameCharacteristics *characteristics) {
   struct Region *region;
   struct Rectangle rect;
 
-  if (!clipinfo || width <= 0 || height <= 0)
+  if (!characteristics || width <= 0 || height <= 0)
     return NULL;
 
   /* For non-rounded frames, return full rectangular region */
-  if (!clipinfo->has_rounded_corners || clipinfo->border_radius == 0) {
+  if (!characteristics->has_rounded_corners ||
+      characteristics->border_radius == 0) {
     region = NewRegion();
     if (region) {
       rect.MinX = left;
@@ -1752,7 +1561,7 @@ zune_frame_create_clip_region(int left, int top, int width, int height,
   if (!region)
     return NULL;
 
-  int radius = clipinfo->border_radius;
+  int radius = characteristics->border_radius;
 
   /* Ensure radius doesn't exceed frame dimensions */
   if (radius * 2 > width)
