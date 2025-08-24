@@ -1129,27 +1129,29 @@ static void frame_rounded_draw(struct dt_frame_image *fi,
   /* Top-left corner: center at (left+radius, top+radius) */
   draw_smooth_corner(rp, left + radius, top + radius, radius,
                      mri->mri_Pens[light_pen], 2);
-  draw_smooth_corner(rp, left + radius, top + radius, radius - 1,
-                     mri->mri_Pens[MPEN_HALFSHINE], 2);
+  // draw_smooth_corner(rp, left + radius, top + radius, radius - 1,
+  //                    mri->mri_Pens[MPEN_HALFSHINE], 2);
 
   /* Top-right corner: center at (left+width-radius-1, top+radius) */
   draw_smooth_corner(rp, left + width - radius - 1, top + radius, radius,
                      mri->mri_Pens[light_pen], 1);
-  draw_smooth_corner(rp, left + width - radius - 1, top + radius, radius - 1,
-                     mri->mri_Pens[MPEN_HALFSHINE], 1);
+  // draw_smooth_corner(rp, left + width - radius - 1, top + radius, radius - 1,
+  //                    mri->mri_Pens[MPEN_HALFSHINE], 1);
 
   /* Bottom-left corner: center at (left+radius, top+height-radius-1) */
   draw_smooth_corner(rp, left + radius, top + height - radius - 1, radius,
                      mri->mri_Pens[dark_pen], 4);
-  draw_smooth_corner(rp, left + radius, top + height - radius - 1, radius - 1,
-                     mri->mri_Pens[MPEN_HALFSHADOW], 4);
+  // draw_smooth_corner(rp, left + radius, top + height - radius - 1, radius -
+  // 1,
+  //                    mri->mri_Pens[MPEN_HALFSHADOW], 4);
 
   /* Bottom-right corner: center at (left+width-radius-1, top+height-radius-1)
    */
   draw_smooth_corner(rp, left + width - radius - 1, top + height - radius - 1,
                      radius, mri->mri_Pens[dark_pen], 8);
-  draw_smooth_corner(rp, left + width - radius - 1, top + height - radius - 1,
-                     radius - 1, mri->mri_Pens[MPEN_HALFSHADOW], 8);
+  // draw_smooth_corner(rp, left + width - radius - 1, top + height - radius -
+  // 1,
+  //                    radius - 1, mri->mri_Pens[MPEN_HALFSHADOW], 8);
 
   /* Ensure perfect connections between curves and straight lines */
   fill_corner_connections(rp, left, top, width, height, radius,
@@ -1164,7 +1166,7 @@ static void frame_rounded_up_draw(struct dt_frame_image *fi,
                                   int gw, int gh, int left, int top, int width,
                                   int height) {
   frame_rounded_draw(fi, mri, gl, gt, gw, gh, left, top, width, height,
-                     MPEN_SHINE, MPEN_SHADOW);
+                     MPEN_SHADOW, MPEN_SHADOW);
 }
 
 /**
@@ -1175,7 +1177,7 @@ static void frame_rounded_down_draw(struct dt_frame_image *fi,
                                     int gw, int gh, int left, int top,
                                     int width, int height) {
   frame_rounded_draw(fi, mri, gl, gt, gw, gh, left, top, width, height,
-                     MPEN_SHADOW, MPEN_SHINE);
+                     MPEN_SHADOW, MPEN_SHADOW);
 }
 
 /**
@@ -1516,7 +1518,7 @@ struct Region *zune_frame_create_clip_region(int left, int top, int width,
     return NULL;
 
   /* For non-rounded frames, return full rectangular region */
-  if (border_radius > 0) {
+  if (border_radius == 0) {
     region = NewRegion();
     if (region) {
       rect.MinX = left;

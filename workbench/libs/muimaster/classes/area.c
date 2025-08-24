@@ -967,7 +967,7 @@ static void Area_Draw_handle_background(Object *obj, struct MUI_AreaData *data,
   else
     background = data->mad_SelBack;
 
-  /* For rounded frames, use full frame area for background */
+  /* For rounded frames, draw parent background in corner areas first */
   if (zframe->border_radius > 0) {
     bgtop = data->mad_TitleHeightAbove;
     bgleft = _left(obj);
@@ -975,8 +975,8 @@ static void Area_Draw_handle_background(Object *obj, struct MUI_AreaData *data,
     bgh = _height(obj) - bgtop;
     bgtop += _top(obj);
 
-    /* Draw parent background for rounded frame area outside the rounded corners
-     */
+    /* Draw parent background for the entire area first - this fills the corners
+     * that will be outside the rounded frame */
     DoMethod(obj, MUIM_DrawParentBackground, bgleft, bgtop, bgw, bgh, bgleft,
              bgtop, flags);
   } else {
@@ -997,7 +997,8 @@ static void Area_Draw_handle_background(Object *obj, struct MUI_AreaData *data,
   r.MaxX = bgleft + bgw - 1;
   r.MaxY = bgtop + bgh - 1;
 
-  /* Check if we need clipping for rounded frames */
+  /* For rounded frames, set up clipping to draw object background only inside
+   * rounded area */
   if (zframe->border_radius > 0) {
     clipregion = zune_frame_create_clip_region(bgleft, bgtop, bgw, bgh,
                                                zframe->border_radius);
@@ -1041,16 +1042,20 @@ static void Area_Draw_handle_background(Object *obj, struct MUI_AreaData *data,
 
   for (i = 0; i < numrects; i++) {
     if (!background) {
-      /* This will do the rest, TODO: on MADF_DRAWALL we not really
-       * need to draw this */
+      /* For rounded frames, we already drew parent background, so draw object
+       * background with clipping. For non-rounded frames, this will do the rest
+       */
       /* D(bug(" Area_Draw(%p):%ld: MUIM_DrawBackground\n", obj,
              __LINE__)); */
-      /* ATTENTION: This draws the clipped away regions of the area.
-       * Comment out and check the result to see what I mean. */
-      DoMethod(obj, MUIM_DrawBackground, rects[i].MinX, rects[i].MinY,
-               rects[i].MaxX - rects[i].MinX + 1,
-               rects[i].MaxY - rects[i].MinY + 1, rects[i].MinX, rects[i].MinY,
-               data->mad_Flags);
+      if (zframe->border_radius == 0) {
+        /* Non-rounded frames: draw background normally */
+        DoMethod(obj, MUIM_DrawBackground, rects[i].MinX, rects[i].MinY,
+                 rects[i].MaxX - rects[i].MinX + 1,
+                 rects[i].MaxY - rects[i].MinY + 1, rects[i].MinX,
+                 rects[i].MinY, data->mad_Flags);
+      }
+      /* For rounded frames with no background image, parent background is
+       * already drawn */
     } else {
       /* D(bug(" Area_Draw(%p):%ld: zune_imspec_draw\n", obj,
              __LINE__)); */

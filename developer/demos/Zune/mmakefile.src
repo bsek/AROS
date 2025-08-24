@@ -7,12 +7,12 @@ FILES := \
     mui_pages \
     mui_notify1 \
     mui_notify2 \
-    mui_input1
+    mui_input1 \
+    mui_rounded_test
 
-#MM workbench-demos-zune : includes linklibs  
+#MM workbench-demos-zune : includes linklibs
 
 %build_progs mmake=workbench-demos-zune \
     files=$(FILES) targetdir=$(AROSDIR)/Demos/Zune
 
 %common
-
