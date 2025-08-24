@@ -1100,7 +1100,25 @@ static void Area_Draw_handle_frame(Object *obj, struct MUI_AreaData *data,
 
   /* no frametitle, just draw frame and return */
   if (!data->mad_FrameTitle) {
-    zframe->draw(zframe->customframe, muiRenderInfo(obj), _left(obj), _top(obj),
+    /* Create a local dt_frame_image to pass parameters without modifying const
+     * zframe */
+    struct dt_frame_image local_frame_image;
+
+    /* Initialize with defaults */
+    memset(&local_frame_image, 0, sizeof(struct dt_frame_image));
+
+    /* Use existing customframe if available, otherwise use our local one */
+    struct dt_frame_image *frame_img =
+        zframe->customframe ? zframe->customframe : &local_frame_image;
+
+    /* Set border radius and frame width parameters */
+    if (zframe->border_radius > 0) {
+      frame_img->border_radius = zframe->border_radius;
+      frame_img->frame_width = zframe->frame_width;
+    }
+
+    /* Pass our frame_img (either customframe or local) to the draw function */
+    zframe->draw(frame_img, muiRenderInfo(obj), _left(obj), _top(obj),
                  _width(obj), _height(obj), _left(obj), _top(obj), _width(obj),
                  _height(obj));
     return;
@@ -1150,7 +1168,25 @@ static void Area_Draw_handle_frame(Object *obj, struct MUI_AreaData *data,
     textdrawclip = MUI_AddClipRegion(muiRenderInfo(obj), region);
   }
 
-  zframe->draw(zframe->customframe, muiRenderInfo(obj), _left(obj), frame_top,
+  /* Create a local dt_frame_image to pass parameters without modifying const
+   * zframe */
+  struct dt_frame_image local_frame_image;
+
+  /* Initialize with defaults */
+  memset(&local_frame_image, 0, sizeof(struct dt_frame_image));
+
+  /* Use existing customframe if available, otherwise use our local one */
+  struct dt_frame_image *frame_img =
+      zframe->customframe ? zframe->customframe : &local_frame_image;
+
+  /* Set border radius and frame width parameters */
+  if (zframe->border_radius > 0) {
+    frame_img->border_radius = zframe->border_radius;
+    frame_img->frame_width = zframe->frame_width;
+  }
+
+  /* Pass our frame_img (either customframe or local) to the draw function */
+  zframe->draw(frame_img, muiRenderInfo(obj), _left(obj), frame_top,
                _width(obj), frame_height, _left(obj), frame_top, _width(obj),
                frame_height);
 

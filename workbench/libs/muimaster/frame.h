@@ -40,9 +40,8 @@ typedef enum
     FST_ROUND_THIN_BORDER,
     FST_GRAY_BORDER,
     FST_SEMIROUND_BEVEL,
-    FST_FLAT_BORDER,            /* 11 - modern flat design */
-    FST_SUBTLE_BORDER,          /* 12 - minimal border */
-    FST_ROUNDED,                /* 13 - rounded corners */
+    FST_SUBTLE_BORDER,          /* 11 - minimal border */
+    FST_ROUNDED,                /* 12 - rounded corners */
     FST_CUSTOM1,
     FST_CUSTOM2,
     FST_CUSTOM3,
@@ -119,5 +118,7 @@ BOOL zune_frame_get_characteristics(Object *obj, const struct MUI_FrameSpec_inte
 /* Function to create clipping region for rounded corners */
 struct Region *zune_frame_create_clip_region(int left, int top, int width, int height,
     UWORD border_radius);
+
+/* Frame parameters are now stored in dt_frame_image structure */
 
 #endif

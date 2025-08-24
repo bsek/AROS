@@ -1049,107 +1049,92 @@ static void fill_corner_connections(struct RastPort *rp, int left, int top,
 
 /**
  * D: Rounded frame
+ * Parameters moved from globals to struct dt_frame_image members
  */
+/* Frame parameters are now part of the dt_frame_image struct */
+
 static void frame_rounded_draw(struct dt_frame_image *fi,
                                struct MUI_RenderInfo *mri, int gl, int gt,
                                int gw, int gh, int left, int top, int width,
                                int height, MPen light_pen, MPen dark_pen) {
   struct RastPort *rp = mri->mri_RastPort;
 
-  if (width <= 20 || height <= 20)
-    return; /* Need even more space for enhanced effect */
+  /* Use the radius from the frame image struct */
+  int radius = fi ? fi->border_radius : 8;
 
-  int radius = 8; /* Extra large corner radius */
+  if (width <= radius * 2 + 4 || height <= radius * 2 + 4)
+    return; /* Need space for radius plus some margin */
 
-  // /* Clear corner areas that should not be part of the rounded frame */
-  // SetAPen(rp, mri->mri_Pens[MPEN_BACKGROUND]);
+  /* Use the frame width from the frame image struct */
+  int frame_width = fi ? fi->frame_width : 1;
 
-  // /* Top-left corner */
-  // int x, y;
-  // for (y = 0; y < radius; y++) {
-  //   for (x = 0; x < radius; x++) {
-  //     int dx = radius - x - 1;
-  //     int dy = radius - y - 1;
-  //     if (dx * dx + dy * dy > radius * radius) {
-  //       WritePixel(rp, left + x, top + y);
-  //     }
-  //   }
-  // }
-
-  // /* Top-right corner */
-  // for (y = 0; y < radius; y++) {
-  //   for (x = 0; x < radius; x++) {
-  //     int dx = x;
-  //     int dy = radius - y - 1;
-  //     if (dx * dx + dy * dy > radius * radius) {
-  //       WritePixel(rp, left + width - radius + x, top + y);
-  //     }
-  //   }
-  // }
-
-  // /* Bottom-left corner */
-  // for (y = 0; y < radius; y++) {
-  //   for (x = 0; x < radius; x++) {
-  //     int dx = radius - x - 1;
-  //     int dy = y;
-  //     if (dx * dx + dy * dy > radius * radius) {
-  //       WritePixel(rp, left + x, top + height - radius + y);
-  //     }
-  //   }
-  // }
-
-  // /* Bottom-right corner */
-  // for (y = 0; y < radius; y++) {
-  //   for (x = 0; x < radius; x++) {
-  //     int dx = x;
-  //     int dy = y;
-  //     if (dx * dx + dy * dy > radius * radius) {
-  //       WritePixel(rp, left + width - radius + x, top + height - radius + y);
-  //     }
-  //   }
-  // }
-
-  /* Draw straight edges that will connect perfectly with curves */
   SetAPen(rp, mri->mri_Pens[light_pen]);
   /* Top edge: from end of left curve to start of right curve */
-  RectFill(rp, left + radius, top, left + width - radius - 1, top);
+  RectFill(rp, left + radius, top, left + width - radius - 1,
+           top + frame_width - 1);
   /* Left edge: from end of top curve to start of bottom curve */
-  RectFill(rp, left, top + radius, left, top + height - radius - 1);
+  RectFill(rp, left, top + radius, left + frame_width - 1,
+           top + height - radius - 1);
 
   SetAPen(rp, mri->mri_Pens[dark_pen]);
   /* Bottom edge: from end of left curve to start of right curve */
-  RectFill(rp, left + radius, top + height - 1, left + width - radius - 1,
-           top + height - 1);
+  RectFill(rp, left + radius, top + height - frame_width,
+           left + width - radius - 1, top + height - 1);
   /* Right edge: from end of top curve to start of bottom curve */
-  RectFill(rp, left + width - 1, top + radius, left + width - 1,
+  RectFill(rp, left + width - frame_width, top + radius, left + width - 1,
            top + height - radius - 1);
 
-  /* Draw perfect quarter-circle corners with anti-aliasing */
+  if (frame_width < 2) {
+    /* Top-left corner: center at (left+radius, top+radius) */
+    draw_smooth_corner(rp, left + radius, top + radius, radius,
+                       mri->mri_Pens[light_pen], 2);
 
-  /* Top-left corner: center at (left+radius, top+radius) */
-  draw_smooth_corner(rp, left + radius, top + radius, radius,
-                     mri->mri_Pens[light_pen], 2);
-  // draw_smooth_corner(rp, left + radius, top + radius, radius - 1,
-  //                    mri->mri_Pens[MPEN_HALFSHINE], 2);
+    /* Top-right corner: center at (left+width-radius-1, top+radius) */
+    draw_smooth_corner(rp, left + width - radius - 1, top + radius, radius,
+                       mri->mri_Pens[light_pen], 1);
 
-  /* Top-right corner: center at (left+width-radius-1, top+radius) */
-  draw_smooth_corner(rp, left + width - radius - 1, top + radius, radius,
-                     mri->mri_Pens[light_pen], 1);
-  // draw_smooth_corner(rp, left + width - radius - 1, top + radius, radius - 1,
-  //                    mri->mri_Pens[MPEN_HALFSHINE], 1);
+    /* Bottom-left corner: center at (left+radius, top+height-radius-1) */
+    draw_smooth_corner(rp, left + radius, top + height - radius - 1, radius,
+                       mri->mri_Pens[dark_pen], 4);
 
-  /* Bottom-left corner: center at (left+radius, top+height-radius-1) */
-  draw_smooth_corner(rp, left + radius, top + height - radius - 1, radius,
-                     mri->mri_Pens[dark_pen], 4);
-  // draw_smooth_corner(rp, left + radius, top + height - radius - 1, radius -
-  // 1,
-  //                    mri->mri_Pens[MPEN_HALFSHADOW], 4);
+    /* Bottom-right corner: center at (left+width-radius-1, top+height-radius-1)
+     */
+    draw_smooth_corner(rp, left + width - radius - 1, top + height - radius - 1,
+                       radius, mri->mri_Pens[dark_pen], 8);
+  } else {
+    /* Draw solid rounded corners by filling the corner areas pixel by pixel */
+    int x, y;
 
-  /* Bottom-right corner: center at (left+width-radius-1, top+height-radius-1)
-   */
-  draw_smooth_corner(rp, left + width - radius - 1, top + height - radius - 1,
-                     radius, mri->mri_Pens[dark_pen], 8);
-  // draw_smooth_corner(rp, left + width - radius - 1, top + height - radius -
+    for (y = 0; y < radius; y++) {
+      for (x = 0; x < radius; x++) {
+        int dx = radius - x - 1;
+        int dy = radius - y - 1;
+        int distance_sq = dx * dx + dy * dy;
+        int outer_radius_sq = radius * radius;
+        int inner_radius = radius - frame_width;
+        int inner_radius_sq = inner_radius * inner_radius;
+
+        /* Only draw if pixel is in the border area (between inner and outer
+         * radius) */
+        if (distance_sq < outer_radius_sq &&
+            (inner_radius <= 0 || distance_sq >= inner_radius_sq)) {
+          /* Top-left corner */
+          SetAPen(rp, mri->mri_Pens[light_pen]);
+          WritePixel(rp, left + x, top + y);
+
+          /* Top-right corner - mirror x coordinate */
+          WritePixel(rp, left + width - x - 1, top + y);
+
+          /* Bottom-left corner - mirror y coordinate */
+          SetAPen(rp, mri->mri_Pens[dark_pen]);
+          WritePixel(rp, left + x, top + height - y - 1);
+
+          /* Bottom-right corner - mirror both x and y coordinates */
+          WritePixel(rp, left + width - x - 1, top + height - y - 1);
+        }
+      }
+    }
+  }
   // 1,
   //                    radius - 1, mri->mri_Pens[MPEN_HALFSHADOW], 8);
 
@@ -1166,7 +1151,7 @@ static void frame_rounded_up_draw(struct dt_frame_image *fi,
                                   int gw, int gh, int left, int top, int width,
                                   int height) {
   frame_rounded_draw(fi, mri, gl, gt, gw, gh, left, top, width, height,
-                     MPEN_SHADOW, MPEN_SHADOW);
+                     MPEN_HALFSHADOW, MPEN_HALFSHADOW);
 }
 
 /**
@@ -1177,24 +1162,11 @@ static void frame_rounded_down_draw(struct dt_frame_image *fi,
                                     int gw, int gh, int left, int top,
                                     int width, int height) {
   frame_rounded_draw(fi, mri, gl, gt, gw, gh, left, top, width, height,
-                     MPEN_SHADOW, MPEN_SHADOW);
+                     MPEN_HALFSHADOW, MPEN_HALFSHADOW);
 }
 
 /**
- * B: Modern flat border - single pixel outline
- */
-static void frame_flat_border_draw(struct dt_frame_image *fi,
-                                   struct MUI_RenderInfo *mri, int gl, int gt,
-                                   int gw, int gh, int left, int top, int width,
-                                   int height) {
-  if (width <= 0 || height <= 0)
-    return;
-
-  rect_draw(fi, mri, left, top, width, height, MPEN_TEXT);
-}
-
-/**
- * C: Modern subtle border - uses half-tone for minimal appearance
+ * B: Modern subtle border - uses half-tone for minimal appearance
  */
 static void frame_subtle_border_draw(struct dt_frame_image *fi,
                                      struct MUI_RenderInfo *mri, int gl, int gt,
@@ -1265,17 +1237,14 @@ static const struct ZuneFrameGfx __builtinFrameGfx[] = {
     {frame_semiround_bevel_down_draw, 0, 2, 2, 2, 2, NULL, FALSE, 2, 1},
 
     /* modern frame styles */
-    /* B : FST_FLAT_BORDER */
-    {frame_flat_border_draw, 0, 1, 1, 1, 1, NULL, FALSE, 1, 0},
-    {frame_flat_border_draw, 0, 1, 1, 1, 1, NULL, FALSE, 1, 0},
 
-    /* C : FST_SUBTLE_BORDER */
+    /* B : FST_SUBTLE_BORDER */
     {frame_subtle_border_draw, 0, 1, 1, 1, 1, NULL, FALSE, 1, 0},
     {frame_subtle_border_draw, 0, 1, 1, 1, 1, NULL, FALSE, 1, 0},
 
-    /* D : FST_ROUNDED */
-    {frame_rounded_up_draw, 0, 8, 8, 8, 8, NULL, FALSE, 3, 8},
-    {frame_rounded_down_draw, 0, 8, 8, 8, 8, NULL, FALSE, 3, 8},
+    /* C : FST_ROUNDED (12) */
+    {frame_rounded_up_draw, 0, 2, 2, 2, 2, NULL, FALSE, 1, 8},
+    {frame_rounded_down_draw, 0, 2, 2, 2, 2, NULL, FALSE, 1, 8},
 
     /* custom frames */
 
