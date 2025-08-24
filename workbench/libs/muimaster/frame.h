@@ -118,6 +118,6 @@ BOOL zune_frame_get_characteristics(Object *obj, const struct MUI_FrameSpec_inte
 
 /* Function to create clipping region for rounded corners */
 struct Region *zune_frame_create_clip_region(int left, int top, int width, int height,
-    const struct MUI_FrameCharacteristics *characteristics);
+    UWORD border_radius);
 
 #endif

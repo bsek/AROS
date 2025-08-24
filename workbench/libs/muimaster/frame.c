@@ -371,21 +371,6 @@ static void frame_custom_down(struct dt_frame_image *fi,
  Drawing primitives - optimized for performance
 **************************************************************************/
 
-/** Cache frequently used pen values to reduce array lookups */
-typedef struct {
-  ULONG shine, shadow, background, text;
-  ULONG halfshine, halfshadow;
-} CachedPens;
-
-static inline void cache_pens(struct MUI_RenderInfo *mri, CachedPens *pens) {
-  pens->shine = mri->mri_Pens[MPEN_SHINE];
-  pens->shadow = mri->mri_Pens[MPEN_SHADOW];
-  pens->background = mri->mri_Pens[MPEN_BACKGROUND];
-  pens->text = mri->mri_Pens[MPEN_TEXT];
-  pens->halfshine = mri->mri_Pens[MPEN_HALFSHINE];
-  pens->halfshadow = mri->mri_Pens[MPEN_HALFSHADOW];
-}
-
 /** Horizontal line drawing */
 static inline void draw_horizontal_line(struct RastPort *rp, int x1, int x2,
                                         int y, ULONG pen) {
@@ -511,9 +496,6 @@ static void button_draw(struct dt_frame_image *fi, struct MUI_RenderInfo *mri,
   if (!rp || width <= 2 || height <= 2)
     return; /* Safety check - need minimum size and valid rastport */
 
-  CachedPens pens;
-  cache_pens(mri, &pens);
-
   /* Draw upper-left edges */
   SetAPen(rp, mri->mri_Pens[ul_preset]);
   draw_vertical_line(rp, left, top, top + height - 2, mri->mri_Pens[ul_preset]);
@@ -528,7 +510,7 @@ static void button_draw(struct dt_frame_image *fi, struct MUI_RenderInfo *mri,
                        mri->mri_Pens[lr_preset]);
 
   /* Fix corner pixels with background color */
-  SetAPen(rp, pens.background);
+  SetAPen(rp, mri->mri_Pens[MPEN_BACKGROUND]);
   WritePixel(rp, left, top + height - 1);
   WritePixel(rp, left + width - 1, top);
 }
@@ -619,9 +601,6 @@ static void thickborder_draw(struct dt_frame_image *fi,
   if (width <= 4 || height <= 4)
     return; /* Safety check - need minimum size */
 
-  CachedPens pens;
-  cache_pens(mri, &pens);
-
   if (bevelled) {
     /* Raised: outer light, inner dark */
     button_draw(fi, mri, left, top, width, height, MPEN_SHINE, MPEN_SHADOW);
@@ -674,11 +653,8 @@ static void round_bevel_draw(struct dt_frame_image *fi,
   if (width <= 8 || height <= 4)
     return; /* Safety check - need minimum size for rounded effect */
 
-  CachedPens pens;
-  cache_pens(mri, &pens);
-
   /* Clear corner areas with background - grouped operations */
-  SetAPen(rp, pens.background);
+  SetAPen(rp, mri->mri_Pens[MPEN_BACKGROUND]);
   RectFill(rp, left, top, left + 3, top + height - 1);
   RectFill(rp, left + width - 4, top, left + width - 1, top + height - 1);
 
@@ -1084,56 +1060,54 @@ static void frame_rounded_draw(struct dt_frame_image *fi,
     return; /* Need even more space for enhanced effect */
 
   int radius = 8; /* Extra large corner radius */
-  CachedPens pens;
-  cache_pens(mri, &pens);
 
-  /* Clear corner areas that should not be part of the rounded frame */
-  SetAPen(rp, mri->mri_Pens[MPEN_BACKGROUND]);
+  // /* Clear corner areas that should not be part of the rounded frame */
+  // SetAPen(rp, mri->mri_Pens[MPEN_BACKGROUND]);
 
-  /* Top-left corner */
-  int x, y;
-  for (y = 0; y < radius; y++) {
-    for (x = 0; x < radius; x++) {
-      int dx = radius - x - 1;
-      int dy = radius - y - 1;
-      if (dx * dx + dy * dy > radius * radius) {
-        WritePixel(rp, left + x, top + y);
-      }
-    }
-  }
+  // /* Top-left corner */
+  // int x, y;
+  // for (y = 0; y < radius; y++) {
+  //   for (x = 0; x < radius; x++) {
+  //     int dx = radius - x - 1;
+  //     int dy = radius - y - 1;
+  //     if (dx * dx + dy * dy > radius * radius) {
+  //       WritePixel(rp, left + x, top + y);
+  //     }
+  //   }
+  // }
 
-  /* Top-right corner */
-  for (y = 0; y < radius; y++) {
-    for (x = 0; x < radius; x++) {
-      int dx = x;
-      int dy = radius - y - 1;
-      if (dx * dx + dy * dy > radius * radius) {
-        WritePixel(rp, left + width - radius + x, top + y);
-      }
-    }
-  }
+  // /* Top-right corner */
+  // for (y = 0; y < radius; y++) {
+  //   for (x = 0; x < radius; x++) {
+  //     int dx = x;
+  //     int dy = radius - y - 1;
+  //     if (dx * dx + dy * dy > radius * radius) {
+  //       WritePixel(rp, left + width - radius + x, top + y);
+  //     }
+  //   }
+  // }
 
-  /* Bottom-left corner */
-  for (y = 0; y < radius; y++) {
-    for (x = 0; x < radius; x++) {
-      int dx = radius - x - 1;
-      int dy = y;
-      if (dx * dx + dy * dy > radius * radius) {
-        WritePixel(rp, left + x, top + height - radius + y);
-      }
-    }
-  }
+  // /* Bottom-left corner */
+  // for (y = 0; y < radius; y++) {
+  //   for (x = 0; x < radius; x++) {
+  //     int dx = radius - x - 1;
+  //     int dy = y;
+  //     if (dx * dx + dy * dy > radius * radius) {
+  //       WritePixel(rp, left + x, top + height - radius + y);
+  //     }
+  //   }
+  // }
 
-  /* Bottom-right corner */
-  for (y = 0; y < radius; y++) {
-    for (x = 0; x < radius; x++) {
-      int dx = x;
-      int dy = y;
-      if (dx * dx + dy * dy > radius * radius) {
-        WritePixel(rp, left + width - radius + x, top + height - radius + y);
-      }
-    }
-  }
+  // /* Bottom-right corner */
+  // for (y = 0; y < radius; y++) {
+  //   for (x = 0; x < radius; x++) {
+  //     int dx = x;
+  //     int dy = y;
+  //     if (dx * dx + dy * dy > radius * radius) {
+  //       WritePixel(rp, left + width - radius + x, top + height - radius + y);
+  //     }
+  //   }
+  // }
 
   /* Draw straight edges that will connect perfectly with curves */
   SetAPen(rp, mri->mri_Pens[light_pen]);
@@ -1156,26 +1130,26 @@ static void frame_rounded_draw(struct dt_frame_image *fi,
   draw_smooth_corner(rp, left + radius, top + radius, radius,
                      mri->mri_Pens[light_pen], 2);
   draw_smooth_corner(rp, left + radius, top + radius, radius - 1,
-                     pens.halfshine, 2);
+                     mri->mri_Pens[MPEN_HALFSHINE], 2);
 
   /* Top-right corner: center at (left+width-radius-1, top+radius) */
   draw_smooth_corner(rp, left + width - radius - 1, top + radius, radius,
                      mri->mri_Pens[light_pen], 1);
   draw_smooth_corner(rp, left + width - radius - 1, top + radius, radius - 1,
-                     pens.halfshine, 1);
+                     mri->mri_Pens[MPEN_HALFSHINE], 1);
 
   /* Bottom-left corner: center at (left+radius, top+height-radius-1) */
   draw_smooth_corner(rp, left + radius, top + height - radius - 1, radius,
                      mri->mri_Pens[dark_pen], 4);
   draw_smooth_corner(rp, left + radius, top + height - radius - 1, radius - 1,
-                     pens.halfshadow, 4);
+                     mri->mri_Pens[MPEN_HALFSHADOW], 4);
 
   /* Bottom-right corner: center at (left+width-radius-1, top+height-radius-1)
    */
   draw_smooth_corner(rp, left + width - radius - 1, top + height - radius - 1,
                      radius, mri->mri_Pens[dark_pen], 8);
   draw_smooth_corner(rp, left + width - radius - 1, top + height - radius - 1,
-                     radius - 1, pens.halfshadow, 8);
+                     radius - 1, mri->mri_Pens[MPEN_HALFSHADOW], 8);
 
   /* Ensure perfect connections between curves and straight lines */
   fill_corner_connections(rp, left, top, width, height, radius,
@@ -1533,18 +1507,16 @@ BOOL zune_frame_get_characteristics(
  * @param clipinfo Output Frame clipping information
  * @return Clipping region or NULL on error
  */
-struct Region *zune_frame_create_clip_region(
-    int left, int top, int width, int height,
-    const struct MUI_FrameCharacteristics *characteristics) {
+struct Region *zune_frame_create_clip_region(int left, int top, int width,
+                                             int height, UWORD border_radius) {
   struct Region *region;
   struct Rectangle rect;
 
-  if (!characteristics || width <= 0 || height <= 0)
+  if (width <= 0 || height <= 0)
     return NULL;
 
   /* For non-rounded frames, return full rectangular region */
-  if (!characteristics->has_rounded_corners ||
-      characteristics->border_radius == 0) {
+  if (border_radius > 0) {
     region = NewRegion();
     if (region) {
       rect.MinX = left;
@@ -1561,7 +1533,7 @@ struct Region *zune_frame_create_clip_region(
   if (!region)
     return NULL;
 
-  int radius = characteristics->border_radius;
+  int radius = border_radius;
 
   /* Ensure radius doesn't exceed frame dimensions */
   if (radius * 2 > width)

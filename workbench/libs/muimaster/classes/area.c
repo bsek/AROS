@@ -974,6 +974,11 @@ static void Area_Draw_handle_background(Object *obj, struct MUI_AreaData *data,
     bgw = _width(obj);
     bgh = _height(obj) - bgtop;
     bgtop += _top(obj);
+
+    /* Draw parent background for rounded frame area outside the rounded corners
+     */
+    DoMethod(obj, MUIM_DrawParentBackground, bgleft, bgtop, bgw, bgh, bgleft,
+             bgtop, flags);
   } else {
     /* For non-rounded frames, use traditional inner area calculation */
     if (zframe->customframe)
@@ -994,24 +999,15 @@ static void Area_Draw_handle_background(Object *obj, struct MUI_AreaData *data,
 
   /* Check if we need clipping for rounded frames */
   if (zframe->border_radius > 0) {
-    const struct MUI_FrameSpec_intern *frame;
-    struct MUI_FrameSpec_intern tempframe;
-    struct MUI_FrameCharacteristics characteristics;
-
-    frame = get_intframe(obj, data, &tempframe);
-    if (zune_frame_get_characteristics(obj, frame, &characteristics) &&
-        characteristics.has_rounded_corners) {
-
-      clipregion = zune_frame_create_clip_region(bgleft, bgtop, bgw, bgh,
-                                                 &characteristics);
-      if (clipregion) {
-        cliphandle = MUI_AddClipRegion(data->mad_RenderInfo, clipregion);
-        if (cliphandle != (APTR)-1) {
-          use_clipping = TRUE;
-        } else {
-          DisposeRegion(clipregion);
-          clipregion = NULL;
-        }
+    clipregion = zune_frame_create_clip_region(bgleft, bgtop, bgw, bgh,
+                                               zframe->border_radius);
+    if (clipregion) {
+      cliphandle = MUI_AddClipRegion(data->mad_RenderInfo, clipregion);
+      if (cliphandle != (APTR)-1) {
+        use_clipping = TRUE;
+      } else {
+        DisposeRegion(clipregion);
+        clipregion = NULL;
       }
     }
   }
@@ -1155,9 +1151,9 @@ static void Area_Draw_handle_frame(Object *obj, struct MUI_AreaData *data,
 
   if (region && textdrawclip != (APTR)-1) {
     MUI_RemoveClipRegion(muiRenderInfo(obj), textdrawclip);
-    /*              DisposeRegion(region);*/ /* sba: DisposeRegion happens in
-                                                MUI_RemoveClipRegion, this seems
-                                                wrong to me */
+    /*              DisposeRegion(region);*/ /* sba: DisposeRegion happens
+                                                in MUI_RemoveClipRegion,
+                                                this seems wrong to me */
   }
 
   /* Title text drawing */
@@ -1211,8 +1207,8 @@ static IPTR Area__MUIM_Draw(struct IClass *cl, Object *obj,
 
   /*      D(bug("Area_Draw(0x%p) %ldx%ldx%ldx%ld\n", obj, _left(obj),
               _top(obj),_right(obj),_bottom(obj))); */
-  /*      D(bug(" Area_Draw(%p) msg=0x%08lx flags=0x%08lx\n", obj, msg->flags,
-              _flags(obj))); */
+  /*      D(bug(" Area_Draw(%p) msg=0x%08lx flags=0x%08lx\n", obj,
+     msg->flags, _flags(obj))); */
 
   if (flags & MADF_DRAWALL)
     flags |= MADF_DRAWOBJECT;
@@ -1226,8 +1222,8 @@ static IPTR Area__MUIM_Draw(struct IClass *cl, Object *obj,
     return 0;
   }
 
-  /* Background can't be drawn without knowing anything about frame, thus some
-   * calculations are made before background and frame drawing.
+  /* Background can't be drawn without knowing anything about frame, thus
+   * some calculations are made before background and frame drawing.
    */
   {
     /* on selected state, will get the opposite frame */
@@ -1719,11 +1715,12 @@ static void handle_press(struct IClass *cl, Object *obj) {
 
     get(obj, MUIA_Selected, &selected);
     if (selected) {
-      /*              D(bug("handle_press(%p) : nnset MUIA_Selected FALSE\n",
-       * obj)); */
+      /*              D(bug("handle_press(%p) : nnset MUIA_Selected
+       * FALSE\n", obj)); */
       nnset(obj, MUIA_Selected, FALSE);
     }
-    /*          D(bug("handle_press(%p) : set MUIA_Selected TRUE\n", obj)); */
+    /*          D(bug("handle_press(%p) : set MUIA_Selected TRUE\n", obj));
+     */
     set(obj, MUIA_Selected, TRUE);
     /*          D(bug("handle_press(%p) : done\n", obj)); */
     break;
@@ -2004,7 +2001,8 @@ static IPTR Area__MUIM_HandleEvent(struct IClass *cl, Object *obj,
 static IPTR Area__MUIM_HandleInput(struct IClass *cl, Object *obj,
                                    struct MUIP_HandleInput *msg) {
   /* Actually a dummy, but real MUI does handle here the input stuff which
-   * Zune has in Area_HandleEvent. For compatibility we should do this too */
+   * Zune has in Area_HandleEvent. For compatibility we should do this too
+   */
   // bug("Area_HandleEvent [%p] imsg=%p muikey=%ld\b", obj, msg->imsg,
   //     msg->muikey);
   return 0;
@@ -2075,7 +2073,8 @@ static IPTR Area__MUIM_Timer(struct IClass *cl, Object *obj, Msg msg) {
   return 0;
 }
 
-/****** Area.mui/MUIM_DoDrag *************************************************
+/****** Area.mui/MUIM_DoDrag
+ **************************************************
  *
  *   NAME
  *       MUIM_DoDrag (V20)
@@ -2087,11 +2086,11 @@ static IPTR Area__MUIM_Timer(struct IClass *cl, Object *obj, Msg msg) {
  *       For use in custom classes
  *
  *   INPUTS
- *       touchx - distance between left side of object and click point, positive
- *           if click happens inside object. Special value of 0x80000000 is
+ *       touchx - distance between left side of object and click point,
+ *positive if click happens inside object. Special value of 0x80000000 is
  *           translated to _window(obj)->MouseX - _left(obj)
- *       touchy - distance between top side of object and click point, positive
- *           if click happens inside object. Special value of 0x80000000 is
+ *       touchy - distance between top side of object and click point,
+ *positive if click happens inside object. Special value of 0x80000000 is
  *           translated to _window(obj)->MouseY - _top(obj)
  *
  *   SEE ALSO
@@ -2113,7 +2112,8 @@ static IPTR Area__MUIM_DoDrag(struct IClass *cl, Object *obj,
   return 0;
 }
 
-/****** Area.mui/MUIM_CreateDragImage ****************************************
+/****** Area.mui/MUIM_CreateDragImage
+ *****************************************
  *
  *   NAME
  *       MUIM_CreateDragImage (V18)
@@ -2126,10 +2126,10 @@ static IPTR Area__MUIM_DoDrag(struct IClass *cl, Object *obj,
  *       For use in custom classes
  *
  *   INPUTS
- *       touchx - distance between left side of object and click point, positive
- *           if image's left border is to be on the left side of mouse pointer
- *       touchy - distance between top side of object and click point, positive
- *           if image's top border is to be above the mouse pointer
+ *       touchx - distance between left side of object and click point,
+ *positive if image's left border is to be on the left side of mouse pointer
+ *       touchy - distance between top side of object and click point,
+ *positive if image's top border is to be above the mouse pointer
  *
  *   SEE ALSO
  *
@@ -2347,13 +2347,15 @@ static IPTR Area__MUIM_CreateFrameClippingRegion(
     return FALSE;
   }
 
-  msg->clipinfo = zune_frame_create_clip_region(msg->left, msg->top, msg->width,
-                                                msg->height, &characteristics);
+  if (characteristics.has_rounded_corners) {
+    msg->clipinfo = zune_frame_create_clip_region(
+        msg->left, msg->top, msg->width, msg->height,
+        characteristics.border_radius);
 
-  if (!msg->clipinfo) {
-    return FALSE;
+    if (!msg->clipinfo) {
+      return FALSE;
+    }
   }
-
   return TRUE;
 }
 
