@@ -1583,7 +1583,9 @@ struct Region *zune_frame_create_clip_region(int left, int top, int width,
       /* Check if pixel is inside circle using distance formula */
       int dx = radius - x - 1;
       int dy = radius - y - 1;
-      if (dx * dx + dy * dy <= radius * radius) {
+      /* Use a more conservative threshold to prevent background leaking */
+      int threshold = (radius > 2) ? (radius - 2) * (radius - 2) : 1;
+      if (dx * dx + dy * dy < threshold) {
         /* Top-left corner */
         rect.MinX = left + x;
         rect.MinY = top + y;
