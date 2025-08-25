@@ -5,7 +5,7 @@
 struct Frameadjust_DATA
 {
     struct MUI_FrameSpec_intern fs_intern;
-    char spec[10];
+    char spec[12];
     Object *FD_display;
     Object *SL_top;
     Object *SL_left;

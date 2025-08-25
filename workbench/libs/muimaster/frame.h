@@ -70,6 +70,8 @@ struct MUI_FrameSpec_intern
     UBYTE innerRight;
     UBYTE innerTop;
     UBYTE innerBottom;
+    UBYTE border_radius;        /* 0-15, optional */
+    UBYTE border_width;         /* 0-15, optional */
 };
 
 struct MUI_RenderInfo;

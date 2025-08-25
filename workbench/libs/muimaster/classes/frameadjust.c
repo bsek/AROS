@@ -110,6 +110,8 @@ static Object *MakeFrameDisplay(int i, int state)
         return HVSpace;
 
     fsi.innerTop = fsi.innerLeft = fsi.innerBottom = fsi.innerRight = 9;
+    fsi.border_radius = 0;
+    fsi.border_width = 0;
     fsi.type = i;
     fsi.state = state;
     zune_frame_intern_to_spec(&fsi, fs);

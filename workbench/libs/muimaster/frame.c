@@ -1378,7 +1378,18 @@ BOOL zune_frame_intern_to_spec(const struct MUI_FrameSpec_intern *intern,
   spec[4] = tmpSpec[0];
   snprintf(tmpSpec, 3, "%lx", (ULONG)intern->innerBottom);
   spec[5] = tmpSpec[0];
-  spec[6] = '\0';
+
+  /* Add optional border_radius and border_width fields */
+  if (intern->border_radius != 0 || intern->border_width != 0) {
+    snprintf(tmpSpec, 3, "%lx", (ULONG)intern->border_radius);
+    spec[6] = tmpSpec[0];
+    snprintf(tmpSpec, 3, "%lx", (ULONG)intern->border_width);
+    spec[7] = tmpSpec[0];
+    spec[8] = '\0';
+  } else {
+    spec[6] = '\0';
+  }
+
   return TRUE;
 }
 
@@ -1397,12 +1408,14 @@ static int xhexasciichar_to_int(char x) {
 BOOL zune_frame_spec_to_intern(CONST_STRPTR spec,
                                struct MUI_FrameSpec_intern *intern) {
   int val;
+  int specLen;
 
   if (!intern || !spec)
     return FALSE;
 
-  /* Validate spec string length */
-  if (strlen(spec) < 6)
+  specLen = strlen(spec);
+  /* Validate spec string length - minimum 6 chars, maximum 8 chars */
+  if (specLen < 6 || specLen > 8)
     return FALSE;
 
   val = xhexasciichar_to_int(spec[0]);
@@ -1434,6 +1447,26 @@ BOOL zune_frame_spec_to_intern(CONST_STRPTR spec,
   if (val == -1 || val > 15)
     return FALSE;
   intern->innerBottom = val;
+
+  /* Initialize optional fields to 0 */
+  intern->border_radius = 0;
+  intern->border_width = 0;
+
+  /* Parse optional border_radius and border_width if present */
+  if (specLen >= 7) {
+    val = xhexasciichar_to_int(spec[6]);
+    if (val == -1 || val > 15)
+      return FALSE;
+    intern->border_radius = val;
+  }
+
+  if (specLen >= 8) {
+    val = xhexasciichar_to_int(spec[7]);
+    if (val == -1 || val > 15)
+      return FALSE;
+    intern->border_width = val;
+  }
+
   return TRUE;
 }
 
