@@ -11,8 +11,12 @@ struct Frameadjust_DATA
     Object *SL_left;
     Object *SL_right;
     Object *SL_bottom;
+    Object *rounded_check;
+    Object *radius_slider;
+    Object *width_slider;
     struct Hook slider_hook;
     struct Hook frames_hook;
+    struct Hook rounded_hook;
 };
 
 #endif /* _FRAMEADJUST_PRIVATE_H_ */
