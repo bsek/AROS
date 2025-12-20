@@ -202,7 +202,7 @@ IPTR Frameadjust__OM_NEW(struct IClass *cl, Object *obj, struct opSet *msg)
               Child, (IPTR) Label2(_(MSG_FRAMEADJUST_RADIUS)),
               Child, (IPTR) (radius_slider = MakeRoundedSlider(0, 15, 5)),
               Child, (IPTR) Label2(_(MSG_FRAMEADJUST_WIDTH)),
-              Child, (IPTR) (width_slider = MakeRoundedSlider(1, 5, 1)),
+              Child, (IPTR) (width_slider = MakeRoundedSlider(0, 5, 1)),
               End, /* HGroup */
               End, /* VGroup */
               Child, (IPTR) VGroup,

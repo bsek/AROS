@@ -122,6 +122,10 @@ struct ZunePrefsNew
     BOOL     interfaces_enable_arexx;
     WORD     bubblehelp_first_delay;
     WORD     bubblehelp_next_delay;
+
+    /* Renderer */
+    BOOL     renderer_antialias;
+    BOOL     renderer_doublebuffer;
     
     /* Groups */
     GroupTitlePosition group_title_position;

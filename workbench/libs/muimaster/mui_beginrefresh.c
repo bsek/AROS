@@ -6,6 +6,7 @@
 #include <proto/layers.h>
 #include <proto/intuition.h>
 #include <proto/muimaster.h>
+#include <proto/zunerenderer.h>
 
 #include "mui.h"
 #include "muimaster_intern.h"
@@ -61,6 +62,12 @@
     mri->mri_Flags |= MUIMRI_REFRESHMODE;
     LockLayerInfo(&w->WScreen->LayerInfo);
     BeginRefresh(w);
+
+    /* Begin batching for performance optimization during refresh */
+    if (mri->mri_RenderPort) {
+        BeginBatch(mri->mri_RenderPort);
+    }
+
     return 1;
 
     AROS_LIBFUNC_EXIT

@@ -1,13 +1,14 @@
 /*
     Copyright (C) 2002-2025, The AROS Development Team.
     All rights reserved.
-    
+
 */
 
 #include <stdio.h>
 
 #include <proto/exec.h>
 #include <proto/graphics.h>
+#include <proto/zunerenderer.h>
 
 #include <clib/alib_protos.h>
 
@@ -17,17 +18,20 @@
 
 #include LC_LIBDEFS_FILE
 
-//#define ZUNE_FORCE_SYSPENS
+// #define ZUNE_FORCE_SYSPENS
 
 struct Library *MUIMasterBase;
 struct Library *MUIScreenBase;
+struct Library *ZuneRendererBase;
 
-static struct TextAttr topaz8Attr =
-    { "topaz.font", 8, FS_NORMAL, FPF_ROMFONT, };
+static struct TextAttr topaz8Attr = {
+    "topaz.font",
+    8,
+    FS_NORMAL,
+    FPF_ROMFONT,
+};
 
-
-static int MUIMasterInit(LIBBASETYPEPTR lh)
-{
+static int MUIMasterInit(LIBBASETYPEPTR lh) {
     MUIMasterBase = (struct Library *)lh;
 
     InitSemaphore(&MUIMB(lh)->ZuneSemaphore);
@@ -88,11 +92,11 @@ static int MUIMasterInit(LIBBASETYPEPTR lh)
 
     MUIScreenBase = OpenLibrary("muiscreen.library", 0);
 
+    MUIMB(lh)->zunerendererbase = ZuneRendererBase = OpenLibrary(ZUNERENDERER_NAME, ZUNERENDERER_VERSION);
     return TRUE;
 }
 
-static int MUIMasterExpunge(LIBBASETYPEPTR lh)
-{
+static int MUIMasterExpunge(LIBBASETYPEPTR lh) {
     MUIMasterBase = (struct Library *)lh;
 
     if (MUIScreenBase)
@@ -106,6 +110,12 @@ static int MUIMasterExpunge(LIBBASETYPEPTR lh)
 
     if (MUIMB(lh)->topaz8font != NULL)
         CloseFont(MUIMB(lh)->topaz8font);
+
+    if (ZuneRendererBase) {
+        CloseLibrary(ZuneRendererBase);
+        ZuneRendererBase = NULL;
+        MUIMB(lh)->zunerendererbase = NULL;
+    }
 
     return TRUE;
 }

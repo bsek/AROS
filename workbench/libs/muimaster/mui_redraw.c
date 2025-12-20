@@ -16,7 +16,8 @@
 #include "mui.h"
 #include "support.h"
 
-#include "debug.h"
+#define DEBUG 0
+#include <aros/debug.h>
 
 /*****************************************************************************
 
@@ -95,7 +96,7 @@
         {
             clip = MUI_AddClipRegion(muiRenderInfo(obj),region);
         }
-        
+
     } /* if object is in a virtual group */
 
     if (1)
@@ -103,7 +104,7 @@
             struct Region *region;
         struct Rectangle *clip_rect;
         struct Layer *l;
-        
+
         clip_rect = &muiRenderInfo(obj)->mri_ClipRect;
 
             if (muiRenderInfo(obj)->mri_Window)
@@ -114,7 +115,7 @@
         {
             l = muiRenderInfo(obj)->mri_RastPort->Layer;
         }
-        
+
         if (l && (region = l->ClipRegion))
         {
             /* Maybe this should went to MUI_AddClipRegion() */
@@ -131,7 +132,7 @@
             clip_rect->MaxY = _bottom(obj);
         }
     }
-    
+
     _flags(obj) = (_flags(obj) & ~MADF_DRAWFLAGS) | (flags & MADF_DRAWFLAGS);
 
     DoMethod(obj, MUIM_Draw, 0);
@@ -161,21 +162,21 @@
             /*
               This aproach might be faster *provided* that the buffer is
               allocated and filled *once* at startup of muimaster.library.
-                
+
               In reality, the WritePixelArray() call has quite a big
               overhead, so you should only use this buffer if the gadget
               completely fits inside, and fall back to allocating a new
               buffer if the gadget is too big.
-                
+
               Perhaps a future optimization...
             */
             LONG  width  = 200;
             LONG  height = 100;
             LONG *buffer = AllocVec(width * height * sizeof(LONG), MEMF_ANY);
             LONG  x, y;
-            
+
             memset(buffer, 0xAA, width * height * sizeof(LONG));
-            
+
             for (y = 0; y < _height(obj); y += height)
             {
                 for (x = 0; x < _width(obj); x += width)
@@ -194,7 +195,7 @@
             LONG  width  = _width(obj);
             LONG  height = _height(obj);
             LONG *buffer = NULL;
-            
+
             if (GetBitMapAttr(_rp(obj)->BitMap, BMA_DEPTH) >= 15)
             {
                 buffer = AllocVec(width * sizeof(LONG), MEMF_ANY);
@@ -218,7 +219,7 @@
                 /* fallback */
                 const static UWORD pattern[] = { 0x8888, 0x2222, };
                 LONG fg = muiRenderInfo(obj)->mri_Pens[MPEN_SHADOW];
-                
+
                 SetDrMd(_rp(obj), JAM1);
                 SetAPen(_rp(obj), fg);
                 SetAfPt(_rp(obj), pattern, 1);
@@ -229,12 +230,30 @@
         }
     } /* if (object is disabled) */
 
-    /* copy buffer to window */
-    if (muiRenderInfo(obj)->mri_BufferBM)
+    /* copy buffer to window if needed */
     {
-        ClipBlit(&muiRenderInfo(obj)->mri_BufferRP, _left(obj), _top(obj),
-                 muiRenderInfo(obj)->mri_Window->RPort, _left(obj), _top(obj),
-                 _width(obj), _height(obj), 0xc0);
+        struct MUI_RenderInfo *ri = muiRenderInfo(obj);
+        if (ri && (ri->mri_DrawingBoard || ri->mri_BufferBM))
+        {
+            BOOL in_refresh = (ri->mri_Flags & MUIMRI_REFRESHMODE) != 0;
+            BOOL in_batch = (ri->mri_BufferBatchDepth > 0);
+            if (in_refresh || in_batch || ri->mri_BufferDirty)
+            {
+                if (!ri->mri_BufferDirty)
+                {
+                    D(bug("MUI_Redraw: buffer marked dirty (obj=%p, refresh=%s, batch=%u, flags=0x%08lx)\n",
+                          obj, in_refresh ? "YES" : "NO",
+                          (unsigned)ri->mri_BufferBatchDepth, ri->mri_Flags));
+                }
+                ri->mri_BufferDirty = TRUE;
+            }
+            else
+            {
+                D(bug("MUI_Redraw: immediate FlushDoubleBufferRegion for obj=%p rect=(%ld,%ld %ldx%ld)\n",
+                      obj, _left(obj), _top(obj), _width(obj), _height(obj)));
+                FlushDoubleBufferRegion(ri, _left(obj), _top(obj), _width(obj), _height(obj));
+            }
+        }
     }
 
     if (clip != (APTR)-1)

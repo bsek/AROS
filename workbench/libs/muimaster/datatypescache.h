@@ -7,7 +7,7 @@
 #ifndef _MUI_DATATYPESCACHE_H
 #define _MUI_DATATYPESCACHE_H
 
-/* struct dt_node; */
+struct ZuneTexture;
 
 /*void dt_init(void);*/
 /*void dt_cleanup(void);*/
@@ -48,6 +48,7 @@ struct dt_node
     struct MinNode node;
     char *filename;
     Object *o;
+    struct ZuneTexture *zune_texture; /* Cached texture for Zune brushes */
     int width, height;
     struct Screen *scr;
     int count;

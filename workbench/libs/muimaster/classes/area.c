@@ -5,14 +5,20 @@
 
 */
 
+#include "mui.h"
+#include "clib/graphics_protos.h"
 #include "frame.h"
+#include "macros.h"
+#include "window.h"
 #include <devices/rawkeycodes.h>
 #include <exec/types.h>
 #include <graphics/gfxmacros.h>
 #include <intuition/imageclass.h>
 #include <libraries/gadtools.h>
+#include <libraries/cybergraphics.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #include <clib/alib_protos.h>
 #include <proto/exec.h>
@@ -21,6 +27,8 @@
 
 #include <proto/muimaster.h>
 #include <proto/utility.h>
+#include <proto/zunerenderer.h>
+#include <proto/cybergraphics.h>
 
 extern struct Library *MUIMasterBase;
 #include "muimaster_intern.h"
@@ -29,14 +37,19 @@ extern struct Library *MUIMasterBase;
 #include "datatypescache.h"
 #include "font.h"
 #include "imspec.h"
+#include "imspec_intern.h"
 #include "menu.h"
-#include "mui.h"
 #include "prefs.h"
 #include "support.h"
 #include "textengine.h"
 
-//  #define MYDEBUG 1
-#include "debug.h"
+#define DEBUG 0
+#include <aros/debug.h>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 
 /*
 Area.mui/MUIA_Background            done
@@ -115,18 +128,13 @@ static STRPTR zune_area_to_string(Object *area);
 #endif
 #endif
 
-static const struct MUI_FrameSpec_intern *
-get_intframe(Object *obj, struct MUI_AreaData *data,
-             struct MUI_FrameSpec_intern *tempstore);
+static const struct MUI_FrameSpec_intern *get_intframe(Object *obj, struct MUI_AreaData *data, struct MUI_FrameSpec_intern *tempstore);
 static void set_inner_sizes(Object *obj, struct MUI_AreaData *data);
 static void set_title_sizes(Object *obj, struct MUI_AreaData *data);
 static void handle_release(struct IClass *cl, Object *obj, int cancel);
 
-static void area_update_msizes(Object *obj, struct MUI_AreaData *data,
-                               const struct MUI_FrameSpec_intern *frame,
-                               const struct ZuneFrameGfx *zframe);
-static void setup_control_char(struct MUI_AreaData *data, Object *obj,
-                               struct IClass *cl);
+static void area_update_msizes(Object *obj, struct MUI_AreaData *data, const struct MUI_FrameSpec_intern *frame, const struct ZuneFrameGfx *zframe);
+static void setup_control_char(struct MUI_AreaData *data, Object *obj, struct IClass *cl);
 static void cleanup_control_char(struct MUI_AreaData *data, Object *obj);
 
 // static void setup_cycle_chain (struct MUI_AreaData *data, Object *obj);
@@ -135,8 +143,7 @@ static void cleanup_control_char(struct MUI_AreaData *data, Object *obj);
 #define ZUNE_FOCUS_TYPE_ACTIVE_OBJ 0
 #define ZUNE_FOCUS_TYPE_DROP_OBJ 1
 
-static void _zune_focus_new(Object *obj, int type)
-{
+static void _zune_focus_new(Object *obj, int type) {
     Object *parent;
     struct RastPort *rp;
     UWORD oldDrPt;
@@ -178,8 +185,7 @@ static void _zune_focus_new(Object *obj, int type)
     SetDrPt(rp, oldDrPt);
 }
 
-static void _zune_focus_destroy(Object *obj, int type)
-{
+static void _zune_focus_destroy(Object *obj, int type) {
     Object *parent;
 
     // bug("_zune_focus_destroy 1 %p\n", obj);
@@ -259,8 +265,7 @@ static void _zune_focus_destroy(Object *obj, int type)
 /**************************************************************************
 OM_NEW
 **************************************************************************/
-static IPTR Area__OM_NEW(struct IClass *cl, Object *obj, struct opSet *msg)
-{
+static IPTR Area__OM_NEW(struct IClass *cl, Object *obj, struct opSet *msg) {
     struct MUI_AreaData *data;
     struct TagItem *tags, *tag;
 
@@ -271,8 +276,7 @@ static IPTR Area__OM_NEW(struct IClass *cl, Object *obj, struct opSet *msg)
     /* Initial local instance data */
     data = INST_DATA(cl, obj);
 
-    data->mad_Flags =
-        MADF_FILLAREA | MADF_SHOWME | MADF_SHOWSELSTATE | MADF_DROPABLE;
+    data->mad_Flags = MADF_FILLAREA | MADF_SHOWME | MADF_SHOWSELSTATE | MADF_DROPABLE;
     data->mad_HorizWeight = data->mad_VertWeight = 100;
     data->mad_InputMode = MUIV_InputMode_None;
 
@@ -454,8 +458,7 @@ static IPTR Area__OM_NEW(struct IClass *cl, Object *obj, struct opSet *msg)
 /**************************************************************************
 OM_DISPOSE
 **************************************************************************/
-static IPTR Area__OM_DISPOSE(struct IClass *cl, Object *obj, Msg msg)
-{
+static IPTR Area__OM_DISPOSE(struct IClass *cl, Object *obj, Msg msg) {
     struct MUI_AreaData *data = INST_DATA(cl, obj);
 
     /* Safe to call this with NULL */
@@ -467,8 +470,7 @@ static IPTR Area__OM_DISPOSE(struct IClass *cl, Object *obj, Msg msg)
 /**************************************************************************
 OM_SET
 **************************************************************************/
-static IPTR Area__OM_SET(struct IClass *cl, Object *obj, struct opSet *msg)
-{
+static IPTR Area__OM_SET(struct IClass *cl, Object *obj, struct opSet *msg) {
     struct MUI_AreaData *data = INST_DATA(cl, obj);
     struct TagItem *tags = msg->ops_AttrList;
     struct TagItem *tag;
@@ -489,8 +491,7 @@ static IPTR Area__OM_SET(struct IClass *cl, Object *obj, struct opSet *msg)
 
             data->mad_Flags |= MADF_OWNBG;
 
-            if (old_backgroundspec &&
-                    (strcmp(data->mad_BackgroundSpec, old_backgroundspec) == 0)) {
+            if (old_backgroundspec && (strcmp(data->mad_BackgroundSpec, old_backgroundspec) == 0)) {
                 /* New background does not differ from old one */
                 zune_image_spec_free(old_backgroundspec);
                 tag->ti_Tag = TAG_IGNORE;
@@ -510,8 +511,7 @@ static IPTR Area__OM_SET(struct IClass *cl, Object *obj, struct opSet *msg)
             }
 
             if (_flags(obj) & MADF_SETUP) {
-                data->mad_Background = zune_imspec_setup((IPTR)data->mad_BackgroundSpec,
-                                       muiRenderInfo(obj));
+                data->mad_Background = zune_imspec_setup((IPTR)data->mad_BackgroundSpec, muiRenderInfo(obj));
             }
             if (_flags(obj) & MADF_CANDRAW) {
                 zune_imspec_show(data->mad_Background, obj);
@@ -545,8 +545,7 @@ static IPTR Area__OM_SET(struct IClass *cl, Object *obj, struct opSet *msg)
             //          if (data->mad_InputMode == MUIV_InputMode_None)
             //              break;
 
-            if ((!(_flags(obj) & MADF_CYCLECHAIN) && tag->ti_Data) ||
-                    ((_flags(obj) & MADF_CYCLECHAIN) && !tag->ti_Data)) {
+            if ((!(_flags(obj) & MADF_CYCLECHAIN) && tag->ti_Data) || ((_flags(obj) & MADF_CYCLECHAIN) && !tag->ti_Data)) {
                 if (_flags(obj) & MADF_SETUP) {
                     cleanup_control_char(data, obj);
                     _handle_bool_tag(data->mad_Flags, tag->ti_Data, MADF_CYCLECHAIN);
@@ -575,15 +574,13 @@ static IPTR Area__OM_SET(struct IClass *cl, Object *obj, struct opSet *msg)
                 if (data->mad_DisableCount == 0)
                     change_disable = 1;
                 count += 1;
-                data->mad_DisableCount =
-                    (data->mad_DisableCount & (1 << 31)) | (count & ~(1 << 31));
+                data->mad_DisableCount = (data->mad_DisableCount & (1 << 31)) | (count & ~(1 << 31));
             } else {
                 int change_val = (data->mad_DisableCount != 0) ? 1 : 0;
                 ULONG count = data->mad_DisableCount & ~(1 << 31);
                 if (count > 0) {
                     count -= 1;
-                    data->mad_DisableCount =
-                        (data->mad_DisableCount & (1 << 31)) | (count & ~(1 << 31));
+                    data->mad_DisableCount = (data->mad_DisableCount & (1 << 31)) | (count & ~(1 << 31));
                 }
                 if (data->mad_DisableCount == 0)
                     change_disable = change_val;
@@ -651,8 +648,7 @@ static IPTR Area__OM_SET(struct IClass *cl, Object *obj, struct opSet *msg)
                     DoMethod(_win(obj), MUIM_Window_RecalcDisplay, (IPTR)_parent(obj));
                 }
             }
-        }
-        break;
+        } break;
 
         case MUIA_Selected:
             /*  D(bug(" Area_Set(%p) :
@@ -714,8 +710,7 @@ static IPTR Area__OM_SET(struct IClass *cl, Object *obj, struct opSet *msg)
 /**************************************************************************
 OM_GET
 **************************************************************************/
-static IPTR Area__OM_GET(struct IClass *cl, Object *obj, struct opGet *msg)
-{
+static IPTR Area__OM_GET(struct IClass *cl, Object *obj, struct opGet *msg) {
 #define STORE *(msg->opg_Storage)
 
     struct MUI_AreaData *data = INST_DATA(cl, obj);
@@ -742,8 +737,7 @@ static IPTR Area__OM_GET(struct IClass *cl, Object *obj, struct opGet *msg)
         return TRUE;
 
     case MUIA_NestedDisabled:
-        STORE =
-            ((data->mad_DisableCount & ~(1 << 31)) != 0) ? (IPTR)TRUE : (IPTR)FALSE;
+        STORE = ((data->mad_DisableCount & ~(1 << 31)) != 0) ? (IPTR)TRUE : (IPTR)FALSE;
         return TRUE;
 
     case MUIA_Font:
@@ -852,9 +846,7 @@ static IPTR Area__OM_GET(struct IClass *cl, Object *obj, struct opGet *msg)
 /**************************************************************************
 MUIM_AskMinMax
 **************************************************************************/
-static IPTR Area__MUIM_AskMinMax(struct IClass *cl, Object *obj,
-                                 struct MUIP_AskMinMax *msg)
-{
+static IPTR Area__MUIM_AskMinMax(struct IClass *cl, Object *obj, struct MUIP_AskMinMax *msg) {
     struct MUI_AreaData *data = INST_DATA(cl, obj);
     const struct ZuneFrameGfx *zframe;
     const struct MUI_FrameSpec_intern *frame;
@@ -885,56 +877,47 @@ static IPTR Area__MUIM_AskMinMax(struct IClass *cl, Object *obj,
 /*
  * Called after MUIM_AskMinMax, to handle fixed and max sizes.
  */
-void __area_finish_minmax(Object *obj, struct MUI_MinMax *MinMaxInfo)
-{
+void __area_finish_minmax(Object *obj, struct MUI_MinMax *MinMaxInfo) {
     struct MUI_AreaData *data = muiAreaData(obj);
 
     if ((_flags(obj) & MADF_FIXHEIGHT) && (data->mad_HardHeight > 0)) {
         int h = data->mad_HardHeight + data->mad_subheight;
 
-        MinMaxInfo->MinHeight = MinMaxInfo->DefHeight = MinMaxInfo->MaxHeight =
-                                    CLAMP(h, MinMaxInfo->MinHeight, MinMaxInfo->MaxHeight);
+        MinMaxInfo->MinHeight = MinMaxInfo->DefHeight = MinMaxInfo->MaxHeight = CLAMP(h, MinMaxInfo->MinHeight, MinMaxInfo->MaxHeight);
     } else if (data->mad_HardHeightTxt) {
         ZText *text;
 
-        if ((text =
-                    zune_text_new(NULL, data->mad_HardHeightTxt, ZTEXT_ARG_NONE, 0))) {
+        if ((text = zune_text_new(NULL, data->mad_HardHeightTxt, ZTEXT_ARG_NONE, 0))) {
             zune_text_get_bounds(text, obj);
 
             MinMaxInfo->MinHeight = MinMaxInfo->DefHeight = MinMaxInfo->MaxHeight =
-                                        CLAMP(text->height + data->mad_subheight, MinMaxInfo->MinHeight,
-                                              MinMaxInfo->MaxHeight);
+                CLAMP(text->height + data->mad_subheight, MinMaxInfo->MinHeight, MinMaxInfo->MaxHeight);
 
             zune_text_destroy(text);
         }
 
     } else if (_flags(obj) & MADF_MAXHEIGHT) {
-        MinMaxInfo->MaxHeight = CLAMP(data->mad_HardHeight + data->mad_subheight,
-                                      MinMaxInfo->MinHeight, MinMaxInfo->MaxHeight);
+        MinMaxInfo->MaxHeight = CLAMP(data->mad_HardHeight + data->mad_subheight, MinMaxInfo->MinHeight, MinMaxInfo->MaxHeight);
     }
 
     if ((_flags(obj) & MADF_FIXWIDTH) && (data->mad_HardWidth > 0)) {
         int w = data->mad_HardWidth + data->mad_subwidth;
 
-        MinMaxInfo->MinWidth = MinMaxInfo->DefWidth = MinMaxInfo->MaxWidth =
-                                   CLAMP(w, MinMaxInfo->MinWidth, MinMaxInfo->MaxWidth);
+        MinMaxInfo->MinWidth = MinMaxInfo->DefWidth = MinMaxInfo->MaxWidth = CLAMP(w, MinMaxInfo->MinWidth, MinMaxInfo->MaxWidth);
     } else if (data->mad_HardWidthTxt) {
         ZText *text;
 
-        if ((text =
-                    zune_text_new(NULL, data->mad_HardWidthTxt, ZTEXT_ARG_NONE, 0))) {
+        if ((text = zune_text_new(NULL, data->mad_HardWidthTxt, ZTEXT_ARG_NONE, 0))) {
             zune_text_get_bounds(text, obj);
 
             MinMaxInfo->MinWidth = MinMaxInfo->DefWidth = MinMaxInfo->MaxWidth =
-                                       CLAMP(text->width + data->mad_subwidth, MinMaxInfo->MinWidth,
-                                             MinMaxInfo->MaxWidth);
+                CLAMP(text->width + data->mad_subwidth, MinMaxInfo->MinWidth, MinMaxInfo->MaxWidth);
 
             zune_text_destroy(text);
         }
 
     } else if (_flags(obj) & MADF_MAXWIDTH) {
-        MinMaxInfo->MaxWidth = CLAMP(data->mad_HardWidth + data->mad_subwidth,
-                                     MinMaxInfo->MinWidth, MinMaxInfo->MaxWidth);
+        MinMaxInfo->MaxWidth = CLAMP(data->mad_HardWidth + data->mad_subwidth, MinMaxInfo->MinWidth, MinMaxInfo->MaxWidth);
     }
 
     /* Set minmax */
@@ -960,10 +943,7 @@ void __area_finish_minmax(Object *obj, struct MUI_MinMax *MinMaxInfo)
 /*
  * draw object background if MADF_FILLAREA.
  */
-static void Area_Draw_handle_background(Object *obj, struct MUI_AreaData *data,
-                                        ULONG flags,
-                                        const struct ZuneFrameGfx *zframe)
-{
+static void Area_Draw_handle_background(Object *obj, struct MUI_AreaData *data, ULONG flags, const struct ZuneFrameGfx *zframe) {
     struct MUI_ImageSpec_intern *background;
     struct Rectangle r, r2, rects[4];
     int i, bgtop, bgleft, bgw, bgh, numrects;
@@ -971,8 +951,7 @@ static void Area_Draw_handle_background(Object *obj, struct MUI_AreaData *data,
     APTR cliphandle = NULL;
     BOOL use_clipping = FALSE;
 
-    if (!(data->mad_Flags & MADF_SELECTED) ||
-            !(data->mad_Flags & MADF_SHOWSELSTATE))
+    if (!(data->mad_Flags & MADF_SELECTED) || !(data->mad_Flags & MADF_SHOWSELSTATE))
         background = data->mad_Background;
     else
         background = data->mad_SelBack;
@@ -987,8 +966,7 @@ static void Area_Draw_handle_background(Object *obj, struct MUI_AreaData *data,
 
         /* Draw parent background for the entire area first - this fills the corners
          * that will be outside the rounded frame */
-        DoMethod(obj, MUIM_DrawParentBackground, bgleft, bgtop, bgw, bgh, bgleft,
-                 bgtop, flags);
+        DoMethod(obj, MUIM_DrawParentBackground, bgleft, bgtop, bgw, bgh, bgleft, bgtop, flags);
     } else {
         /* For non-rounded frames, use traditional inner area calculation */
         if (zframe->customframe)
@@ -1008,23 +986,32 @@ static void Area_Draw_handle_background(Object *obj, struct MUI_AreaData *data,
     r.MaxY = bgtop + bgh - 1;
 
     /* For rounded frames, set up clipping to draw object background only inside
-     * rounded area */
+     * rounded area. Use inset to match frame drawing coordinates. */
     if (zframe->border_radius > 0) {
         struct MUI_FrameSpec_intern tempframe;
-        const struct MUI_FrameSpec_intern *current_frame =
-            get_intframe(obj, data, &tempframe);
+        const struct MUI_FrameSpec_intern *current_frame = get_intframe(obj, data, &tempframe);
 
-        // Use the current frame's border_radius, not the zframe default
+        // Use the current frame's border_radius and border_width
         ULONG actual_radius = current_frame->border_radius;
-        clipregion =
-            zune_frame_create_clip_region(bgleft, bgtop, bgw, bgh, actual_radius);
-        if (clipregion) {
-            cliphandle = MUI_AddClipRegion(data->mad_RenderInfo, clipregion);
-            if (cliphandle != (APTR)-1) {
-                use_clipping = TRUE;
-            } else {
-                DisposeRegion(clipregion);
-                clipregion = NULL;
+        ULONG border_width = current_frame->border_width;
+        
+        // Apply same inset as frame drawing to ensure clip matches frame
+        int inset = border_width + ZUNE_AA_FEATHER_PADDING;
+        int clip_left = bgleft + inset;
+        int clip_top = bgtop + inset;
+        int clip_w = bgw - inset * 2;
+        int clip_h = bgh - inset * 2;
+        
+        if (clip_w > 0 && clip_h > 0) {
+            clipregion = zune_frame_create_clip_region(clip_left, clip_top, clip_w, clip_h, actual_radius);
+            if (clipregion) {
+                cliphandle = MUI_AddClipRegion(data->mad_RenderInfo, clipregion);
+                if (cliphandle != (APTR)-1) {
+                    use_clipping = TRUE;
+                } else {
+                    DisposeRegion(clipregion);
+                    clipregion = NULL;
+                }
             }
         }
     }
@@ -1056,46 +1043,72 @@ static void Area_Draw_handle_background(Object *obj, struct MUI_AreaData *data,
         numrects = SubtractRectFromRect(&r, &r2, rects);
     }
 
-    for (i = 0; i < numrects; i++) {
-        if (!background) {
-            /* For rounded frames, we already drew parent background, so draw object
-             * background with clipping. For non-rounded frames, this will do the rest
-             */
-            /* D(bug(" Area_Draw(%p):%ld: MUIM_DrawBackground\n", obj,
-                   __LINE__)); */
-            if (zframe->border_radius == 0) {
-                /* Non-rounded frames: draw background normally */
-                DoMethod(obj, MUIM_DrawBackground, rects[i].MinX, rects[i].MinY,
-                         rects[i].MaxX - rects[i].MinX + 1,
-                         rects[i].MaxY - rects[i].MinY + 1, rects[i].MinX,
-                         rects[i].MinY, data->mad_Flags);
+    if (!background) {
+        BOOL handled = FALSE;
+
+        if (zframe->border_radius == 0) {
+            if (numrects == 1) {
+                DoMethod(obj, MUIM_DrawBackground, rects[0].MinX, rects[0].MinY, rects[0].MaxX - rects[0].MinX + 1,
+                         rects[0].MaxY - rects[0].MinY + 1, rects[0].MinX, rects[0].MinY, data->mad_Flags);
+                handled = TRUE;
+            } else if (numrects > 1) {
+                struct Region *bg_region = NewRegion();
+                APTR bg_clip_handle = NULL;
+
+                if (bg_region) {
+                    for (i = 0; i < numrects; i++) {
+                        OrRectRegion(bg_region, &rects[i]);
+                    }
+
+                    bg_clip_handle = MUI_AddClipRegion(data->mad_RenderInfo, bg_region);
+                    if (bg_clip_handle != (APTR)-1) {
+                        DoMethod(obj, MUIM_DrawParentBackground, r.MinX, r.MinY, r.MaxX - r.MinX + 1, r.MaxY - r.MinY + 1, r.MinX, r.MinY,
+                                 data->mad_Flags);
+                        MUI_RemoveClipRegion(data->mad_RenderInfo, bg_clip_handle);
+                        handled = TRUE;
+                    } else {
+                        DisposeRegion(bg_region);
+                    }
+                }
             }
-            /* For rounded frames with no background image, parent background is
-             * already drawn */
-        } else {
+        }
+
+        /* For rounded frames with no background image, parent background is already drawn in full */
+        if (handled || zframe->border_radius > 0)
+            goto cleanup_clip;
+
+        /* Fallback to individual rect drawing when batching isn't possible */
+        if (!handled) {
+            for (i = 0; i < numrects; i++) {
+                DoMethod(obj, MUIM_DrawBackground, rects[i].MinX, rects[i].MinY, rects[i].MaxX - rects[i].MinX + 1,
+                         rects[i].MaxY - rects[i].MinY + 1, rects[i].MinX, rects[i].MinY, data->mad_Flags);
+            }
+            goto cleanup_clip;
+        }
+    }
+
+    for (i = 0; i < numrects; i++) {
+        if (background) {
             /* D(bug(" Area_Draw(%p):%ld: zune_imspec_draw\n", obj,
                    __LINE__)); */
-            zune_imspec_draw(background, data->mad_RenderInfo, rects[i].MinX,
-                             rects[i].MinY, rects[i].MaxX - rects[i].MinX + 1,
-                             rects[i].MaxY - rects[i].MinY + 1, rects[i].MinX,
-                             rects[i].MinY, 0);
+            zune_imspec_draw(background, data->mad_RenderInfo, rects[i].MinX, rects[i].MinY, rects[i].MaxX - rects[i].MinX + 1,
+                             rects[i].MaxY - rects[i].MinY + 1, rects[i].MinX, rects[i].MinY, 0);
         }
     }
 
     /* Remove clipping region if we used one */
+cleanup_clip:
     if (use_clipping && cliphandle != (APTR)-1) {
         MUI_RemoveClipRegion(data->mad_RenderInfo, cliphandle);
     }
 
-    if (muiGlobalInfo(obj)->mgi_Prefs->window_redraw ==
-            WINDOW_REDRAW_WITHOUT_CLEAR) {
+    if (muiGlobalInfo(obj)->mgi_Prefs->window_redraw == WINDOW_REDRAW_WITHOUT_CLEAR) {
         if (bgtop > _top(obj) && !(flags & MADF_DRAWALL)) {
             /* Fill in the gap produced by the title with the background
              * of the parent object but only if
              * the upper object hasn't drawn it already
              * (which is the case if MADF_DRAWALL is setted) */
-            DoMethod(obj, MUIM_DrawParentBackground, bgleft, _top(obj), bgw,
-                     bgtop - _top(obj), bgleft, _top(obj), data->mad_Flags);
+            DoMethod(obj, MUIM_DrawParentBackground, bgleft, _top(obj), bgw, bgtop - _top(obj), bgleft, _top(obj), data->mad_Flags);
         }
     }
 }
@@ -1103,28 +1116,39 @@ static void Area_Draw_handle_background(Object *obj, struct MUI_AreaData *data,
 /*
  * draw object frame + title if not MADF_FRAMEPHANTOM.
  */
-static void Area_Draw_handle_frame(Object *obj, struct MUI_AreaData *data,
-                                   const struct ZuneFrameGfx *zframe)
-{
+static void Area_Draw_handle_frame(Object *obj, struct MUI_AreaData *data, const struct ZuneFrameGfx *zframe) {
     APTR textdrawclip = (APTR)-1;
-    struct Region *region;
+    struct Region *region = NULL;
     int tx;
     int tw, frame_height, frame_top;
     int addtw;
     struct TextExtent te;
     int nchars;
     int maxtxtwidth;
+    BOOL skip_frame_draw = FALSE;
+
+    /* Handle deferred frame outline drawing (single-buffered rounded frames) */
+    if (data->mad_Flags2 & MADF2_ZUNE_FRAME_DEFERRED) {
+        struct MUI_FrameSpec_intern tempframe;
+        const struct MUI_FrameSpec_intern *framespec = get_intframe(obj, data, &tempframe);
+        zune_frame_draw_deferred_outline(obj, data, framespec);
+        /* Frame is now rendered, skip normal frame drawing */
+        return;
+    }
+
+    if (data->mad_Flags2 & MADF2_ZUNE_FRAME_RENDERED) {
+        skip_frame_draw = TRUE;
+    }
 
     /* no frametitle, just draw frame and return */
     if (!data->mad_FrameTitle) {
+        if (skip_frame_draw)
+            return;
         struct dt_frame_image temp_frame;
         struct MUI_FrameSpec_intern tempframe;
-        const struct MUI_FrameSpec_intern *framespec =
-            get_intframe(obj, data, &tempframe);
-        struct dt_frame_image *frame_img =
-            zune_frame_prepare_for_drawing(zframe, framespec, &temp_frame);
-        zframe->draw(frame_img, muiRenderInfo(obj), _left(obj), _top(obj),
-                     _width(obj), _height(obj), _left(obj), _top(obj), _width(obj),
+        const struct MUI_FrameSpec_intern *framespec = get_intframe(obj, data, &tempframe);
+        struct dt_frame_image *frame_img = zune_frame_prepare_for_drawing(zframe, framespec, &temp_frame);
+        zframe->draw(frame_img, muiRenderInfo(obj), _left(obj), _top(obj), _width(obj), _height(obj), _left(obj), _top(obj), _width(obj),
                      _height(obj));
         return;
     }
@@ -1144,8 +1168,7 @@ static void Area_Draw_handle_frame(Object *obj, struct MUI_AreaData *data,
 
     maxtxtwidth = _width(obj) - zframe->ileft - zframe->iright - 2 * 5 - addtw;
 
-    nchars = TextFit(_rp(obj), data->mad_FrameTitle, strlen(data->mad_FrameTitle),
-                     &te, NULL, 1, maxtxtwidth, _font(obj)->tf_YSize);
+    nchars = TextFit(_rp(obj), data->mad_FrameTitle, strlen(data->mad_FrameTitle), &te, NULL, 1, maxtxtwidth, _font(obj)->tf_YSize);
 
     tw = te.te_Width + addtw;
     tx = _left(obj) + (_width(obj) - tw) / 2;
@@ -1153,57 +1176,51 @@ static void Area_Draw_handle_frame(Object *obj, struct MUI_AreaData *data,
     frame_top = _top(obj) + data->mad_TitleHeightAbove;
     frame_height = _height(obj) - frame_top + _top(obj);
 
-    if ((region = NewRegion())) {
-        struct Rectangle rect;
-        int hspace = _font(obj)->tf_YSize / 8;
+    if (!skip_frame_draw) {
+        if ((region = NewRegion())) {
+            struct Rectangle rect;
+            int hspace = _font(obj)->tf_YSize / 8;
 
-        rect.MinX = tx - hspace;
-        rect.MinY = _top(obj);
-        rect.MaxX = tx + tw - 1 + hspace;
-        rect.MaxY = _top(obj) + _font(obj)->tf_YSize - 1;
-        // frame is not thick enough anyway
-        OrRectRegion(region, &rect);
+            rect.MinX = tx - hspace;
+            rect.MinY = _top(obj);
+            rect.MaxX = tx + tw - 1 + hspace;
+            rect.MaxY = _top(obj) + _font(obj)->tf_YSize - 1;
+            // frame is not thick enough anyway
+            OrRectRegion(region, &rect);
 
-        rect.MinX = _left(obj);
-        rect.MinY = _top(obj);
-        rect.MaxX = _right(obj);
-        rect.MaxY = _bottom(obj);
-        XorRectRegion(region, &rect);
+            rect.MinX = _left(obj);
+            rect.MinY = _top(obj);
+            rect.MaxX = _right(obj);
+            rect.MaxY = _bottom(obj);
+            XorRectRegion(region, &rect);
 
-        textdrawclip = MUI_AddClipRegion(muiRenderInfo(obj), region);
-    }
+            textdrawclip = MUI_AddClipRegion(muiRenderInfo(obj), region);
+        }
 
-    /* Pass our frame_img (either customframe or properly prepared local) to the
-     * draw function */
-    struct dt_frame_image temp_frame;
-    struct MUI_FrameSpec_intern tempframe;
-    const struct MUI_FrameSpec_intern *framespec =
-        get_intframe(obj, data, &tempframe);
-    struct dt_frame_image *frame_img =
-        zune_frame_prepare_for_drawing(zframe, framespec, &temp_frame);
-    zframe->draw(frame_img, muiRenderInfo(obj), _left(obj), frame_top,
-                 _width(obj), frame_height, _left(obj), frame_top, _width(obj),
-                 frame_height);
+        /* Pass our frame_img (either customframe or properly prepared local) to
+         * the draw function */
+        struct dt_frame_image temp_frame;
+        struct MUI_FrameSpec_intern tempframe;
+        const struct MUI_FrameSpec_intern *framespec = get_intframe(obj, data, &tempframe);
+        struct dt_frame_image *frame_img = zune_frame_prepare_for_drawing(zframe, framespec, &temp_frame);
+        zframe->draw(frame_img, muiRenderInfo(obj), _left(obj), frame_top, _width(obj), frame_height, _left(obj), frame_top, _width(obj),
+                     frame_height);
 
-    if (region && textdrawclip != (APTR)-1) {
-        MUI_RemoveClipRegion(muiRenderInfo(obj), textdrawclip);
-        /*              DisposeRegion(region);*/ /* sba: DisposeRegion happens
-                                                    in MUI_RemoveClipRegion,
-                                                    this seems wrong to me */
+        if (region && textdrawclip != (APTR)-1) {
+            MUI_RemoveClipRegion(muiRenderInfo(obj), textdrawclip);
+        }
     }
 
     /* Title text drawing */
     SetDrMd(_rp(obj), JAM1);
     SetAPen(_rp(obj), _pens(obj)[MPEN_SHADOW]);
-    if (muiGlobalInfo(obj)->mgi_Prefs->group_title_color ==
-            GROUP_TITLE_COLOR_3D) {
+    if (muiGlobalInfo(obj)->mgi_Prefs->group_title_color == GROUP_TITLE_COLOR_3D) {
         Move(_rp(obj), tx + 1, _top(obj) + _font(obj)->tf_Baseline + 1);
         Text(_rp(obj), data->mad_FrameTitle, nchars);
         SetAPen(_rp(obj), _pens(obj)[MPEN_SHINE]);
         Move(_rp(obj), tx, _top(obj) + _font(obj)->tf_Baseline);
         Text(_rp(obj), data->mad_FrameTitle, nchars);
-    } else if (muiGlobalInfo(obj)->mgi_Prefs->group_title_color ==
-               GROUP_TITLE_COLOR_OUTLINE) {
+    } else if (muiGlobalInfo(obj)->mgi_Prefs->group_title_color == GROUP_TITLE_COLOR_OUTLINE) {
         SetAPen(_rp(obj), _pens(obj)[MPEN_SHINE]);
 
         tx += addtw / 2;
@@ -1220,8 +1237,7 @@ static void Area_Draw_handle_frame(Object *obj, struct MUI_AreaData *data,
         Move(_rp(obj), tx, _top(obj) + _font(obj)->tf_Baseline);
         Text(_rp(obj), data->mad_FrameTitle, nchars);
     } else {
-        if (muiGlobalInfo(obj)->mgi_Prefs->group_title_color ==
-                GROUP_TITLE_COLOR_HILITE) {
+        if (muiGlobalInfo(obj)->mgi_Prefs->group_title_color == GROUP_TITLE_COLOR_HILITE) {
             SetAPen(_rp(obj), _pens(obj)[MPEN_SHINE]);
         }
         Move(_rp(obj), tx, _top(obj) + _font(obj)->tf_Baseline);
@@ -1232,9 +1248,7 @@ static void Area_Draw_handle_frame(Object *obj, struct MUI_AreaData *data,
 /**************************************************************************
 MUIM_Draw
 **************************************************************************/
-static IPTR Area__MUIM_Draw(struct IClass *cl, Object *obj,
-                            struct MUIP_Draw *msg)
-{
+static IPTR Area__MUIM_Draw(struct IClass *cl, Object *obj, struct MUIP_Draw *msg) {
     struct MUI_AreaData *data = INST_DATA(cl, obj);
     const struct ZuneFrameGfx *zframe;
     struct TextFont *obj_font = NULL;
@@ -1259,30 +1273,40 @@ static IPTR Area__MUIM_Draw(struct IClass *cl, Object *obj,
         return 0;
     }
 
+    /* Reset renderer flags before drawing - they will be set again if renderer is used */
+    data->mad_Flags2 &= ~(MADF2_ZUNE_FRAME_RENDERED | MADF2_ZUNE_RENDERER_BG | MADF2_ZUNE_FRAME_DEFERRED);
+
     /* Background can't be drawn without knowing anything about frame, thus
      * some calculations are made before background and frame drawing.
      */
-    {
-        /* on selected state, will get the opposite frame */
-        const struct MUI_FrameSpec_intern *frame;
-        struct MUI_FrameSpec_intern tempframe;
-        int state;
+    /* on selected state, will get the opposite frame */
+    const struct MUI_FrameSpec_intern *frame;
+    struct MUI_FrameSpec_intern tempframe;
+    int state;
 
-        frame = get_intframe(obj, data, &tempframe);
-        state = frame->state;
-        if ((data->mad_Flags & MADF_SELECTED) &&
-                (data->mad_Flags & MADF_SHOWSELSTATE))
-            state ^= 1;
+    frame = get_intframe(obj, data, &tempframe);
+    state = frame->state;
+    if ((data->mad_Flags & MADF_SELECTED) && (data->mad_Flags & MADF_SHOWSELSTATE))
+        state ^= 1;
 
-        zframe = zune_zframe_get_with_state(obj, frame, state);
+    zframe = zune_zframe_get_with_state(obj, frame, state);
 
-        /* update innersizes as there are frames which have different inner
-         * spacings in selected state */
-        area_update_msizes(obj, data, frame, zframe);
+    /* update innersizes as there are frames which have different inner
+     * spacings in selected state */
+    area_update_msizes(obj, data, frame, zframe);
+
+    /* For rounded frames, try the renderer which handles both background and
+     * frame together when double-buffered. When single-buffered, renderer
+     * will return FALSE and we fall back to normal drawing. */
+    BOOL frame_via_renderer = FALSE;
+    if (frame->type == FST_ROUNDED) {
+        frame_via_renderer = zune_frame_try_renderer(obj, data, frame, msg->flags, zframe);
     }
 
-    /* Background drawing */
-    Area_Draw_handle_background(obj, data, msg->flags, zframe);
+    /* Draw background unless the renderer already handled it */
+    if (!(data->mad_Flags2 & MADF2_ZUNE_RENDERER_BG)) {
+        Area_Draw_handle_background(obj, data, msg->flags, zframe);
+    }
 
     obj_font = _font(obj);
     _font(obj) = zune_font_get(obj, MUIV_Font_Title);
@@ -1304,34 +1328,44 @@ static IPTR Area__MUIM_Draw(struct IClass *cl, Object *obj,
 /**************************************************************************
 MUIM_DrawParentBackground
 **************************************************************************/
-static IPTR
-Area__MUIM_DrawParentBackground(struct IClass *cl, Object *obj,
-                                struct MUIP_DrawParentBackground *msg)
-{
+static IPTR Area__MUIM_DrawParentBackground(struct IClass *cl, Object *obj, struct MUIP_DrawParentBackground *msg) {
     struct MUI_AreaData *data = INST_DATA(cl, obj);
     Object *parent = NULL;
 
-    if (!(data->mad_Flags & MADF_CANDRAW)) /* not between show/hide */
-        return FALSE;
+  if (!(data->mad_Flags & MADF_CANDRAW)) /* not between show/hide */
+    return FALSE;
 
-    get(obj, MUIA_Parent, &parent);
-    if (parent) {
-        DoMethod(parent, MUIM_DrawBackground, msg->left, msg->top, msg->width,
-                 msg->height, msg->xoffset, msg->yoffset, msg->flags);
-    } else {
-        D(bug("Area_DrawParentBackground(%p) : MUIM_Window_DrawBackground\n", obj));
-        DoMethod(_win(obj), MUIM_Window_DrawBackground, msg->left, msg->top,
-                 msg->width, msg->height, msg->xoffset, msg->yoffset, msg->flags);
-    }
+  if (data->mad_Flags2 & MADF2_ZUNE_RENDERER_BG)
     return TRUE;
+
+  get(obj, MUIA_Parent, &parent);
+  if (parent) {
+    struct MUI_AreaData *parent_data = INST_DATA(cl, parent);
+
+    /* If parent has a background, draw it directly and stop propagation.
+     * This avoids unnecessary traversal up the widget hierarchy when
+     * the parent already has an opaque background that will cover the area.
+     * Only propagate to grandparent if parent has no background. */
+    if (parent_data->mad_Background) {
+      DoMethod(parent, MUIM_DrawBackground, msg->left, msg->top, msg->width,
+               msg->height, msg->xoffset, msg->yoffset, msg->flags);
+    } else {
+      /* Parent has no background, propagate upwards */
+      DoMethod(parent, MUIM_DrawParentBackground, msg->left, msg->top,
+               msg->width, msg->height, msg->xoffset, msg->yoffset, msg->flags);
+    }
+  } else {
+    D(bug("Area_DrawParentBackground(%p) : MUIM_Window_DrawBackground\n", obj));
+    DoMethod(_win(obj), MUIM_Window_DrawBackground, msg->left, msg->top,
+             msg->width, msg->height, msg->xoffset, msg->yoffset, msg->flags);
+  }
+  return TRUE;
 }
 
 /**************************************************************************
 MUIM_DrawBackground
 **************************************************************************/
-static IPTR Area__MUIM_DrawBackground(struct IClass *cl, Object *obj,
-                                      struct MUIP_DrawBackground *msg)
-{
+static IPTR Area__MUIM_DrawBackground(struct IClass *cl, Object *obj, struct MUIP_DrawBackground *msg) {
     struct MUI_AreaData *data = INST_DATA(cl, obj);
     struct MUI_ImageSpec_intern *bg;
     LONG state;
@@ -1339,8 +1373,10 @@ static IPTR Area__MUIM_DrawBackground(struct IClass *cl, Object *obj,
     if (!(data->mad_Flags & MADF_CANDRAW)) /* not between show/hide */
         return FALSE;
 
-    if ((msg->flags & MADF_SELECTED) && (msg->flags & MADF_SHOWSELSTATE) &&
-            data->mad_SelBack) {
+    if (data->mad_Flags2 & MADF2_ZUNE_RENDERER_BG)
+        return TRUE;
+
+    if ((msg->flags & MADF_SELECTED) && (msg->flags & MADF_SHOWSELSTATE) && data->mad_SelBack) {
         /*      D(bug("Area_DrawBackground(%p): selected bg\n", obj)); */
         bg = data->mad_SelBack;
         state = IDS_SELECTED;
@@ -1357,48 +1393,38 @@ static IPTR Area__MUIM_DrawBackground(struct IClass *cl, Object *obj,
     if (!bg) {
         D(bug("Area_DrawBackground(%p) : MUIM_DrawParentBackground\n", obj));
 
-        return DoMethod(obj, MUIM_DrawParentBackground, msg->left, msg->top,
-                        msg->width, msg->height, msg->xoffset, msg->yoffset,
-                        msg->flags);
+        return DoMethod(obj, MUIM_DrawParentBackground, msg->left, msg->top, msg->width, msg->height, msg->xoffset, msg->yoffset, msg->flags);
     }
     frame = get_intframe(obj, data, &tempframe);
 
     int xstate = frame->state;
-    if ((data->mad_Flags & MADF_SELECTED) &&
-            (data->mad_Flags & MADF_SHOWSELSTATE))
+    if ((data->mad_Flags & MADF_SELECTED) && (data->mad_Flags & MADF_SHOWSELSTATE))
         xstate ^= 1;
 
     zframe = zune_zframe_get_with_state(obj, frame, xstate);
 
     if (zframe->customframe == NULL) {
         /*      D(bug("Area_DrawBackground(%p): draw bg\n", obj)); */
-        zune_imspec_draw(bg, data->mad_RenderInfo, msg->left, msg->top, msg->width,
-                         msg->height, msg->xoffset, msg->yoffset, state);
+        zune_imspec_draw(bg, data->mad_RenderInfo, msg->left, msg->top, msg->width, msg->height, msg->xoffset, msg->yoffset, state);
 
         //     if (!data->mad_FrameTitle)
         //     {
 
     } else {
         if (zframe->noalpha == FALSE) {
-            zune_imspec_draw(bg, data->mad_RenderInfo, msg->left, msg->top,
-                             msg->width, msg->height, msg->xoffset, msg->yoffset,
-                             state);
+            zune_imspec_draw(bg, data->mad_RenderInfo, msg->left, msg->top, msg->width, msg->height, msg->xoffset, msg->yoffset, state);
         }
     }
 
     if (zframe->customframe) {
-        zframe->draw(zframe->customframe, muiRenderInfo(obj), _left(obj), _top(obj),
-                     _width(obj), _height(obj), msg->left, msg->top, msg->width,
+        zframe->draw(zframe->customframe, muiRenderInfo(obj), _left(obj), _top(obj), _width(obj), _height(obj), msg->left, msg->top, msg->width,
                      msg->height);
     }
 
     return TRUE;
 }
 
-static IPTR
-Area__MUIM_DrawBackgroundBuffered(struct IClass *cl, Object *obj,
-                                  struct MUIP_DrawBackgroundBuffered *msg)
-{
+static IPTR Area__MUIM_DrawBackgroundBuffered(struct IClass *cl, Object *obj, struct MUIP_DrawBackgroundBuffered *msg) {
     struct MUI_AreaData *data = INST_DATA(cl, obj);
     struct MUI_ImageSpec_intern *bg;
     LONG state = 0;
@@ -1406,23 +1432,22 @@ Area__MUIM_DrawBackgroundBuffered(struct IClass *cl, Object *obj,
     if (!(data->mad_Flags & MADF_CANDRAW)) /* not between show/hide */
         return FALSE;
 
+    /* If the Zune renderer already painted the background, avoid redrawing it. */
+    if (data->mad_Flags2 & MADF2_ZUNE_RENDERER_BG)
+        return TRUE;
+
     bg = data->mad_Background;
 
     /*      D(bug("Area_DrawBackground(%p): draw bg\n", obj)); */
-    zune_imspec_drawbuffered(bg, msg->rp, data->mad_RenderInfo, msg->left,
-                             msg->top, msg->width, msg->height,
-                             msg->xoffset + msg->left, msg->yoffset + msg->top,
-                             state, msg->left, msg->top, 1, _mleft(obj),
-                             _mtop(obj), _mright(obj), _mbottom(obj));
+    zune_imspec_drawbuffered(bg, msg->rp, data->mad_RenderInfo, msg->left, msg->top, msg->width, msg->height, msg->xoffset + msg->left,
+                             msg->yoffset + msg->top, state, msg->left, msg->top, 1, _mleft(obj), _mtop(obj), _mright(obj), _mbottom(obj));
 
     return TRUE;
 }
 
 /* Perverting the EventHandlerNode structure to specify a shortcut.
  */
-static void setup_control_char(struct MUI_AreaData *data, Object *obj,
-                               struct IClass *cl)
-{
+static void setup_control_char(struct MUI_AreaData *data, Object *obj, struct IClass *cl) {
     if (data->mad_ControlChar != 0 || data->mad_Flags & MADF_CYCLECHAIN) {
         data->mad_ccn.ehn_Events = data->mad_ControlChar;
         switch (data->mad_InputMode) {
@@ -1439,23 +1464,17 @@ static void setup_control_char(struct MUI_AreaData *data, Object *obj,
         data->mad_ccn.ehn_Priority = 0;
         data->mad_ccn.ehn_Object = obj;
         data->mad_ccn.ehn_Class = cl;
-        DoMethod(_win(obj), MUIM_Window_AddControlCharHandler,
-                 (IPTR)&data->mad_ccn);
+        DoMethod(_win(obj), MUIM_Window_AddControlCharHandler, (IPTR)&data->mad_ccn);
     }
 }
 
-static void cleanup_control_char(struct MUI_AreaData *data, Object *obj)
-{
+static void cleanup_control_char(struct MUI_AreaData *data, Object *obj) {
     if (data->mad_ControlChar != 0 || data->mad_Flags & MADF_CYCLECHAIN) {
-        DoMethod(_win(obj), MUIM_Window_RemControlCharHandler,
-                 (IPTR)&data->mad_ccn);
+        DoMethod(_win(obj), MUIM_Window_RemControlCharHandler, (IPTR)&data->mad_ccn);
     }
 }
 
-static const struct MUI_FrameSpec_intern *
-get_intframe(Object *obj, struct MUI_AreaData *data,
-             struct MUI_FrameSpec_intern *tempstore)
-{
+static const struct MUI_FrameSpec_intern *get_intframe(Object *obj, struct MUI_AreaData *data, struct MUI_FrameSpec_intern *tempstore) {
     if (data->mad_Frame > 100) {
         /* Frame is spec in string format. Store it in tempstore and return
            a pointer to it. The caller should have such a temp variable on
@@ -1473,8 +1492,7 @@ get_intframe(Object *obj, struct MUI_AreaData *data,
     }
 }
 
-static void set_inner_sizes(Object *obj, struct MUI_AreaData *data)
-{
+static void set_inner_sizes(Object *obj, struct MUI_AreaData *data) {
     const struct MUI_FrameSpec_intern *frame;
     struct MUI_FrameSpec_intern tempframe;
 
@@ -1490,8 +1508,7 @@ static void set_inner_sizes(Object *obj, struct MUI_AreaData *data)
         data->mad_InnerBottom = frame->innerBottom;
 }
 
-static void set_title_sizes(Object *obj, struct MUI_AreaData *data)
-{
+static void set_title_sizes(Object *obj, struct MUI_AreaData *data) {
     if (data->mad_FrameTitle) {
         const struct ZuneFrameGfx *zframe;
         const struct MUI_FrameSpec_intern *frame;
@@ -1511,10 +1528,8 @@ static void set_title_sizes(Object *obj, struct MUI_AreaData *data)
             break;
         }
 
-        data->mad_TitleHeightAdd =
-            _font(obj)->tf_YSize - data->mad_InnerTop - zframe->itop;
-        data->mad_TitleHeightBelow =
-            data->mad_TitleHeightAdd - data->mad_TitleHeightAbove;
+        data->mad_TitleHeightAdd = _font(obj)->tf_YSize - data->mad_InnerTop - zframe->itop;
+        data->mad_TitleHeightBelow = data->mad_TitleHeightAdd - data->mad_TitleHeightAbove;
     }
 }
 
@@ -1523,9 +1538,7 @@ First method to be called after an OM_NEW, it is the place
 for all initializations depending on the environment, but not
 on the gadget size/position. Matched by MUIM_Cleanup.
 **************************************************************************/
-static IPTR Area__MUIM_Setup(struct IClass *cl, Object *obj,
-                             struct MUIP_Setup *msg)
-{
+static IPTR Area__MUIM_Setup(struct IClass *cl, Object *obj, struct MUIP_Setup *msg) {
     struct MUI_AreaData *data = INST_DATA(cl, obj);
     const struct ZuneFrameGfx *zframe;
     const struct MUI_FrameSpec_intern *frame;
@@ -1552,14 +1565,11 @@ static IPTR Area__MUIM_Setup(struct IClass *cl, Object *obj,
     area_update_msizes(obj, data, frame, zframe);
 
     if (data->mad_Flags & MADF_OWNBG) {
-        data->mad_Background =
-            zune_imspec_setup((IPTR)data->mad_BackgroundSpec, muiRenderInfo(obj));
+        data->mad_Background = zune_imspec_setup((IPTR)data->mad_BackgroundSpec, muiRenderInfo(obj));
     }
 
-    if ((data->mad_Flags & MADF_SHOWSELSTATE) &&
-            (data->mad_InputMode != MUIV_InputMode_None)) {
-        data->mad_SelBack =
-            zune_imspec_setup(MUII_SelectedBack, muiRenderInfo(obj));
+    if ((data->mad_Flags & MADF_SHOWSELSTATE) && (data->mad_InputMode != MUIV_InputMode_None)) {
+        data->mad_SelBack = zune_imspec_setup(MUII_SelectedBack, muiRenderInfo(obj));
     }
 
     if (data->mad_InputMode != MUIV_InputMode_None || data->mad_ContextMenu) {
@@ -1598,9 +1608,7 @@ static IPTR Area__MUIM_Setup(struct IClass *cl, Object *obj,
 /**************************************************************************
 Called to match a MUIM_Setup, when environment is no longer available.
 **************************************************************************/
-static IPTR Area__MUIM_Cleanup(struct IClass *cl, Object *obj,
-                               struct MUIP_Cleanup *msg)
-{
+static IPTR Area__MUIM_Cleanup(struct IClass *cl, Object *obj, struct MUIP_Cleanup *msg) {
     struct MUI_AreaData *data = INST_DATA(cl, obj);
 
     _flags(obj) &= ~MADF_SETUP;
@@ -1609,8 +1617,7 @@ static IPTR Area__MUIM_Cleanup(struct IClass *cl, Object *obj,
     cleanup_control_char(data, obj);
 
     if (data->mad_Timer.ihn_Millis) {
-        DoMethod(_app(obj), MUIM_Application_RemInputHandler,
-                 (IPTR)&data->mad_Timer);
+        DoMethod(_app(obj), MUIM_Application_RemInputHandler, (IPTR)&data->mad_Timer);
         data->mad_Timer.ihn_Millis = 0;
     }
 
@@ -1622,16 +1629,14 @@ static IPTR Area__MUIM_Cleanup(struct IClass *cl, Object *obj,
     if (data->mad_ehn.ehn_Events)
         DoMethod(_win(obj), MUIM_Window_RemEventHandler, (IPTR)&data->mad_ehn);
 
-    D(bug("Area cleanup %p active=%p\n", obj,
-          (Object *)XGET(_win(obj), MUIA_Window_ActiveObject)));
+    D(bug("Area cleanup %p active=%p\n", obj, (Object *)XGET(_win(obj), MUIA_Window_ActiveObject)));
     if (obj == (Object *)XGET(_win(obj), MUIA_Window_ActiveObject)) {
         D(bug("we are active, unset us\n"));
         set(_win(obj), MUIA_Window_ActiveObject, MUIV_Window_ActiveObject_None);
     }
 
     /* It's safe to call the following function with NULL */
-    if ((data->mad_Flags & MADF_SHOWSELSTATE) &&
-            (data->mad_InputMode != MUIV_InputMode_None)) {
+    if ((data->mad_Flags & MADF_SHOWSELSTATE) && (data->mad_InputMode != MUIV_InputMode_None)) {
         zune_imspec_cleanup(data->mad_SelBack);
         data->mad_SelBack = NULL;
     }
@@ -1650,15 +1655,12 @@ Called after the window is open and the area layouted, but before
 any drawing. Matched by one MUIM_Hide.
 Good place to init things depending on gadget size/position.
 **************************************************************************/
-static IPTR Area__MUIM_Show(struct IClass *cl, Object *obj,
-                            struct MUIP_Show *msg)
-{
+static IPTR Area__MUIM_Show(struct IClass *cl, Object *obj, struct MUIP_Show *msg) {
     struct MUI_AreaData *data = INST_DATA(cl, obj);
 
     zune_imspec_show(data->mad_Background, obj);
 
-    if (data->mad_Flags & MADF_SHOWSELSTATE &&
-            data->mad_InputMode != MUIV_InputMode_None) {
+    if (data->mad_Flags & MADF_SHOWSELSTATE && data->mad_InputMode != MUIV_InputMode_None) {
         zune_imspec_show(data->mad_SelBack, obj);
     }
 
@@ -1668,14 +1670,11 @@ static IPTR Area__MUIM_Show(struct IClass *cl, Object *obj,
 /**************************************************************************
 Called when the window is about to be closed, to match MUIM_Show.
 **************************************************************************/
-static IPTR Area__MUIM_Hide(struct IClass *cl, Object *obj,
-                            struct MUIP_Hide *msg)
-{
+static IPTR Area__MUIM_Hide(struct IClass *cl, Object *obj, struct MUIP_Hide *msg) {
     struct MUI_AreaData *data = INST_DATA(cl, obj);
 
     zune_imspec_hide(data->mad_Background);
-    if (data->mad_Flags & MADF_SHOWSELSTATE &&
-            data->mad_InputMode != MUIV_InputMode_None) {
+    if (data->mad_Flags & MADF_SHOWSELSTATE && data->mad_InputMode != MUIV_InputMode_None) {
         zune_imspec_hide(data->mad_SelBack);
     }
 
@@ -1690,8 +1689,7 @@ static IPTR Area__MUIM_Hide(struct IClass *cl, Object *obj,
 /**************************************************************************
 Called when gadget activated
 **************************************************************************/
-static IPTR Area__MUIM_GoActive(struct IClass *cl, Object *obj, Msg msg)
-{
+static IPTR Area__MUIM_GoActive(struct IClass *cl, Object *obj, Msg msg) {
     // bug("Area_GoActive %p\n", obj);
     if (_flags(obj) & MADF_CANDRAW)
         _zune_focus_new(obj, ZUNE_FOCUS_TYPE_ACTIVE_OBJ);
@@ -1701,8 +1699,7 @@ static IPTR Area__MUIM_GoActive(struct IClass *cl, Object *obj, Msg msg)
 /**************************************************************************
 Called when gadget deactivated
 **************************************************************************/
-static IPTR Area__MUIM_GoInactive(struct IClass *cl, Object *obj, Msg msg)
-{
+static IPTR Area__MUIM_GoInactive(struct IClass *cl, Object *obj, Msg msg) {
     // bug("Area_GoInactive %p\n", obj);
     if (_flags(obj) & MADF_CANDRAW)
         _zune_focus_destroy(obj, ZUNE_FOCUS_TYPE_ACTIVE_OBJ);
@@ -1713,9 +1710,7 @@ static IPTR Area__MUIM_GoInactive(struct IClass *cl, Object *obj, Msg msg)
 This one or derived methods won't be called if short help is
 not set in area instdata. So set this to a dummy val if overriding
 **************************************************************************/
-static IPTR Area__MUIM_CreateShortHelp(struct IClass *cl, Object *obj,
-                                       struct MUIP_CreateShortHelp *msg)
-{
+static IPTR Area__MUIM_CreateShortHelp(struct IClass *cl, Object *obj, struct MUIP_CreateShortHelp *msg) {
     struct MUI_AreaData *data = INST_DATA(cl, obj);
 
     return (IPTR)data->mad_ShortHelp;
@@ -1724,35 +1719,26 @@ static IPTR Area__MUIM_CreateShortHelp(struct IClass *cl, Object *obj,
 /**************************************************************************
 ...
 **************************************************************************/
-static IPTR Area__MUIM_DeleteShortHelp(struct IClass *cl, Object *obj,
-                                       struct MUIP_DeleteShortHelp *msg)
-{
-    return TRUE;
-}
+static IPTR Area__MUIM_DeleteShortHelp(struct IClass *cl, Object *obj, struct MUIP_DeleteShortHelp *msg) { return TRUE; }
 
 /**************************************************************************
 ...
 **************************************************************************/
-static IPTR Area__MUIM_CreateBubble(struct IClass *cl, Object *obj,
-                                    struct MUIP_CreateBubble *msg)
-{
+static IPTR Area__MUIM_CreateBubble(struct IClass *cl, Object *obj, struct MUIP_CreateBubble *msg) {
     return (IPTR)zune_bubble_create(obj, msg->x, msg->y, msg->txt, msg->flags);
 }
 
 /**************************************************************************
 ...
 **************************************************************************/
-static IPTR Area__MUIM_DeleteBubble(struct IClass *cl, Object *obj,
-                                    struct MUIP_DeleteBubble *msg)
-{
+static IPTR Area__MUIM_DeleteBubble(struct IClass *cl, Object *obj, struct MUIP_DeleteBubble *msg) {
     zune_bubble_delete(obj, msg->bubble);
 
     return TRUE;
 }
 
 /* either lmb or press key */
-static void handle_press(struct IClass *cl, Object *obj)
-{
+static void handle_press(struct IClass *cl, Object *obj) {
     struct MUI_AreaData *data = INST_DATA(cl, obj);
 
     switch (data->mad_InputMode) {
@@ -1761,8 +1747,7 @@ static void handle_press(struct IClass *cl, Object *obj)
         set(obj, MUIA_Timer, ++muiAreaData(obj)->mad_Timeval);
         if (!data->mad_Timer.ihn_Millis && data->mad_DisableCount == 0) {
             data->mad_Timer.ihn_Millis = 300;
-            DoMethod(_app(obj), MUIM_Application_AddInputHandler,
-                     (IPTR)&data->mad_Timer);
+            DoMethod(_app(obj), MUIM_Application_AddInputHandler, (IPTR)&data->mad_Timer);
         }
         break;
 
@@ -1783,15 +1768,13 @@ static void handle_press(struct IClass *cl, Object *obj)
     }
     case MUIV_InputMode_Toggle:
         // although undocumented, MUI sets MUIA_Pressed too
-        SetAttrs(obj, MUIA_Selected, !(data->mad_Flags & MADF_SELECTED),
-                 MUIA_Pressed, !(data->mad_Flags & MADF_PRESSED), TAG_DONE);
+        SetAttrs(obj, MUIA_Selected, !(data->mad_Flags & MADF_SELECTED), MUIA_Pressed, !(data->mad_Flags & MADF_PRESSED), TAG_DONE);
         break;
     }
 }
 
 /* either lmb or release key */
-static void handle_release(struct IClass *cl, Object *obj, int cancel)
-{
+static void handle_release(struct IClass *cl, Object *obj, int cancel) {
     struct MUI_AreaData *data = INST_DATA(cl, obj);
 
     if (data->mad_ehn.ehn_Events)
@@ -1811,17 +1794,14 @@ static void handle_release(struct IClass *cl, Object *obj, int cancel)
     }
 
     if (data->mad_Timer.ihn_Millis) {
-        DoMethod(_app(obj), MUIM_Application_RemInputHandler,
-                 (IPTR)&data->mad_Timer);
+        DoMethod(_app(obj), MUIM_Application_RemInputHandler, (IPTR)&data->mad_Timer);
         data->mad_Timer.ihn_Millis = 0;
     }
 }
 
-static IPTR event_button(Class *cl, Object *obj, struct IntuiMessage *imsg)
-{
+static IPTR event_button(Class *cl, Object *obj, struct IntuiMessage *imsg) {
     struct MUI_AreaData *data = INST_DATA(cl, obj);
-    BOOL in = _between(_left(obj), imsg->MouseX, _right(obj)) &&
-              _between(_top(obj), imsg->MouseY, _bottom(obj));
+    BOOL in = _between(_left(obj), imsg->MouseX, _right(obj)) && _between(_top(obj), imsg->MouseY, _bottom(obj));
 
     switch (imsg->Code) {
     case SELECTDOWN:
@@ -1833,14 +1813,12 @@ static IPTR event_button(Class *cl, Object *obj, struct IntuiMessage *imsg)
             data->mad_ClickX = imsg->MouseX;
             data->mad_ClickY = imsg->MouseY;
 
-            if ((data->mad_InputMode != MUIV_InputMode_Toggle) &&
-                    (data->mad_Flags & MADF_SELECTED))
+            if ((data->mad_InputMode != MUIV_InputMode_Toggle) && (data->mad_Flags & MADF_SELECTED))
                 break;
             nnset(obj, MUIA_Timer, 0);
             if (data->mad_InputMode == MUIV_InputMode_RelVerify) {
                 if (data->mad_ehn.ehn_Events)
-                    DoMethod(_win(obj), MUIM_Window_RemEventHandler,
-                             (IPTR)&data->mad_ehn);
+                    DoMethod(_win(obj), MUIM_Window_RemEventHandler, (IPTR)&data->mad_ehn);
                 data->mad_ehn.ehn_Events |= IDCMP_MOUSEMOVE | IDCMP_RAWKEY;
                 DoMethod(_win(obj), MUIM_Window_AddEventHandler, (IPTR)&data->mad_ehn);
             }
@@ -1861,8 +1839,7 @@ static IPTR event_button(Class *cl, Object *obj, struct IntuiMessage *imsg)
 
     case MENUDOWN:
         if (in && data->mad_ContextMenu) {
-            Object *menuobj = (Object *)DoMethod(obj, MUIM_ContextMenuBuild,
-                                                 imsg->MouseX, imsg->MouseY);
+            Object *menuobj = (Object *)DoMethod(obj, MUIM_ContextMenuBuild, imsg->MouseX, imsg->MouseY);
             if (menuobj) {
                 struct NewMenu *newmenu = NULL;
 
@@ -1880,8 +1857,7 @@ static IPTR event_button(Class *cl, Object *obj, struct IntuiMessage *imsg)
                 }
 
                 if (data->mad_ehn.ehn_Events)
-                    DoMethod(_win(obj), MUIM_Window_RemEventHandler,
-                             (IPTR)&data->mad_ehn);
+                    DoMethod(_win(obj), MUIM_Window_RemEventHandler, (IPTR)&data->mad_ehn);
                 data->mad_ehn.ehn_Events |= IDCMP_MOUSEMOVE;
                 DoMethod(_win(obj), MUIM_Window_AddEventHandler, (IPTR)&data->mad_ehn);
             }
@@ -1923,8 +1899,7 @@ static IPTR event_button(Class *cl, Object *obj, struct IntuiMessage *imsg)
     return 0;
 }
 
-static IPTR event_motion(Class *cl, Object *obj, struct IntuiMessage *imsg)
-{
+static IPTR event_motion(Class *cl, Object *obj, struct IntuiMessage *imsg) {
     struct MUI_AreaData *data = INST_DATA(cl, obj);
 
     if ((imsg->Qualifier & IEQUALIFIER_RBUTTON) && data->mad_ContextZMenu) {
@@ -1933,32 +1908,26 @@ static IPTR event_motion(Class *cl, Object *obj, struct IntuiMessage *imsg)
     }
 
     if (imsg->Qualifier & IEQUALIFIER_LEFTBUTTON) {
-        BOOL in = _between(_left(obj), imsg->MouseX, _right(obj)) &&
-                  _between(_top(obj), imsg->MouseY, _bottom(obj));
+        BOOL in = _between(_left(obj), imsg->MouseX, _right(obj)) && _between(_top(obj), imsg->MouseY, _bottom(obj));
 
         if (in) {
-            if ((data->mad_Flags & MADF_DRAGGABLE) &&
-                    ((abs(data->mad_ClickX - imsg->MouseX) >= 3) ||
-                     (abs(data->mad_ClickY - imsg->MouseY) >= 3)))
-                /* should be user configurable */
+            if ((data->mad_Flags & MADF_DRAGGABLE) && ((abs(data->mad_ClickX - imsg->MouseX) >= 3) || (abs(data->mad_ClickY - imsg->MouseY) >= 3)))
+            /* should be user configurable */
             {
                 if (data->mad_InputMode == MUIV_InputMode_RelVerify)
                     set(obj, MUIA_Selected, FALSE);
                 nnset(obj, MUIA_Pressed, FALSE);
 
                 if (data->mad_ehn.ehn_Events)
-                    DoMethod(_win(obj), MUIM_Window_RemEventHandler,
-                             (IPTR)&data->mad_ehn);
+                    DoMethod(_win(obj), MUIM_Window_RemEventHandler, (IPTR)&data->mad_ehn);
                 data->mad_ehn.ehn_Events = IDCMP_MOUSEBUTTONS;
                 DoMethod(_win(obj), MUIM_Window_AddEventHandler, (IPTR)&data->mad_ehn);
                 if (data->mad_Timer.ihn_Millis) {
-                    DoMethod(_app(obj), MUIM_Application_RemInputHandler,
-                             (IPTR)&data->mad_Timer);
+                    DoMethod(_app(obj), MUIM_Application_RemInputHandler, (IPTR)&data->mad_Timer);
                     data->mad_Timer.ihn_Millis = 0;
                 }
 
-                DoMethod(obj, MUIM_DoDrag, data->mad_ClickX - _left(obj),
-                         data->mad_ClickY - _top(obj), 0);
+                DoMethod(obj, MUIM_DoDrag, data->mad_ClickX - _left(obj), data->mad_ClickY - _top(obj), 0);
                 return MUI_EventHandlerRC_Eat;
             }
         }
@@ -1977,9 +1946,7 @@ static IPTR event_motion(Class *cl, Object *obj, struct IntuiMessage *imsg)
 /**************************************************************************
 ...
 **************************************************************************/
-static IPTR Area__MUIM_HandleEvent(struct IClass *cl, Object *obj,
-                                   struct MUIP_HandleEvent *msg)
-{
+static IPTR Area__MUIM_HandleEvent(struct IClass *cl, Object *obj, struct MUIP_HandleEvent *msg) {
     struct MUI_AreaData *data = INST_DATA(cl, obj);
 
     if (data->mad_DisableCount)
@@ -2042,13 +2009,11 @@ static IPTR Area__MUIM_HandleEvent(struct IClass *cl, Object *obj,
             }
 
             /* Do not eat wheel movement events */
-            if ((msg->imsg->Code == RAWKEY_NM_WHEEL_UP) ||
-                    (msg->imsg->Code == RAWKEY_NM_WHEEL_DOWN))
+            if ((msg->imsg->Code == RAWKEY_NM_WHEEL_UP) || (msg->imsg->Code == RAWKEY_NM_WHEEL_DOWN))
                 return 0;
 
             return MUI_EventHandlerRC_Eat;
-        }
-        break;
+        } break;
         }
     }
     return 0;
@@ -2057,9 +2022,7 @@ static IPTR Area__MUIM_HandleEvent(struct IClass *cl, Object *obj,
 /**************************************************************************
 ...
 **************************************************************************/
-static IPTR Area__MUIM_HandleInput(struct IClass *cl, Object *obj,
-                                   struct MUIP_HandleInput *msg)
-{
+static IPTR Area__MUIM_HandleInput(struct IClass *cl, Object *obj, struct MUIP_HandleInput *msg) {
     /* Actually a dummy, but real MUI does handle here the input stuff which
      * Zune has in Area_HandleEvent. For compatibility we should do this too
      */
@@ -2071,17 +2034,13 @@ static IPTR Area__MUIM_HandleInput(struct IClass *cl, Object *obj,
 /**************************************************************************
 Trivial; custom classes may override this to get dynamic menus.
 **************************************************************************/
-static IPTR Area__MUIM_ContextMenuBuild(struct IClass *cl, Object *obj,
-                                        struct MUIP_ContextMenuBuild *msg)
-{
+static IPTR Area__MUIM_ContextMenuBuild(struct IClass *cl, Object *obj, struct MUIP_ContextMenuBuild *msg) {
     struct MUI_AreaData *data = INST_DATA(cl, obj);
     return (IPTR)data->mad_ContextMenu; /* a Menustrip object */
 }
 
 /**************************************************************************/
-static IPTR Area__MUIM_ContextMenuChoice(struct IClass *cl, Object *obj,
-        struct MUIP_ContextMenuChoice *msg)
-{
+static IPTR Area__MUIM_ContextMenuChoice(struct IClass *cl, Object *obj, struct MUIP_ContextMenuChoice *msg) {
     set(obj, MUIA_ContextMenuTrigger, msg->item);
     return 0;
 }
@@ -2089,16 +2048,13 @@ static IPTR Area__MUIM_ContextMenuChoice(struct IClass *cl, Object *obj,
 /**************************************************************************
 MUIM_Export : to export an object's "contents" to a dataspace object.
 **************************************************************************/
-static IPTR Area__MUIM_Export(struct IClass *cl, Object *obj,
-                              struct MUIP_Export *msg)
-{
+static IPTR Area__MUIM_Export(struct IClass *cl, Object *obj, struct MUIP_Export *msg) {
     struct MUI_AreaData *data = INST_DATA(cl, obj);
     ULONG id;
 
     if ((id = muiNotifyData(obj)->mnd_ObjectID)) {
         char selected = (data->mad_Flags & MADF_SELECTED) ? 1 : 0;
-        DoMethod(msg->dataspace, MUIM_Dataspace_Add, (IPTR)&selected, sizeof(char),
-                 (IPTR)id);
+        DoMethod(msg->dataspace, MUIM_Dataspace_Add, (IPTR)&selected, sizeof(char), (IPTR)id);
     }
     return 0;
 }
@@ -2106,14 +2062,11 @@ static IPTR Area__MUIM_Export(struct IClass *cl, Object *obj,
 /**************************************************************************
 MUIM_Import : to import an object's "contents" from a dataspace object.
 **************************************************************************/
-static IPTR Area__MUIM_Import(struct IClass *cl, Object *obj,
-                              struct MUIP_Import *msg)
-{
+static IPTR Area__MUIM_Import(struct IClass *cl, Object *obj, struct MUIP_Import *msg) {
     ULONG id;
 
     if ((id = muiNotifyData(obj)->mnd_ObjectID)) {
-        char *selected =
-            (char *)DoMethod(msg->dataspace, MUIM_Dataspace_Find, (IPTR)id);
+        char *selected = (char *)DoMethod(msg->dataspace, MUIM_Dataspace_Find, (IPTR)id);
 
         if (selected)
             set(obj, MUIA_Selected, *selected);
@@ -2124,12 +2077,10 @@ static IPTR Area__MUIM_Import(struct IClass *cl, Object *obj,
 /**************************************************************************
 MUIM_Timer
 **************************************************************************/
-static IPTR Area__MUIM_Timer(struct IClass *cl, Object *obj, Msg msg)
-{
+static IPTR Area__MUIM_Timer(struct IClass *cl, Object *obj, Msg msg) {
     struct MUI_AreaData *data = INST_DATA(cl, obj);
     if (data->mad_Timer.ihn_Millis)
-        DoMethod(_app(obj), MUIM_Application_RemInputHandler,
-                 (IPTR)&data->mad_Timer);
+        DoMethod(_app(obj), MUIM_Application_RemInputHandler, (IPTR)&data->mad_Timer);
     data->mad_Timer.ihn_Millis = 50;
     DoMethod(_app(obj), MUIM_Application_AddInputHandler, (IPTR)&data->mad_Timer);
 
@@ -2163,9 +2114,7 @@ static IPTR Area__MUIM_Timer(struct IClass *cl, Object *obj, Msg msg)
  ******************************************************************************
  *
  */
-static IPTR Area__MUIM_DoDrag(struct IClass *cl, Object *obj,
-                              struct MUIP_DoDrag *msg)
-{
+static IPTR Area__MUIM_DoDrag(struct IClass *cl, Object *obj, struct MUIP_DoDrag *msg) {
     LONG touchx = msg->touchx;
     LONG touchy = msg->touchy;
     if (touchx == 0x80000000)
@@ -2173,8 +2122,7 @@ static IPTR Area__MUIM_DoDrag(struct IClass *cl, Object *obj,
     if (touchy == 0x80000000)
         touchy = _window(obj)->MouseY - _top(obj);
 
-    DoMethod(_win(obj), MUIM_Window_DragObject, (IPTR)obj, touchx, touchy,
-             msg->flags);
+    DoMethod(_win(obj), MUIM_Window_DragObject, (IPTR)obj, touchx, touchy, msg->flags);
     return 0;
 }
 
@@ -2202,34 +2150,27 @@ static IPTR Area__MUIM_DoDrag(struct IClass *cl, Object *obj,
  ******************************************************************************
  *
  */
-static IPTR Area__MUIM_CreateDragImage(struct IClass *cl, Object *obj,
-                                       struct MUIP_CreateDragImage *msg)
-{
-    struct MUI_DragImage *img = (struct MUI_DragImage *)AllocVec(
-                                    sizeof(struct MUI_DragImage), MEMF_CLEAR);
+static IPTR Area__MUIM_CreateDragImage(struct IClass *cl, Object *obj, struct MUIP_CreateDragImage *msg) {
+    struct MUI_DragImage *img = (struct MUI_DragImage *)AllocVec(sizeof(struct MUI_DragImage), MEMF_CLEAR);
     if (img) {
         const struct ZuneFrameGfx *zframe;
         LONG depth = GetBitMapAttr(_screen(obj)->RastPort.BitMap, BMA_DEPTH);
 
-        zframe = zune_zframe_get(
-                     obj, &muiGlobalInfo(obj)->mgi_Prefs->frames[MUIV_Frame_Drag]);
+        zframe = zune_zframe_get(obj, &muiGlobalInfo(obj)->mgi_Prefs->frames[MUIV_Frame_Drag]);
 
         img->width = _width(obj) + zframe->ileft + zframe->iright;
         img->height = _height(obj) + zframe->itop + zframe->ibottom;
 
-        if ((img->bm = AllocBitMap(img->width, img->height, depth, BMF_MINPLANES,
-                                   _screen(obj)->RastPort.BitMap))) {
+        if ((img->bm = AllocBitMap(img->width, img->height, depth, BMF_MINPLANES, _screen(obj)->RastPort.BitMap))) {
             /* Render the stuff now */
             struct RastPort *rp_save = muiRenderInfo(obj)->mri_RastPort;
             struct RastPort temprp;
             InitRastPort(&temprp);
             temprp.BitMap = img->bm;
-            ClipBlit(_rp(obj), _left(obj), _top(obj), &temprp, zframe->ileft,
-                     zframe->itop, _width(obj), _height(obj), 0xc0);
+            ClipBlit(_rp(obj), _left(obj), _top(obj), &temprp, zframe->ileft, zframe->itop, _width(obj), _height(obj), 0xc0);
 
             muiRenderInfo(obj)->mri_RastPort = &temprp;
-            zframe->draw(zframe->customframe, muiRenderInfo(obj), 0, 0, img->width,
-                         img->height, 0, 0, img->width, img->height);
+            zframe->draw(zframe->customframe, muiRenderInfo(obj), 0, 0, img->width, img->height, 0, 0, img->width, img->height);
             muiRenderInfo(obj)->mri_RastPort = rp_save;
         }
 
@@ -2243,9 +2184,7 @@ static IPTR Area__MUIM_CreateDragImage(struct IClass *cl, Object *obj,
 /**************************************************************************
 MUIM_DeleteDragImage
 **************************************************************************/
-static IPTR Area__MUIM_DeleteDragImage(struct IClass *cl, Object *obj,
-                                       struct MUIP_DeleteDragImage *msg)
-{
+static IPTR Area__MUIM_DeleteDragImage(struct IClass *cl, Object *obj, struct MUIP_DeleteDragImage *msg) {
     if (msg->di) {
         if (msg->di->bm)
             FreeBitMap(msg->di->bm);
@@ -2257,15 +2196,11 @@ static IPTR Area__MUIM_DeleteDragImage(struct IClass *cl, Object *obj,
 /**************************************************************************
 MUIM_DragQueryExtended
 **************************************************************************/
-static IPTR Area__MUIM_DragQueryExtended(struct IClass *cl, Object *obj,
-        struct MUIP_DragQueryExtended *msg)
-{
+static IPTR Area__MUIM_DragQueryExtended(struct IClass *cl, Object *obj, struct MUIP_DragQueryExtended *msg) {
     struct MUI_AreaData *data = INST_DATA(cl, obj);
     if (data->mad_Flags & MADF_DROPABLE) {
-        if (_left(obj) <= msg->x && msg->x <= _right(obj) && _top(obj) <= msg->y &&
-                msg->y <= _bottom(obj)) {
-            if (DoMethod(obj, MUIM_DragQuery, (IPTR)msg->obj) ==
-                    MUIV_DragQuery_Accept)
+        if (_left(obj) <= msg->x && msg->x <= _right(obj) && _top(obj) <= msg->y && msg->y <= _bottom(obj)) {
+            if (DoMethod(obj, MUIM_DragQuery, (IPTR)msg->obj) == MUIV_DragQuery_Accept)
                 return (IPTR)obj;
         }
     }
@@ -2275,9 +2210,7 @@ static IPTR Area__MUIM_DragQueryExtended(struct IClass *cl, Object *obj,
 /**************************************************************************
 MUIM_DragBegin
 **************************************************************************/
-static IPTR Area__MUIM_DragBegin(struct IClass *cl, Object *obj,
-                                 struct MUIP_DragBegin *msg)
-{
+static IPTR Area__MUIM_DragBegin(struct IClass *cl, Object *obj, struct MUIP_DragBegin *msg) {
     // struct MUI_AreaData *data = INST_DATA(cl, obj);
     _zune_focus_new(obj, ZUNE_FOCUS_TYPE_DROP_OBJ);
     return 0;
@@ -2286,9 +2219,7 @@ static IPTR Area__MUIM_DragBegin(struct IClass *cl, Object *obj,
 /**************************************************************************
 MUIM_DragFinish
 **************************************************************************/
-static IPTR Area__MUIM_DragFinish(struct IClass *cl, Object *obj,
-                                  struct MUIP_DragFinish *msg)
-{
+static IPTR Area__MUIM_DragFinish(struct IClass *cl, Object *obj, struct MUIP_DragFinish *msg) {
     // struct MUI_AreaData *data = INST_DATA(cl, obj);
     _zune_focus_destroy(obj, ZUNE_FOCUS_TYPE_DROP_OBJ);
     return 0;
@@ -2299,10 +2230,7 @@ static IPTR Area__MUIM_DragFinish(struct IClass *cl, Object *obj,
  * If frame phantom, ignore horizontal frame components.
  * Depends on inner sizes and frame
  */
-static void area_update_msizes(Object *obj, struct MUI_AreaData *data,
-                               const struct MUI_FrameSpec_intern *frame,
-                               const struct ZuneFrameGfx *zframe)
-{
+static void area_update_msizes(Object *obj, struct MUI_AreaData *data, const struct MUI_FrameSpec_intern *frame, const struct ZuneFrameGfx *zframe) {
 
     /*      if (XGET(obj, MUIA_UserData) == 42) */
     /*      { */
@@ -2311,19 +2239,43 @@ static void area_update_msizes(Object *obj, struct MUI_AreaData *data,
     /*      } */
 
     struct dt_frame_image *fi = zframe->customframe;
+    int addleft = data->mad_InnerLeft + zframe->ileft;
+    int addtop = data->mad_InnerTop + data->mad_TitleHeightAdd + zframe->itop;
+    int subwidth = addleft + data->mad_InnerRight + zframe->iright;
+    int subheight = addtop + data->mad_InnerBottom + zframe->ibottom;
 
-    data->mad_addleft = data->mad_InnerLeft + zframe->ileft;
-    data->mad_subwidth =
-        data->mad_addleft + data->mad_InnerRight + zframe->iright;
-    data->mad_addtop =
-        data->mad_InnerTop + data->mad_TitleHeightAdd + zframe->itop;
-    data->mad_subheight =
-        data->mad_addtop + data->mad_InnerBottom + zframe->ibottom;
+    UWORD base_border = zframe->border_width;
+    UWORD desired_border = base_border;
+    if (frame && frame->border_width)
+        desired_border = frame->border_width;
+
+    if (desired_border != base_border) {
+        int border_delta = (int)desired_border - (int)base_border;
+        addleft += border_delta;
+        addtop += border_delta;
+        subwidth += border_delta * 2;
+        subheight += border_delta * 2;
+        D(bug("area_update_msizes(%p): border override base=%u desired=%u\n", obj, base_border, desired_border));
+    }
+
+    UWORD extra_width = ZUNE_AA_FEATHER_PADDING;
+    if (zframe->border_radius > 0) {
+        addleft += extra_width;
+        addtop += extra_width;
+        subwidth += extra_width * 2;
+        subheight += extra_width * 2;
+        D(bug("area_update_msizes(%p): AA padding applied (radius=%u)\n", obj, zframe->border_radius));
+    }
 
     if (data->mad_Flags & MADF_FRAMEPHANTOM) {
-        data->mad_addleft = 0;
-        data->mad_subwidth = 0;
+        addleft = 0;
+        subwidth = 0;
     }
+
+    data->mad_addleft = CLAMP(addleft, 0, 127);
+    data->mad_subwidth = CLAMP(subwidth, 0, 127);
+    data->mad_addtop = CLAMP(addtop, 0, 127);
+    data->mad_subheight = CLAMP(subheight, 0, 127);
 
     // clamping ... maybe ?
 
@@ -2336,20 +2288,14 @@ static void area_update_msizes(Object *obj, struct MUI_AreaData *data,
 /**************************************************************************
  MUIM_Area_UnknownDropDestination
 **************************************************************************/
-IPTR Area__MUIM_UnknownDropDestination(
-    struct IClass *cl, Object *obj, struct MUIP_UnknownDropDestination *msg)
-{
-    return 0;
-}
+IPTR Area__MUIM_UnknownDropDestination(struct IClass *cl, Object *obj, struct MUIP_UnknownDropDestination *msg) { return 0; }
 
 /**************************************************************************
 MUIM_UpdateInnerSizes - Updates the innersizes of an object. You actually
 should only call this method if the dimensions of an object would not be
 affected, otherwise the results are unexpected
 **************************************************************************/
-static IPTR Area__MUIM_UpdateInnerSizes(struct IClass *cl, Object *obj,
-                                        struct MUIP_UpdateInnerSizes *msg)
-{
+static IPTR Area__MUIM_UpdateInnerSizes(struct IClass *cl, Object *obj, struct MUIP_UpdateInnerSizes *msg) {
     struct MUI_AreaData *data = INST_DATA(cl, obj);
     const struct ZuneFrameGfx *zframe;
     const struct MUI_FrameSpec_intern *frame;
@@ -2363,22 +2309,18 @@ static IPTR Area__MUIM_UpdateInnerSizes(struct IClass *cl, Object *obj,
     return 1;
 }
 
-static IPTR Area__MUIM_FindAreaObject(struct IClass *cl, Object *obj,
-                                      struct MUIP_FindAreaObject *msg)
-{
+static IPTR Area__MUIM_FindAreaObject(struct IClass *cl, Object *obj, struct MUIP_FindAreaObject *msg) {
     if (msg->obj == obj)
         return (IPTR)obj;
     else
         return (IPTR)NULL;
 }
 
-static IPTR Area__MUIM_QueryFrameCharacteristics(
-    struct IClass *cl, Object *obj,
-    struct MUIP_QueryFrameCharacteristics *msg)
-{
+static IPTR Area__MUIM_QueryFrameCharacteristics(struct IClass *cl, Object *obj, struct MUIP_QueryFrameCharacteristics *msg) {
     struct MUI_AreaData *data = INST_DATA(cl, obj);
     const struct MUI_FrameSpec_intern *frame;
     struct MUI_FrameSpec_intern tempframe;
+    const struct ZuneFrameGfx *zframe;
 
     if (!msg->characteristics)
         return FALSE;
@@ -2387,16 +2329,19 @@ static IPTR Area__MUIM_QueryFrameCharacteristics(
         return FALSE;
 
     frame = get_intframe(obj, data, &tempframe);
+    zframe = zune_zframe_get(obj, frame);
 
-    msg->characteristics->border_width = frame->border_width;
-    msg->characteristics->border_radius = frame->border_radius;
-    msg->characteristics->has_rounded_corners = frame->border_radius > 0;
+    UWORD effective_border_width = frame->border_width ? frame->border_width : zframe->border_width;
+
+    D(bug("Area_QueryFrameCharacteristics(%p): eff border=%u radius=%u\n", obj, effective_border_width,
+          frame->border_radius ? frame->border_radius : zframe->border_radius));
+
+    msg->characteristics->border_width = effective_border_width;
+    msg->characteristics->border_radius = frame->border_radius ? frame->border_radius : zframe->border_radius;
+    msg->characteristics->has_rounded_corners = msg->characteristics->border_radius > 0;
 }
 
-static IPTR Area__MUIM_CreateFrameClippingRegion(
-    struct IClass *cl, Object *obj,
-    struct MUIP_CreateFrameClippingRegion *msg)
-{
+static IPTR Area__MUIM_CreateFrameClippingRegion(struct IClass *cl, Object *obj, struct MUIP_CreateFrameClippingRegion *msg) {
     struct MUI_AreaData *data = INST_DATA(cl, obj);
     const struct MUI_FrameSpec_intern *frame;
     struct MUI_FrameSpec_intern tempframe;
@@ -2415,9 +2360,7 @@ static IPTR Area__MUIM_CreateFrameClippingRegion(
     }
 
     if (characteristics.has_rounded_corners) {
-        msg->clipinfo = zune_frame_create_clip_region(
-                            msg->left, msg->top, msg->width, msg->height,
-                            characteristics.border_radius);
+        msg->clipinfo = zune_frame_create_clip_region(msg->left, msg->top, msg->width, msg->height, characteristics.border_radius);
 
         if (!msg->clipinfo) {
             return FALSE;
@@ -2426,8 +2369,7 @@ static IPTR Area__MUIM_CreateFrameClippingRegion(
     return TRUE;
 }
 
-BOOPSI_DISPATCHER(IPTR, Area_Dispatcher, cl, obj, msg)
-{
+BOOPSI_DISPATCHER(IPTR, Area_Dispatcher, cl, obj, msg) {
     switch (msg->MethodID) {
     case OM_NEW:
         return Area__OM_NEW(cl, obj, (struct opSet *)msg);
@@ -2522,7 +2464,4 @@ BOOPSI_DISPATCHER_END
 /*
  * Class descriptor.
  */
-const struct __MUIBuiltinClass _MUI_Area_desc = {MUIC_Area, MUIC_Notify,
-          sizeof(struct MUI_AreaData),
-          (void *)Area_Dispatcher
-};
+const struct __MUIBuiltinClass _MUI_Area_desc = {MUIC_Area, MUIC_Notify, sizeof(struct MUI_AreaData), (void *)Area_Dispatcher};

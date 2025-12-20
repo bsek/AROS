@@ -20,6 +20,7 @@ extern struct Library *MUIMasterBase;
 #include "mui.h"
 #include "support.h"
 #include "prefs.h"
+#include "window.h"
 
 /*  #define MYDEBUG 1 */
 #include "debug.h"
@@ -856,6 +857,10 @@ IPTR Group__MUIM_InitChange(struct IClass *cl, Object *obj,
     struct MUIP_Group_InitChange *msg)
 {
     struct MUI_GroupData *data = INST_DATA(cl, obj);
+    struct MUI_RenderInfo *mri = muiRenderInfo(obj);
+
+    if (mri)
+        WindowBeginBufferedBatch(mri);
 
     data->flags &= ~GROUP_CHANGED;
     data->flags |= GROUP_CHANGING;
@@ -870,6 +875,8 @@ IPTR Group__MUIM_ExitChange(struct IClass *cl, Object *obj,
     struct MUIP_Group_ExitChange *msg)
 {
     struct MUI_GroupData *data = INST_DATA(cl, obj);
+    struct MUI_RenderInfo *mri = muiRenderInfo(obj);
+    IPTR result = TRUE;
 
     data->flags &= ~GROUP_CHANGING;
 
@@ -903,7 +910,7 @@ IPTR Group__MUIM_ExitChange(struct IClass *cl, Object *obj,
 
                 if (pdata->flags & GROUP_CHANGING)
                 {
-                    return TRUE;
+                    goto out;
                 }
 
             }
@@ -912,7 +919,11 @@ IPTR Group__MUIM_ExitChange(struct IClass *cl, Object *obj,
         }
     }
 
-    return TRUE;
+out:
+    if (mri)
+        WindowEndBufferedBatch(mri);
+
+    return result;
 }
 
 
@@ -1255,6 +1266,12 @@ IPTR Group__MUIM_Draw(struct IClass *cl, Object *obj,
 
             ScrollWindowRaster(_window(obj), diff_virt_offx, diff_virt_offy,
                 left, top, right, bottom);
+
+            if (muiRenderInfo(obj)->mri_BufferBM && !muiRenderInfo(obj)->mri_DrawingBoard)
+            {
+                ScrollRasterBF(_rp(obj), diff_virt_offx, diff_virt_offy,
+                    left, top, right, bottom);
+            }
 
             if ((region = NewRegion()))
             {

@@ -18,6 +18,7 @@
 #include "support_classes.h"
 #include "muimaster_intern.h"
 #include "boopsi_private.h"
+#include "window.h"
 
 extern struct Library *MUIMasterBase;
 

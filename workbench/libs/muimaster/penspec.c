@@ -7,9 +7,11 @@
 #include <string.h>
 #include <proto/dos.h>
 #include <proto/graphics.h>
+#include <proto/zunerenderer.h>
 
 /*  #define MYDEBUG 1 */
-#include "debug.h"
+#define DEBUG 0
+#include <aros/debug.h>
 #include "penspec.h"
 #include "muimaster_intern.h"
 #include "mui.h"
@@ -246,6 +248,7 @@ void zune_penspec_drawdirect(struct MUI_PenSpec_intern *psi,
     struct RastPort *rp, struct MUI_RenderInfo *mri, LONG left, LONG top,
     LONG right, LONG bottom)
 {
+    D(bug("Calling zune_penspec_drawdirect with rect: [%d,%d,%d,%d]\n", left, top, right, bottom));
     if (!psi || !mri || !rp)
         return;
 
@@ -254,6 +257,20 @@ void zune_penspec_drawdirect(struct MUI_PenSpec_intern *psi,
         D(bug("drawing with 0x%p, pen=%ld, at %ld, %ld => %ld, %ld\n",
                 psi, psi->p_pen, left, top, right, bottom));
     }
+
+    if (mri->mri_RenderPort && rp == mri->mri_RenderPort->target_rp) {
+      struct ZuneRect rect = {
+          .x = (WORD)left,
+          .y = (WORD)top,
+          .width = (UWORD)(right - left + 1),
+          .height = (UWORD)(bottom - top + 1),
+      };
+
+      D(bug("Calling DrawRectangle with rect: [%d,%d,%d,%d]\n", rect.x, rect.y, rect.width, rect.height));
+      ZuneFillRectangle(mri->mri_RenderPort, &rect, ZUNE_BRUSH_PEN(psi->p_pen));
+      return;
+    }
+
     SetAPen(rp, psi->p_pen);
     RectFill(rp, left, top, right, bottom);
 }

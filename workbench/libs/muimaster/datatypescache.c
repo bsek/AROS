@@ -21,6 +21,7 @@
 #include <proto/utility.h>
 #include <proto/layers.h>
 #include <proto/cybergraphics.h>
+#include <proto/zunerenderer.h>
 
 //#define MYDEBUG 1
 #include "debug.h"
@@ -780,8 +781,9 @@ struct dt_node *dt_load_picture(CONST_STRPTR filename, struct Screen *scr)
                     if (bmhd)
                     {
                         node->width = bmhd->bmh_Width;
-                        node->height = bmhd->bmh_Height;
-                        node->mask = bmhd->bmh_Masking;
+                    node->height = bmhd->bmh_Height;
+                    node->mask = bmhd->bmh_Masking;
+                    node->zune_texture = NULL;
                         D(bug("[Zune:DTC] %s: picture @ 0x%p = %ldx%ld\n", __func__, node->o,
                                 node->width, node->height));
                     }
@@ -819,6 +821,10 @@ void dt_dispose_picture(struct dt_node *node)
                 FreePropConfig(node);
             else
                 DisposeDTObject(node->o);
+            if (node->zune_texture) {
+                DestroyTexture(node->zune_texture);
+                node->zune_texture = NULL;
+            }
             FreeVec(node->filename);
             FreeVec(node);
         }

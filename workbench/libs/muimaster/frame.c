@@ -11,19 +11,568 @@
 #include <proto/cybergraphics.h>
 #include <proto/graphics.h>
 #include <proto/layers.h>
+#include <proto/intuition.h>
+#include <proto/muimaster.h>
+#include <proto/zunerenderer.h>
 
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
+#include <clib/alib_protos.h>
+
+#include "inline/muimaster.h"
+#include "inline/zunerenderer.h"
+#include "mui.h"
+#include "macros.h"
+#include "classes/area.h"
+#include "classes/window.h"
 #include "datatypescache.h"
 #include "frame.h"
-#include "mui.h"
+#include "imspec_intern.h"
 #include "muimaster_intern.h"
+#include <libraries/zunerenderer.h>
+#include <datatypes/pictureclass.h>
 
 #define DEBUG 0
 #include <aros/debug.h>
 
 extern struct Library *MUIMasterBase;
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+/* Threshold for using cached DrawingBoard for AA rendering */
+#define FRAME_DRAWBUFFER_MIN_WIDTH  150
+#define FRAME_DRAWBUFFER_MIN_HEIGHT 100
+
+struct FrameRendererBrush {
+    struct ZuneBrush brush;
+    struct ZuneGradientStop gradient_stops[4];
+    struct ZuneTexture *texture; /* optional temp texture to destroy after draw */
+};
+
+static inline BOOL frame_renderer_can_use_zunerenderer(struct MUI_RenderInfo *mri) {
+    return mri && mri->mri_RenderPort && (mri->mri_RenderPort->target_rp == mri->mri_RastPort);
+}
+
+static inline UBYTE frame_renderer_clamp_channel(ULONG value) {
+    return (UBYTE)((value > 255) ? 255 : value);
+}
+
+static inline WORD frame_renderer_float_to_word(float value) {
+    return (WORD)((value >= 0.0f) ? (value + 0.5f) : (value - 0.5f));
+}
+
+static ULONG frame_renderer_rgb_triplet_to_argb32(const ULONG rgb[3]) {
+    return ZUNE_COLOR_ARGB32(0xFF, frame_renderer_clamp_channel(rgb[0]),
+                             frame_renderer_clamp_channel(rgb[1]),
+                             frame_renderer_clamp_channel(rgb[2]));
+}
+
+static ULONG frame_renderer_pen_to_argb32(struct MUI_RenderInfo *mri, LONG pen) {
+    ULONG rgb[3] = {0};
+    if (pen < 0 || !mri || !mri->mri_Colormap)
+        return 0;
+    GetRGB32(mri->mri_Colormap, pen, 1, rgb);
+    return ZUNE_COLOR_ARGB32(0xFF, rgb[0] >> 24, rgb[1] >> 24, rgb[2] >> 24);
+}
+
+static ULONG frame_renderer_generate_border_color(struct MUI_ImageSpec_intern *background, struct MUI_RenderInfo *mri) {
+    ULONG rgb[3];
+
+    // if (background && background->type == IST_COLOR) {
+    //     LONG background_pen = background->u.penspec.p_pen;
+    //     if (background_pen >= 0 && mri->mri_Colormap) {
+    //         GetRGB32(mri->mri_Colormap, background_pen, 1, rgb);
+
+    //         /* Convert to grayscale using luminance formula, then darken for border */
+    //         UBYTE r = rgb[0] >> 24;
+    //         UBYTE g = rgb[1] >> 24;
+    //         UBYTE b = rgb[2] >> 24;
+    //         UBYTE gray = (UBYTE)((r * 299 + g * 587 + b * 114) / 1000);
+    //         /* Darken the gray for a subtle border effect */
+    //         gray = (gray > 40) ? (gray - 40) : 0;
+    //         return ZUNE_COLOR_ARGB32(0xFF, gray, gray, gray);
+    //     }
+    // }
+
+    LONG border_pen = mri->mri_Pens[MPEN_SHADOW];
+    if (border_pen < 0 || !mri->mri_Colormap)
+        return 0;
+
+    GetRGB32(mri->mri_Colormap, border_pen, 1, rgb);
+    /* Convert shadow pen to grayscale */
+    UBYTE r = rgb[0] >> 24;
+    UBYTE g = rgb[1] >> 24;
+    UBYTE b = rgb[2] >> 24;
+    UBYTE gray = (UBYTE)((r * 299 + g * 587 + b * 114) / 1000);
+    return ZUNE_COLOR_ARGB32(0xFF, gray, gray, gray);
+}
+
+static void frame_renderer_compute_gradient_points(UWORD width, UWORD height, UWORD angle, struct ZunePoint *start, struct ZunePoint *end) {
+    float radians = (float)(angle % 360) * (float)M_PI / 180.0f;
+    float dir_x = sinf(radians);
+    float dir_y = cosf(radians);
+    float cx = (float)width / 2.0f;
+    float cy = (float)height / 2.0f;
+    float half_len = 0.5f * (fabsf(dir_x) * width + fabsf(dir_y) * height);
+
+    if (half_len < 1.0f)
+        half_len = 1.0f;
+
+    start->x = frame_renderer_float_to_word(cx - dir_x * half_len);
+    start->y = frame_renderer_float_to_word(cy - dir_y * half_len);
+    end->x = frame_renderer_float_to_word(cx + dir_x * half_len);
+    end->y = frame_renderer_float_to_word(cy + dir_y * half_len);
+}
+
+static BOOL frame_renderer_gradient_to_brush(struct MUI_ImageSpec_intern *background, UWORD width, UWORD height, struct FrameRendererBrush *out_brush) {
+    struct ZuneBrush *brush = &out_brush->brush;
+
+    brush->type = ZUNE_BRUSH_TYPE_LINEAR_GRADIENT;
+    brush->flags = 0;
+
+    out_brush->gradient_stops[0].position = 0.0f;
+    out_brush->gradient_stops[0].color = frame_renderer_rgb_triplet_to_argb32(background->u.gradient.start_rgb);
+    out_brush->gradient_stops[1].position = 1.0f;
+    out_brush->gradient_stops[1].color = frame_renderer_rgb_triplet_to_argb32(background->u.gradient.end_rgb);
+
+    brush->data.linear.stops = out_brush->gradient_stops;
+    brush->data.linear.stop_count = 2;
+
+    frame_renderer_compute_gradient_points(width, height, background->u.gradient.angle, &brush->data.linear.start, &brush->data.linear.end);
+
+    return TRUE;
+}
+
+static ULONG frame_renderer_expand_pattern_bit(ULONG color_fg, ULONG color_bg, UWORD row_bits, int x) {
+    /* Patterns are 16-bit rows; bit 15 is leftmost */
+    BOOL is_fg = (row_bits & (1U << (15 - x))) != 0;
+    return is_fg ? color_fg : color_bg;
+}
+
+static BOOL frame_renderer_background_to_brush(struct MUI_ImageSpec_intern *background, struct MUI_RenderInfo *mri, UWORD width, UWORD height,
+                                               struct FrameRendererBrush *out_brush) {
+    D(bug("Frame renderer background info:\n"));
+    D(if (background) {
+          bug("  Type: %d\n", background->type);
+      } else {
+          bug("  No background\n");
+      });
+
+    (void)mri;
+
+    if (!background || !out_brush || width == 0 || height == 0) {
+        D(bug("frame_renderer_background_to_brush: missing input or zero size (bg=%p out=%p w=%u h=%u)\n", background, out_brush, width, height));
+        return FALSE;
+    }
+
+    memset(out_brush, 0, sizeof(*out_brush));
+
+    switch (background->type) {
+    case IST_COLOR:
+        break;
+    case IST_SCALED_GRADIENT:
+    case IST_TILED_GRADIENT:
+        return frame_renderer_gradient_to_brush(background, width, height, out_brush);
+    case IST_PATTERN: {
+        /* Duplicate pattern definitions from imspec.c */
+        static const UWORD gridpattern1[] = {0x5555, 0xaaaa};
+        static const UWORD gridpattern2[] = {0x4444, 0x1111};
+        struct PatternInfo {
+            MPen bg;
+            MPen fg;
+            const UWORD *pattern;
+        };
+        static const struct PatternInfo pattern_table[] = {
+            {MPEN_SHADOW, MPEN_BACKGROUND, gridpattern1}, /* MUII_SHADOWBACK     */
+            {MPEN_SHADOW, MPEN_FILL, gridpattern1},       /* MUII_SHADOWFILL     */
+            {MPEN_SHADOW, MPEN_SHINE, gridpattern1},      /* MUII_SHADOWSHINE    */
+            {MPEN_FILL, MPEN_BACKGROUND, gridpattern1},   /* MUII_FILLBACK       */
+            {MPEN_FILL, MPEN_SHINE, gridpattern1},        /* MUII_FILLSHINE      */
+            {MPEN_SHINE, MPEN_BACKGROUND, gridpattern1},  /* MUII_SHINEBACK      */
+            {MPEN_FILL, MPEN_BACKGROUND, gridpattern2},   /* MUII_FILLBACK2      */
+            {MPEN_HALFSHINE, MPEN_BACKGROUND, gridpattern1}, /* MUII_HSHINEBACK   */
+            {MPEN_HALFSHADOW, MPEN_BACKGROUND, gridpattern1}, /* MUII_HSHADOWBACK */
+            {MPEN_HALFSHINE, MPEN_SHINE, gridpattern1},   /* MUII_HSHINESHINE    */
+            {MPEN_HALFSHADOW, MPEN_SHADOW, gridpattern1}, /* MUII_HSHADOWSHADOW  */
+            {MPEN_MARK, MPEN_SHINE, gridpattern1},        /* MUII_MARKSHINE      */
+            {MPEN_MARK, MPEN_HALFSHINE, gridpattern1},    /* MUII_MARKHALFSHINE  */
+            {MPEN_MARK, MPEN_BACKGROUND, gridpattern1},   /* MUII_MARKBACKGROUND */
+        };
+
+        if (background->u.pattern < 0 || background->u.pattern >= (LONG)(sizeof(pattern_table) / sizeof(pattern_table[0]))) {
+            D(bug("frame_renderer_background_to_brush: pattern index %ld out of range\n", background->u.pattern));
+            return FALSE;
+        }
+
+        const struct PatternInfo *pi = &pattern_table[background->u.pattern];
+
+        if (!mri || !mri->mri_Colormap) {
+            D(bug("frame_renderer_background_to_brush: missing colormap for pattern\n"));
+            return FALSE;
+        }
+
+        LONG fg_pen = mri->mri_Pens[pi->fg];
+        LONG bg_pen = mri->mri_Pens[pi->bg];
+        if (fg_pen < 0 || bg_pen < 0) {
+            D(bug("frame_renderer_background_to_brush: invalid pens fg=%ld bg=%ld\n", fg_pen, bg_pen));
+            return FALSE;
+        }
+
+        /* Use native pattern brush - zero copy! */
+        out_brush->brush.type = ZUNE_BRUSH_TYPE_PATTERN;
+        out_brush->brush.flags = 0;
+        out_brush->brush.data.pattern.fg_pen = fg_pen;
+        out_brush->brush.data.pattern.bg_pen = bg_pen;
+        out_brush->brush.data.pattern.pattern = pi->pattern;
+        out_brush->brush.data.pattern.colormap = mri->mri_Colormap;
+        out_brush->texture = NULL;
+        return TRUE;
+    }
+    case IST_BITMAP:
+    case IST_BRUSH: {
+        struct dt_node *node = (background->type == IST_BITMAP) ? background->u.bitmap.dt : background->u.brush.dt[0];
+        if (!node) {
+            D(bug("frame_renderer_background_to_brush: bitmap/brush has NULL dt_node\n"));
+            return FALSE;
+        }
+
+        BOOL cached = FALSE;
+        struct ZuneTexture *tex = NULL;
+
+        if (node->zune_texture) {
+            tex = node->zune_texture;
+            tex->ref_count++; /* retain while brush is in use */
+            cached = TRUE;
+        } else if (node->o) {
+            tex = CreateTextureFromDatatype((APTR)node->o, ZUNE_TEXTURE_WRAPPING);
+            if (tex) {
+                node->zune_texture = tex;
+                tex->ref_count++; /* retain while brush is in use */
+            }
+        }
+
+        if (!tex) {
+            D(bug("frame_renderer_background_to_brush: failed to create texture from dt_node\n"));
+            return FALSE;
+        }
+
+        out_brush->brush.type = ZUNE_BRUSH_TYPE_TEXTURE;
+        out_brush->brush.flags = 0;
+        out_brush->brush.data.texture.texture = tex;
+        out_brush->brush.data.texture.source.x = 0;
+        out_brush->brush.data.texture.source.y = 0;
+        out_brush->brush.data.texture.source.width = dt_width(node);
+        out_brush->brush.data.texture.source.height = dt_height(node);
+        out_brush->brush.data.texture.wrap_u = ZUNE_BRUSH_WRAP_REPEAT;
+        out_brush->brush.data.texture.wrap_v = ZUNE_BRUSH_WRAP_REPEAT;
+        out_brush->brush.data.texture.filter = ZUNE_BRUSH_FILTER_NEAREST;
+        out_brush->texture = tex; /* always release our temporary ref after draw */
+        return TRUE;
+    }
+    default:
+        D(bug("frame_renderer_background_to_brush: unsupported background type %d\n", background->type));
+        return FALSE;
+    }
+
+    if (background->u.penspec.p_pen < 0)
+        return FALSE;
+
+    out_brush->brush.type = ZUNE_BRUSH_TYPE_PEN;
+    out_brush->brush.flags = 0;
+    out_brush->brush.data.pen.pen = background->u.penspec.p_pen;
+    out_brush->brush.data.pen.release_pen = FALSE;
+    out_brush->brush.data.pen.reserved = 0;
+
+    return TRUE;
+}
+
+BOOL zune_frame_try_renderer(Object *obj, struct MUI_AreaData *data, const struct MUI_FrameSpec_intern *frame, ULONG flags,
+                             const struct ZuneFrameGfx *zframe) {
+    struct MUI_ImageSpec_intern *background;
+    struct FrameRendererBrush fill_brush_storage;
+    struct ZuneBrush *fill_brush;
+    struct MUI_RenderInfo *mri;
+    LONG bgleft, bgtop, bgw, bgh;
+    UBYTE radius, border_width;
+    struct ZuneRect rect;
+
+    D(bug("Entered zune_frame_try_renderer\n"));
+
+    if (frame && frame->type != FST_ROUNDED)
+        return FALSE;
+
+    if (!obj || !data || !frame || !zframe || zframe->customframe || !(data->mad_Flags & MADF_FILLAREA))
+        return FALSE;
+
+    mri = data->mad_RenderInfo;
+    if (!frame_renderer_can_use_zunerenderer(mri))
+        return FALSE;
+
+    D(bug("Checking border radius zune_frame_try_renderer\n"));
+    radius = frame->border_radius;
+
+    border_width = frame->border_width;
+
+    bgleft = _left(obj);
+    bgtop = _top(obj) + data->mad_TitleHeightAbove;
+    bgw = _width(obj);
+    bgh = _height(obj) - data->mad_TitleHeightAbove;
+
+    if (bgw <= 0 || bgh <= 0)
+        return FALSE;
+
+    if ((ULONG)bgw > 0xFFFF || (ULONG)bgh > 0xFFFF)
+        return FALSE;
+
+    if ((data->mad_Flags & MADF_SELECTED) == 0 || !(data->mad_Flags & MADF_SHOWSELSTATE))
+        background = data->mad_Background;
+    else
+        background = data->mad_SelBack;
+
+    if (!frame_renderer_background_to_brush(background, mri, (UWORD)bgw, (UWORD)bgh, &fill_brush_storage)) {
+        D(bug("zune_frame_try_renderer (%p): Failed to create brush from background", obj));
+        return FALSE;
+    }
+
+    D(bug("zune_frame_try_renderer (%p): Created brush from background, continuing...", obj));
+
+    fill_brush = &fill_brush_storage.brush;
+
+    struct RenderPort *port = mri->mri_RenderPort;
+    if (!port)
+        return FALSE;
+
+    /* Preserve RastPort state for subsequent text drawing */
+    struct RastPort *rp = mri->mri_RastPort;
+
+    if ((int)radius * 2 > bgw)
+        radius = bgw / 2;
+    if ((int)radius * 2 > bgh)
+        radius = bgh / 2;
+
+    D(bug("zune_frame_try_renderer(%p): radius=%u border=%u\n", obj, radius, border_width));
+
+    ULONG border_color = frame_renderer_generate_border_color(background, mri);
+
+    int inset = border_width + ZUNE_AA_FEATHER_PADDING;
+    if (bgw <= inset * 2 || bgh <= inset * 2)
+        return FALSE;
+
+    rect = (struct ZuneRect){
+        .x = bgleft + inset,
+        .y = bgtop + inset,
+        .width = bgw - inset * 2,
+        .height = bgh - inset * 2,
+    };
+
+    BOOL use_aa = muiGlobalInfo(obj)->mgi_Prefs->renderer_antialias;
+
+    /* For large AA rectangles, use cached DrawingBoard for better performance.
+     * Only use draw buffer when window double buffering is enabled, because
+     * ReadPixelArray needs valid background content to blend with. When window
+     * double buffering is off, the parent background hasn't been drawn yet. */
+    BOOL window_has_buffer = (mri->mri_DrawingBoard || mri->mri_BufferBM);
+    BOOL use_drawbuffer = use_aa &&
+                          window_has_buffer &&
+                          bgw >= FRAME_DRAWBUFFER_MIN_WIDTH &&
+                          bgh >= FRAME_DRAWBUFFER_MIN_HEIGHT;
+
+    if (use_drawbuffer) {
+        struct DrawingBoard *board = NULL;
+        struct RenderPort *buffer_port = NULL;
+
+        if (WindowObtainObjectDrawBuffer(mri, obj, (UWORD)bgw, (UWORD)bgh, &board, &buffer_port)) {
+            /* Lock for direct pixel access */
+            LockDrawingBoardPixels(buffer_port, NULL);
+
+            /* Copy background from screen to buffer for proper AA blending */
+            ReadPixelArray(board->pixels, 0, 0, board->pitch,
+                          rp, bgleft, bgtop, bgw, bgh, RECTFMT_ARGB);
+
+            /* Draw to buffer with coordinates relative to buffer origin */
+            struct ZuneRect buffer_rect = {
+                .x = inset,
+                .y = inset,
+                .width = bgw - inset * 2,
+                .height = bgh - inset * 2,
+            };
+
+            if (border_width == 0) {
+                ZuneFillRectangleRoundedAA(buffer_port, &buffer_rect, radius, fill_brush);
+            } else {
+                ZuneFillRectangleRoundedStyledAA(buffer_port, &buffer_rect, radius, border_width, fill_brush, border_color);
+            }
+
+            UnlockDrawingBoardPixels(buffer_port);
+
+            /* Blit result back to screen */
+            BlitDrawingBoardToRenderPortRects(board, port, 0, 0, bgleft, bgtop, bgw, bgh);
+
+            data->mad_Flags2 |= MADF2_ZUNE_RENDERER_BG | MADF2_ZUNE_FRAME_RENDERED;
+        } else {
+            /* Fallback to direct rendering if buffer allocation failed */
+            use_drawbuffer = FALSE;
+        }
+    }
+
+    if (!use_drawbuffer) {
+        /* When window has no double buffer, the clip region on the layer level
+         * interferes with filled rounded rectangle drawing. In that case, only
+         * draw the frame outline and let the normal background drawing handle
+         * the fill separately. */
+        if (window_has_buffer) {
+            /* Window has buffer: draw filled rectangle with optional border */
+            if (border_width == 0) {
+                if (use_aa) ZuneFillRectangleRoundedAA(port, &rect, radius, fill_brush); else ZuneFillRectangleRounded(port, &rect, radius, fill_brush);
+            } else {
+                D(bug("Drawing frame with outline width: %d and radius: %d\n", border_width, radius));
+                if (use_aa) ZuneFillRectangleRoundedStyledAA(port, &rect, radius, border_width, fill_brush, border_color); else ZuneDrawRectangleRoundedStyled(port, &rect, radius, border_width, fill_brush, border_color);
+            }
+            data->mad_Flags2 |= MADF2_ZUNE_RENDERER_BG | MADF2_ZUNE_FRAME_RENDERED;
+        } else {
+            /* No window buffer: defer frame outline drawing until after background.
+             * Set flag so Area_Draw_handle_frame calls zune_frame_draw_deferred_outline. */
+            if (border_width > 0) {
+                D(bug("No buffer: Deferring frame outline, width: %d, radius: %d\n", border_width, radius));
+                data->mad_Flags2 |= MADF2_ZUNE_FRAME_DEFERRED;
+                /* Don't set MADF2_ZUNE_FRAME_RENDERED yet - that happens after outline is drawn */
+            }
+            /* If border_width == 0, no frame to draw - return FALSE to use normal path */
+            if (border_width == 0) {
+                if (fill_brush_storage.texture) {
+                    DestroyTexture(fill_brush_storage.texture);
+                }
+                return FALSE;
+            }
+        }
+    }
+
+    if (fill_brush_storage.texture) {
+        DestroyTexture(fill_brush_storage.texture);
+        fill_brush_storage.texture = NULL;
+    }
+
+    return TRUE;
+}
+
+/*
+ * Draw deferred rounded frame outline after background has been drawn.
+ * Called from Area_Draw_handle_frame when MADF2_ZUNE_FRAME_DEFERRED is set.
+ */
+void zune_frame_draw_deferred_outline(Object *obj, struct MUI_AreaData *data,
+                                      const struct MUI_FrameSpec_intern *frame) {
+    struct MUI_RenderInfo *mri;
+    struct MUI_ImageSpec_intern *background;
+    LONG bgleft, bgtop, bgw, bgh;
+    UBYTE radius, border_width;
+
+    if (!obj || !data || !frame || frame->type != FST_ROUNDED)
+        return;
+
+    mri = data->mad_RenderInfo;
+    if (!frame_renderer_can_use_zunerenderer(mri))
+        return;
+
+    radius = frame->border_radius;
+    border_width = frame->border_width;
+
+    if (border_width == 0)
+        return;
+
+    bgleft = _left(obj);
+    bgtop = _top(obj) + data->mad_TitleHeightAbove;
+    bgw = _width(obj);
+    bgh = _height(obj) - data->mad_TitleHeightAbove;
+
+    if (bgw <= 0 || bgh <= 0)
+        return;
+
+    if ((int)radius * 2 > bgw)
+        radius = bgw / 2;
+    if ((int)radius * 2 > bgh)
+        radius = bgh / 2;
+
+    /* Get background for border color calculation */
+    if ((data->mad_Flags & MADF_SELECTED) == 0 || !(data->mad_Flags & MADF_SHOWSELSTATE))
+        background = data->mad_Background;
+    else
+        background = data->mad_SelBack;
+
+    ULONG border_color = frame_renderer_generate_border_color(background, mri);
+
+    struct RenderPort *port = mri->mri_RenderPort;
+    if (!port)
+        return;
+
+    struct RastPort *rp = mri->mri_RastPort;
+    BOOL use_aa = muiGlobalInfo(obj)->mgi_Prefs->renderer_antialias;
+
+    /* Only use AA feather padding when antialiasing is enabled */
+    int inset = border_width + (use_aa ? ZUNE_AA_FEATHER_PADDING : 0);
+    if (bgw <= inset * 2 || bgh <= inset * 2)
+        return;
+
+    struct ZuneRect rect = {
+        .x = bgleft + inset,
+        .y = bgtop + inset,
+        .width = bgw - inset * 2,
+        .height = bgh - inset * 2,
+    };
+
+    /* For large AA outlines, use cached DrawingBoard for better performance */
+    BOOL use_drawbuffer = use_aa &&
+                          bgw >= FRAME_DRAWBUFFER_MIN_WIDTH &&
+                          bgh >= FRAME_DRAWBUFFER_MIN_HEIGHT;
+
+    D(bug("Drawing deferred frame outline, width: %d, radius: %d, use_drawbuffer: %d\n",
+          border_width, radius, use_drawbuffer));
+
+    if (use_drawbuffer) {
+        struct DrawingBoard *board = NULL;
+        struct RenderPort *buffer_port = NULL;
+
+        if (WindowObtainObjectDrawBuffer(mri, obj, (UWORD)bgw, (UWORD)bgh, &board, &buffer_port)) {
+            /* Lock for direct pixel access */
+            LockDrawingBoardPixels(buffer_port, NULL);
+
+            /* Copy background from screen to buffer for proper AA blending */
+            ReadPixelArray(board->pixels, 0, 0, board->pitch,
+                          rp, bgleft, bgtop, bgw, bgh, RECTFMT_ARGB);
+
+            /* Draw to buffer with coordinates relative to buffer origin */
+            struct ZuneRect buffer_rect = {
+                .x = inset,
+                .y = inset,
+                .width = bgw - inset * 2,
+                .height = bgh - inset * 2,
+            };
+
+            ZuneDrawRectangleRoundedOutlineStyledAA(buffer_port, &buffer_rect, radius, border_width, border_color);
+
+            UnlockDrawingBoardPixels(buffer_port);
+
+            /* Blit result back to screen */
+            BlitDrawingBoardToRenderPortRects(board, port, 0, 0, bgleft, bgtop, bgw, bgh);
+        } else {
+            /* Fallback to direct rendering if buffer allocation failed */
+            use_drawbuffer = FALSE;
+        }
+    }
+
+    if (!use_drawbuffer) {
+        if (use_aa)
+            ZuneDrawRectangleRoundedOutlineStyledAA(port, &rect, radius, border_width, border_color);
+        else
+            ZuneDrawRectangleRoundedOutlineStyled(port, &rect, radius, border_width, border_color);
+    }
+
+    data->mad_Flags2 |= MADF2_ZUNE_FRAME_RENDERED;
+    data->mad_Flags2 &= ~MADF2_ZUNE_FRAME_DEFERRED;
+}
 
 /**************************************************************************
  custom frames
@@ -472,6 +1021,42 @@ static void rect_draw(struct dt_frame_image *fi, struct MUI_RenderInfo *mri,
 }
 
 /**************************************************************************
+ Helper function to draw simple rect borders using zunerenderer
+**************************************************************************/
+static BOOL rect_draw_with_zunerenderer(struct MUI_RenderInfo *mri, int left,
+                                        int top, int width, int height,
+                                        MPen preset_color)
+{
+    if (!frame_renderer_can_use_zunerenderer(mri))
+        return FALSE;
+
+    if (width <= 0 || height <= 0)
+        return FALSE;
+
+    if ((ULONG)width > 0xFFFF || (ULONG)height > 0xFFFF)
+        return FALSE;
+
+    LONG pen_index = mri->mri_Pens[preset_color];
+    if (pen_index < 0 || !mri->mri_Colormap)
+        return FALSE;
+
+    ULONG rgb[3];
+    GetRGB32(mri->mri_Colormap, pen_index, 1, rgb);
+    ULONG border_color = ZUNE_COLOR_ARGB32(0xFF, rgb[0] >> 24, rgb[1] >> 24, rgb[2] >> 24);
+
+    struct ZuneRect rect = {
+        .x = (WORD)left,
+        .y = (WORD)top,
+        .width = (UWORD)width,
+        .height = (UWORD)height,
+    };
+
+    ZuneDrawRectangleOutline(mri->mri_RenderPort, &rect, border_color);
+    
+    return TRUE;
+}
+
+/**************************************************************************
  simple white border
 **************************************************************************/
 static void frame_white_rect_draw(struct dt_frame_image *fi,
@@ -479,6 +1064,10 @@ static void frame_white_rect_draw(struct dt_frame_image *fi,
                                   int gw, int gh, int left, int top, int width,
                                   int height)
 {
+    /* Try zunerenderer first, fallback to classic rendering */
+    if (rect_draw_with_zunerenderer(mri, left, top, width, height, MPEN_SHINE))
+        return;
+    
     rect_draw(fi, mri, left, top, width, height, MPEN_SHINE);
 }
 
@@ -490,6 +1079,10 @@ static void frame_black_rect_draw(struct dt_frame_image *fi,
                                   int gw, int gh, int left, int top, int width,
                                   int height)
 {
+    /* Try zunerenderer first, fallback to classic rendering */
+    if (rect_draw_with_zunerenderer(mri, left, top, width, height, MPEN_SHADOW))
+        return;
+    
     rect_draw(fi, mri, left, top, width, height, MPEN_SHADOW);
 }
 
@@ -665,6 +1258,54 @@ static void frame_thick_border_down_draw(struct dt_frame_image *fi,
  5 : FST_ROUND_BEVEL
 **************************************************************************/
 /**
+ * Helper function to draw rounded bevel using zunerenderer
+ * Since zunerenderer doesn't support two-color borders directly, we use
+ * a single color approach when both pens are the same, or fallback otherwise
+ */
+static BOOL round_bevel_draw_with_zunerenderer(struct MUI_RenderInfo *mri,
+                                               int left, int top, int width,
+                                               int height, MPen ul, MPen lr)
+{
+    if (!frame_renderer_can_use_zunerenderer(mri))
+        return FALSE;
+
+    if (width <= 8 || height <= 4)
+        return FALSE;
+
+    if ((ULONG)width > 0xFFFF || (ULONG)height > 0xFFFF)
+        return FALSE;
+
+    /* For now, only handle single-color borders with zunerenderer */
+    /* Two-color 3D effect requires fallback to classic rendering */
+    if (ul != lr)
+        return FALSE;
+
+    LONG pen_index = mri->mri_Pens[ul];
+    if (pen_index < 0 || !mri->mri_Colormap)
+        return FALSE;
+
+    ULONG rgb[3];
+    GetRGB32(mri->mri_Colormap, pen_index, 1, rgb);
+    ULONG border_color = ZUNE_COLOR_ARGB32(0xFF, rgb[0] >> 24, rgb[1] >> 24, rgb[2] >> 24);
+
+    /* Use corner radius of 2 pixels for round bevel (from __builtinFrameGfx) */
+    UBYTE radius = 2;
+    UBYTE border_width = 2;
+
+    struct ZuneRect rect = {
+        .x = (WORD)left,
+        .y = (WORD)top,
+        .width = (UWORD)width,
+        .height = (UWORD)height,
+    };
+
+    ZuneDrawRectangleRoundedOutlineStyledAA(mri->mri_RenderPort, &rect, radius,
+                                            border_width, border_color);
+
+    return TRUE;
+}
+
+/**
  * Draw a rounded bevel frame
  * @param ul Upper-left pen (light for raised, dark for recessed)
  * @param lr Lower-right pen (dark for raised, light for recessed)
@@ -675,6 +1316,11 @@ static void round_bevel_draw(struct dt_frame_image *fi,
 {
     struct RastPort *rp = mri->mri_RastPort;
 
+    /* Try zunerenderer first for single-color borders */
+    if (round_bevel_draw_with_zunerenderer(mri, left, top, width, height, ul, lr))
+        return;
+
+    /* Fallback to classic rendering for two-color 3D effect */
     if (width <= 8 || height <= 4)
         return; /* Safety check - need minimum size for rounded effect */
 
@@ -775,6 +1421,54 @@ static void frame_border_button_down_draw(struct dt_frame_image *fi,
 /**************************************************************************
  7 : FST_ROUND_THICK_BORDER
 **************************************************************************/
+/**
+ * Helper function to draw rounded thick border using zunerenderer
+ * Only handles single-color case (when all pens are the same)
+ */
+static BOOL round_thick_border_draw_with_zunerenderer(struct MUI_RenderInfo *mri,
+                                                      int left, int top, int width,
+                                                      int height, MPen pen1,
+                                                      MPen pen2, MPen pen3,
+                                                      MPen pen4, MPen pen5)
+{
+    if (!frame_renderer_can_use_zunerenderer(mri))
+        return FALSE;
+
+    if (width <= 8 || height <= 8)
+        return FALSE;
+
+    if ((ULONG)width > 0xFFFF || (ULONG)height > 0xFFFF)
+        return FALSE;
+
+    /* Only handle single-color borders - multi-pen gradients require fallback */
+    if (pen1 != pen2 || pen1 != pen3 || pen1 != pen4 || pen1 != pen5)
+        return FALSE;
+
+    LONG pen_index = mri->mri_Pens[pen1];
+    if (pen_index < 0 || !mri->mri_Colormap)
+        return FALSE;
+
+    ULONG rgb[3];
+    GetRGB32(mri->mri_Colormap, pen_index, 1, rgb);
+    ULONG border_color = ZUNE_COLOR_ARGB32(0xFF, rgb[0] >> 24, rgb[1] >> 24, rgb[2] >> 24);
+
+    /* Use corner radius of 3 and border width of 4 (from __builtinFrameGfx) */
+    UBYTE radius = 3;
+    UBYTE border_width = 4;
+
+    struct ZuneRect rect = {
+        .x = (WORD)left,
+        .y = (WORD)top,
+        .width = (UWORD)width,
+        .height = (UWORD)height,
+    };
+
+    ZuneDrawRectangleRoundedOutlineStyledAA(mri->mri_RenderPort, &rect, radius,
+                                            border_width, border_color);
+
+    return TRUE;
+}
+
 static void round_thick_border_draw(struct dt_frame_image *fi,
                                     struct MUI_RenderInfo *mri, int left,
                                     int top, int width, int height, MPen pen1,
@@ -782,6 +1476,13 @@ static void round_thick_border_draw(struct dt_frame_image *fi,
                                     MPen pen5)
 {
     struct RastPort *rp = mri->mri_RastPort;
+
+    /* Try zunerenderer first for single-color borders */
+    if (round_thick_border_draw_with_zunerenderer(mri, left, top, width, height,
+                                                   pen1, pen2, pen3, pen4, pen5))
+        return;
+
+    /* Fallback to classic rendering for multi-color gradient effect */
 
     rect_draw(fi, mri, left, top, width - 2, height - 2, pen1);
     rect_draw(fi, mri, left + 2, top + 2, width - 2, height - 2, pen5);
@@ -840,6 +1541,54 @@ static void frame_round_thick_border_down_draw(struct dt_frame_image *fi,
  8 : FST_ROUND_THIN_BORDER
 **************************************************************************/
 /**
+ * Helper function to draw rounded thin border using zunerenderer
+ * Only handles single-color case (when all pens are the same)
+ */
+static BOOL round_thin_border_draw_with_zunerenderer(struct MUI_RenderInfo *mri,
+                                                     int left, int top, int width,
+                                                     int height, MPen pen1,
+                                                     MPen pen2, MPen pen3,
+                                                     MPen pen4, MPen pen5)
+{
+    if (!frame_renderer_can_use_zunerenderer(mri))
+        return FALSE;
+
+    if (width <= 6 || height <= 6)
+        return FALSE;
+
+    if ((ULONG)width > 0xFFFF || (ULONG)height > 0xFFFF)
+        return FALSE;
+
+    /* Only handle single-color borders - multi-pen gradients require fallback */
+    if (pen1 != pen2 || pen1 != pen3 || pen1 != pen4 || pen1 != pen5)
+        return FALSE;
+
+    LONG pen_index = mri->mri_Pens[pen1];
+    if (pen_index < 0 || !mri->mri_Colormap)
+        return FALSE;
+
+    ULONG rgb[3];
+    GetRGB32(mri->mri_Colormap, pen_index, 1, rgb);
+    ULONG border_color = ZUNE_COLOR_ARGB32(0xFF, rgb[0] >> 24, rgb[1] >> 24, rgb[2] >> 24);
+
+    /* Use corner radius of 2 and border width of 2 (from __builtinFrameGfx) */
+    UBYTE radius = 2;
+    UBYTE border_width = 2;
+
+    struct ZuneRect rect = {
+        .x = (WORD)left,
+        .y = (WORD)top,
+        .width = (UWORD)width,
+        .height = (UWORD)height,
+    };
+
+    ZuneDrawRectangleRoundedOutlineStyledAA(mri->mri_RenderPort, &rect, radius,
+                                            border_width, border_color);
+
+    return TRUE;
+}
+
+/**
  * Draw a rounded thin border - complex multi-pen effect
  * Uses 5 pens to create gradient-like rounded appearance
  */
@@ -850,6 +1599,12 @@ static void round_thin_border_draw(struct dt_frame_image *fi,
 {
     struct RastPort *rp = mri->mri_RastPort;
 
+    /* Try zunerenderer first for single-color borders */
+    if (round_thin_border_draw_with_zunerenderer(mri, left, top, width, height,
+                                                  pen1, pen2, pen3, pen4, pen5))
+        return;
+
+    /* Fallback to classic rendering for multi-color gradient effect */
     if (width <= 6 || height <= 6)
         return; /* Safety check */
 
@@ -1639,8 +2394,8 @@ struct Region *zune_frame_create_clip_region(int left, int top, int width,
             /* Check if pixel is inside circle using distance formula */
             int dx = radius - x - 1;
             int dy = radius - y - 1;
-            /* Use a more conservative threshold to prevent background leaking */
-            int threshold = (radius > 2) ? (radius - 2) * (radius - 2) : 1;
+            /* Use radius squared as threshold to match the actual circle */
+            int threshold = radius * radius;
             if (dx * dx + dy * dy < threshold) {
                 /* Top-left corner */
                 rect.MinX = left + x;

@@ -231,6 +231,8 @@ const static struct def_ulval DefULValues[] = {
     {MUICFG_Interfaces_EnableARexx, TRUE},
     {MUICFG_BubbleHelp_FirstDelay, 30},
     {MUICFG_BubbleHelp_NextDelay, 10},
+    {MUICFG_Renderer_Antialias, TRUE},
+    {MUICFG_Renderer_DoubleBuffer, TRUE},
     {0, 0},
 };
 
@@ -649,6 +651,12 @@ IPTR Configdata__OM_NEW(struct IClass *cl, Object *obj, struct opSet *msg)
         GetConfigULong(obj, MUICFG_BubbleHelp_FirstDelay);
     data->prefs.bubblehelp_next_delay =
         GetConfigULong(obj, MUICFG_BubbleHelp_NextDelay);
+
+    /*---------- renderer stuff ----------*/
+    data->prefs.renderer_antialias =
+        GetConfigULong(obj, MUICFG_Renderer_Antialias);
+    data->prefs.renderer_doublebuffer =
+        GetConfigULong(obj, MUICFG_Renderer_DoubleBuffer);
 
     /*---------- window stuff ----------*/
 

@@ -74,7 +74,7 @@ struct MUIMasterBase_intern
 #ifdef HAVE_COOLIMAGES
     struct Library              *coolimagesbase;
 #endif
-    
+
 /*  struct Library              *datatypesbase; */
 #endif /* __AROS__ */
 
@@ -85,6 +85,8 @@ struct MUIMasterBase_intern
     struct MinList              BuiltinClasses;
     struct MinList              Applications;
     struct MUI_PenSpec          *defaultPens;
+
+    struct Library *zunerendererbase;
 };
 
 
@@ -145,5 +147,9 @@ struct MUIMasterBase_intern
 #define WorkbenchBase   (MUIMB(MUIMasterBase)->workbenchbase)
 
 #endif /* __AROS__ */
+
+/* Double buffering functions */
+void FlushDoubleBuffer(struct MUI_RenderInfo *mri);
+void FlushDoubleBufferRegion(struct MUI_RenderInfo *mri, LONG left, LONG top, LONG width, LONG height);
 
 #endif /* MUIMASTER_INTERN_H */

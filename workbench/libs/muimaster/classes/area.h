@@ -20,6 +20,9 @@
 #include "classes/window.h"     /* for MUI_EventHandlerNode, will be gone if this MUI_AreaData is moved to area.c */
 #endif
 
+struct DrawingBoard;
+struct RenderPort;
+
 /*** Name *******************************************************************/
 #define MUIC_Area                   "Area.mui"
 
@@ -586,6 +589,10 @@ struct MUI_AreaData
 #define MADF_DRAWFLAGS (MADF_DRAWOBJECT | MADF_DRAWUPDATE | MADF_DRAW_XXX \
     | MADF_DRAWFRAME | MADF_DRAW_XXX_2 | MADF_DRAWALL)
 
+/* mad_Flags2 bits */
+#define MADF2_ZUNE_FRAME_RENDERED (1 << 0)
+#define MADF2_ZUNE_RENDERER_BG    (1 << 1)
+#define MADF2_ZUNE_FRAME_DEFERRED (1 << 2) /* Frame outline to be drawn after background */
 
 // offset 94 (byte) (frame << 1) (lsb is SETUP_DONE flag)
 enum
