@@ -6,6 +6,7 @@
 #include <proto/graphics.h>
 #include <proto/intuition.h>
 #include <proto/muimaster.h>
+#include <proto/zunerenderer.h>
 
 #include "mui.h"
 #include "muimaster_intern.h"
@@ -45,6 +46,11 @@
 
     if (w == NULL)
         return;
+
+    /* End batching before finishing refresh */
+    if (mri->mri_RenderPort) {
+        EndBatch(mri->mri_RenderPort);
+    }
 
     EndRefresh(w, TRUE);
     UnlockLayerInfo(&w->WScreen->LayerInfo);

@@ -2082,8 +2082,9 @@ IPTR List__MUIM_Draw(struct IClass *cl, Object *obj, struct MUIP_Draw *msg)
         int top, bottom;
         if (abs(diffy) < data->entries_visible)
         {
+            struct Layer *layer = _rp(obj)->Layer;
             scroll_caused_damage =
-                (_rp(obj)->Layer->Flags & LAYERREFRESH) ? FALSE : TRUE;
+                (layer && (layer->Flags & LAYERREFRESH)) ? FALSE : TRUE;
 
             ScrollRaster(_rp(obj), 0, diffy * data->entry_maxheight,
                 _mleft(data->area), y,
@@ -2092,7 +2093,7 @@ IPTR List__MUIM_Draw(struct IClass *cl, Object *obj, struct MUIP_Draw *msg)
 
             scroll_caused_damage =
                 scroll_caused_damage
-                && (_rp(obj)->Layer->Flags & LAYERREFRESH);
+                && layer && (layer->Flags & LAYERREFRESH);
 
             if (diffy > 0)
             {

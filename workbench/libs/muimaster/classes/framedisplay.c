@@ -45,6 +45,15 @@ IPTR Framedisplay__OM_NEW(struct IClass *cl, Object *obj, struct opSet *msg)
 
     data = INST_DATA(cl, obj);
 
+    /* Make sure we start from a defined frame specification. Otherwise we end up
+     * using random stack data which may index past the builtin frame table and
+     * smear garbage (as seen with the clipboard popframe in Zune prefs when
+     * double buffering changes the memory layout). A simple rectangular frame is
+     * a safe default until a real spec gets assigned. */
+    memset(&data->fs_intern, 0, sizeof(data->fs_intern));
+    data->fs_intern.type = FST_RECT;
+    data->spec[0] = '\0';
+
     /* parse initial taglist */
 
     for (tags = msg->ops_AttrList; (tag = NextTagItem(&tags));) {
@@ -114,6 +123,8 @@ IPTR Framedisplay__MUIM_Draw(struct IClass *cl, Object *obj,
     const struct ZuneFrameGfx *zframe;
     APTR region;
     WORD ileft, itop, iright, ibottom;
+    WORD innerWidth, innerHeight, maxOffset;
+    WORD startX, startY, endX, endY, delta;
     int i;
 
     DoSuperMethodA(cl, obj, (Msg)msg);
@@ -144,10 +155,37 @@ IPTR Framedisplay__MUIM_Draw(struct IClass *cl, Object *obj,
     region = MUI_AddClipping(muiRenderInfo(obj), ileft, itop, iright - ileft + 1,
                              ibottom - itop + 1);
 
-    for (i = itop; i < ibottom + iright - ileft; i++) {
-        if (!(i % 4)) {
-            Move(_rp(obj), ileft, i);
-            Draw(_rp(obj), ileft + i - itop, itop);
+    innerWidth = iright - ileft;
+    innerHeight = ibottom - itop;
+
+    if (innerWidth >= 0 && innerHeight >= 0) {
+        maxOffset = innerWidth + innerHeight;
+
+        for (i = 0; i <= maxOffset; i += 4) {
+            startX = ileft;
+            startY = itop + i;
+
+            if (startY > ibottom) {
+                delta = startY - ibottom;
+                startY = ibottom;
+                startX += delta;
+                if (startX > iright)
+                    startX = iright;
+            }
+
+            endX = ileft + i;
+            endY = itop;
+
+            if (endX > iright) {
+                delta = endX - iright;
+                endX = iright;
+                endY += delta;
+                if (endY > ibottom)
+                    endY = ibottom;
+            }
+
+            Move(_rp(obj), startX, startY);
+            Draw(_rp(obj), endX, endY);
         }
     }
 

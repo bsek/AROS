@@ -153,8 +153,11 @@ Object *INTERNAL_ImageButton(CONST_STRPTR label, CONST_STRPTR imagePath,
             MUIA_Group_Spacing, 0,
             //MUIA_Group_SameHeight, TRUE,
             controlChar ? MUIA_ControlChar : TAG_IGNORE, (IPTR) controlChar,
-            
-            Child, (IPTR)HVSpace,
+
+            /* Keep inner elements transparent so only the outer button paints its background */
+            Child, (IPTR)MUI_NewObject(MUIC_Rectangle,
+                MUIA_FillArea, FALSE,
+                TAG_DONE),
             Child, (IPTR)ImageObject,
                 MUIA_Image_Spec, (IPTR) imageSpec,
                 MUIA_Image_FreeVert,    FALSE,
@@ -162,16 +165,26 @@ Object *INTERNAL_ImageButton(CONST_STRPTR label, CONST_STRPTR imagePath,
                 MUIA_Image_FontMatch,   TRUE,
                 MUIA_Font,       (IPTR) textFont,
                 MUIA_Weight,            0,
+                MUIA_FillArea, FALSE,
+                MUIA_Frame, MUIV_Frame_None,
             End,
-            Child, (IPTR)HSpace(4),
+            Child, (IPTR)MUI_NewObject(MUIC_Rectangle,
+                MUIA_VertWeight, 0,
+                MUIA_FixWidth, 4,
+                MUIA_FillArea, FALSE,
+                TAG_DONE),
             Child, (IPTR)TextObject,
                 MUIA_Font,           (IPTR) MUIV_Font_Button,
                 MUIA_Text_HiCharIdx, (IPTR) '_',
                 MUIA_Text_Contents,  (IPTR) label,
                 MUIA_Text_PreParse,  (IPTR) "\33c",
                 MUIA_Weight,                0,
+                MUIA_FillArea, FALSE,
+                MUIA_Frame, MUIV_Frame_None,
             End,
-            Child, (IPTR)HVSpace,
+            Child, (IPTR)MUI_NewObject(MUIC_Rectangle,
+                MUIA_FillArea, FALSE,
+                TAG_DONE),
         End;
 
     }
@@ -301,11 +314,11 @@ Object *INTERNAL_ImageButton(CONST_STRPTR label, CONST_STRPTR imagePath,
             {
                 img = (struct CoolImage *)params[1];
             }
-            
+
             if (img)
             {
                 control_char = get_control_char(label);
-                
+
                 return (Object *)HGroup,
                     MUIA_VertWeight, 0,
                     ButtonFrame,
@@ -348,9 +361,9 @@ Object *INTERNAL_ImageButton(CONST_STRPTR label, CONST_STRPTR imagePath,
                     Child, (IPTR)RectangleObject, End,
                     Child, (IPTR)HSpace(2),
                 End;
-                    
+
             } /* if (img) */
-            
+
         } /* if (CoolImagesBase) */
 #endif
         /* fall through */
@@ -382,7 +395,7 @@ Object *INTERNAL_ImageButton(CONST_STRPTR label, CONST_STRPTR imagePath,
     case MUIO_Checkmark: /* STRPTR label */
         {
             int control_char = get_control_char((const char *)params[0]);
-            
+
             return MUI_NewObject(MUIC_Image,
                 ImageButtonFrame,
                 MUIA_Background, MUII_ButtonBack,

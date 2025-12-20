@@ -12,6 +12,7 @@
 #include <proto/utility.h>
 #include <proto/muimaster.h>
 #include <proto/cybergraphics.h>
+#include <proto/zunerenderer.h>
 
 #ifdef __AROS__
 #include <intuition/windecorclass.h>
@@ -27,7 +28,7 @@
 #include "support.h"
 #include "prefs.h"
 
-/*  #define MYDEBUG 1 */
+#define MYDEBUG 1
 #include "debug.h"
 
 extern struct Library *MUIMasterBase;
@@ -126,6 +127,8 @@ static ULONG upscale(struct Prop_DATA *data, ULONG val)
 #endif
     return val;
 }
+
+
 
 IPTR Prop__OM_NEW(struct IClass *cl, Object *obj, struct opSet *msg)
 {
@@ -587,6 +590,127 @@ int WriteTiledImageVertical(struct NewImage *dst, struct RastPort *maprp,
 }
 
 #ifdef __AROS__
+/* ZunePropRenderFunc - Renders prop gadget using zunerenderer
+ * Used for STANDARD and NEWLOOK scrollbar types for modern rendering
+ */
+AROS_UFH3
+    (void, ZunePropRenderFunc,
+    AROS_UFHA(struct Hook *, h, A0),
+    AROS_UFHA(Object *, obj, A2),
+    AROS_UFHA(struct wdpDrawBorderPropKnob *, msg, A1))
+{
+    AROS_USERFUNC_INIT
+
+    struct Prop_DATA *data = h->h_Data;
+    Object *muiobj = data->obj;
+
+    if (msg->MethodID == WDM_DRAW_BORDERPROPKNOB)
+    {
+        struct Window *window = msg->wdp_Window;
+        struct Gadget *gadget = msg->wdp_Gadget;
+        struct Rectangle *prop_rect = msg->wdp_PropRect;
+        struct Rectangle *knob_rect = msg->wdp_RenderRect;
+        struct PropInfo *pi = ((struct PropInfo *)gadget->SpecialInfo);
+        BOOL hit = (msg->wdp_Flags & WDF_DBPK_HIT) ? TRUE : FALSE;
+        BOOL active = (window->Flags & WFLG_WINDOWACTIVE) ? TRUE : FALSE;
+
+        D(bug("[ZuneProp] RenderFunc called: hit=%d, active=%d, knob=(%d,%d)-(%d,%d), prop=(%d,%d)-(%d,%d)\n",
+            hit, active,
+            knob_rect->MinX, knob_rect->MinY, knob_rect->MaxX, knob_rect->MaxY,
+            prop_rect->MinX, prop_rect->MinY, prop_rect->MaxX, prop_rect->MaxY));
+        D(bug("[ZuneProp]   VPot=%d, HPot=%d, VBody=%d, HBody=%d, KNOBHIT=%d\n",
+            pi->VertPot, pi->HorizPot,
+            pi->VertBody, pi->HorizBody,
+            (pi->Flags & KNOBHIT) ? 1 : 0));
+
+        struct MUI_RenderInfo *mri = muiRenderInfo(muiobj);
+        struct RenderPort *rp = mri->mri_WindowRenderPort ? mri->mri_WindowRenderPort : mri->mri_RenderPort;
+
+        D(bug("[ZuneProp]   msg->wdp_RPort=%p, rp=%p, rp->target_rp=%p\n",
+            msg->wdp_RPort, rp, rp ? rp->target_rp : NULL));
+
+        if (!rp)
+            return;
+
+        /* We render to rp->target_rp which may be a double buffer.
+         * After rendering, we need to flush the prop region to the window.
+         */
+
+        /* Get pen colors */
+        UWORD *pens = mri->mri_Pens;
+        ULONG container_color, knob_color, knob_border_color;
+
+        /* Container background - use halfshadow for a subtle look */
+        ULONG rgb[3];
+        GetRGB32(mri->mri_Colormap, pens[MPEN_HALFSHADOW], 1, rgb);
+        container_color = ZUNE_COLOR_ARGB32(0xFF, rgb[0] >> 24, rgb[1] >> 24, rgb[2] >> 24);
+
+        /* Knob color depends on state */
+        if (hit) {
+            /* Pressed state - use fill color */
+            GetRGB32(mri->mri_Colormap, pens[MPEN_FILL], 1, rgb);
+        } else if (active) {
+            /* Active window - use halfshine */
+            GetRGB32(mri->mri_Colormap, pens[MPEN_HALFSHINE], 1, rgb);
+        } else {
+            /* Inactive - use background */
+            GetRGB32(mri->mri_Colormap, pens[MPEN_BACKGROUND], 1, rgb);
+        }
+        knob_color = ZUNE_COLOR_ARGB32(0xFF, rgb[0] >> 24, rgb[1] >> 24, rgb[2] >> 24);
+
+        /* Knob border - use shadow */
+        GetRGB32(mri->mri_Colormap, pens[MPEN_SHADOW], 1, rgb);
+        knob_border_color = ZUNE_COLOR_ARGB32(0xFF, rgb[0] >> 24, rgb[1] >> 24, rgb[2] >> 24);
+
+        /* Draw container (background) */
+        struct ZuneRect container = {
+            .x = prop_rect->MinX,
+            .y = prop_rect->MinY,
+            .width = prop_rect->MaxX - prop_rect->MinX + 1,
+            .height = prop_rect->MaxY - prop_rect->MinY + 1
+        };
+        struct ZuneBrush container_brush = ZUNE_BRUSH_LITERAL_SOLID(container_color);
+        ZuneFillRectangle(rp, &container, &container_brush);
+
+        /* Draw knob with rounded corners and border */
+        WORD knob_width = knob_rect->MaxX - knob_rect->MinX + 1;
+        WORD knob_height = knob_rect->MaxY - knob_rect->MinY + 1;
+
+        /* Only draw knob if it has reasonable size */
+        if (knob_width > 4 && knob_height > 4) {
+            struct ZuneRect knob = {
+                .x = knob_rect->MinX,
+                .y = knob_rect->MinY,
+                .width = knob_width,
+                .height = knob_height
+            };
+
+            /* Corner radius based on smaller dimension, max 4 pixels */
+            UBYTE corner_radius = 3;
+            if ((pi->Flags & FREEVERT) != 0) {
+                /* Vertical - base on width */
+                if (knob_width < 10) corner_radius = 2;
+            } else {
+                /* Horizontal - base on height */
+                if (knob_height < 10) corner_radius = 2;
+            }
+
+            struct ZuneBrush knob_brush = ZUNE_BRUSH_LITERAL_SOLID(knob_color);
+            ZuneFillRectangleRoundedStyledAA(rp, &knob, corner_radius, 1, &knob_brush, knob_border_color);
+        }
+
+        /* Flush the prop region from the double buffer to the window */
+        if (mri->mri_BufferBM || mri->mri_DrawingBoard) {
+            FlushDoubleBufferRegion(mri,
+                prop_rect->MinX, prop_rect->MinY,
+                prop_rect->MaxX - prop_rect->MinX + 1,
+                prop_rect->MaxY - prop_rect->MinY + 1);
+        }
+    }
+
+    AROS_USERFUNC_EXIT
+}
+
 AROS_UFH3
     (void, CustomPropRenderFunc,
     AROS_UFHA(struct Hook *, h, A0),
@@ -951,6 +1075,19 @@ IPTR Prop__MUIM_Show(struct IClass *cl, Object *obj, struct MUIP_Show *msg)
                     }
                 }
             }
+            else if (depth >= 15)
+            {
+                /* Use zunerenderer for STANDARD and NEWLOOK scrollbar types
+                 * when we have sufficient color depth */
+                struct MUI_RenderInfo *mri = muiRenderInfo(obj);
+                if (mri && (mri->mri_RenderPort || mri->mri_WindowRenderPort))
+                {
+                    data->dhook.h_Entry = (HOOKFUNC) ZunePropRenderFunc;
+                    data->dhook.h_Data = data;
+                    data->obj = obj;
+                    dhook = &data->dhook;
+                }
+            }
 #endif
 
             if (data->prop_object)
@@ -1131,6 +1268,9 @@ IPTR Prop__MUIM_HandleEvent(struct IClass *cl, Object *obj,
 
             if ((LONG) v < 0)
                 v = 0;
+
+            D(bug("[ZuneProp] HandleEvent: PGA_Top=%ld, upscaled v=%ld, data->first=%ld, entries=%ld\n",
+                tag->ti_Data, v, data->first, data->entries));
 
             SetAttrs(obj, MUIA_Prop_First, v, MUIA_Prop_OnlyTrigger, TRUE,
                 MUIA_Prop_Release,

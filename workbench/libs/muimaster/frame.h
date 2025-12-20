@@ -15,8 +15,11 @@
 #include <exec/types.h>
 #endif
 
+#define ZUNE_AA_FEATHER_PADDING 1
+
 struct MUI_FrameSpec;
 struct MUI_FrameCharacteristics;
+struct MUI_AreaData;
 
 /* MUI_*Spec really are ASCII strings.
  */
@@ -125,6 +128,14 @@ struct dt_frame_image *zune_frame_prepare_for_drawing(
     const struct ZuneFrameGfx *zframe,
     const struct MUI_FrameSpec_intern *framespec,
     struct dt_frame_image *temp_storage);
+
+BOOL zune_frame_try_renderer(Object *obj, struct MUI_AreaData *data,
+    const struct MUI_FrameSpec_intern *frame, ULONG flags,
+    const struct ZuneFrameGfx *zframe);
+
+/* Draw deferred rounded frame outline (called after background when single-buffered) */
+void zune_frame_draw_deferred_outline(Object *obj, struct MUI_AreaData *data,
+    const struct MUI_FrameSpec_intern *frame);
 
 /* Frame parameters are now stored in dt_frame_image structure */
 

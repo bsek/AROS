@@ -205,14 +205,22 @@ IPTR Image__OM_SET(struct IClass *cl, Object *obj, struct opSet *msg)
                     if (data->img)
                         zune_imspec_cleanup(data->img);
                     data->img = zune_imspec_setup((IPTR)data->spec, muiRenderInfo(obj));
-                    // FIXME: quick hack to not draw the background for gradients. It should really be generalized
+                    // Only adjust FillArea when the object still uses the default (opaque) setting.
                     if (data->img)
                     {
+                        struct MUI_AreaData *adata = muiAreaData(obj);
+                        BOOL has_fillarea = (adata->mad_Flags & MADF_FILLAREA) != 0;
+
                         if (data->img->type == IST_SCALED_GRADIENT
                                 || data->img->type == IST_TILED_GRADIENT)
-                            set(obj, MUIA_FillArea, FALSE);
-                        else
+                        {
+                            if (has_fillarea)
+                                set(obj, MUIA_FillArea, FALSE);
+                        }
+                        else if (has_fillarea)
+                        {
                             set(obj, MUIA_FillArea, TRUE);
+                        }
                     }
                 }
 
@@ -299,14 +307,22 @@ IPTR Image__MUIM_Setup(struct IClass *cl, Object *obj, struct MUIP_Setup *msg)
     if (data->spec)
     {
         data->img = zune_imspec_setup((IPTR)data->spec, muiRenderInfo(obj));
-        // FIXME: quick hack to not draw the background for gradients. It should really be generalized
+        // Only adjust FillArea when the object still uses the default (opaque) setting.
         if (data->img)
         {
+            struct MUI_AreaData *adata = muiAreaData(obj);
+            BOOL has_fillarea = (adata->mad_Flags & MADF_FILLAREA) != 0;
+
             if (data->img->type == IST_SCALED_GRADIENT
                     || data->img->type == IST_TILED_GRADIENT)
-                set(obj, MUIA_FillArea, FALSE);
-            else
+            {
+                if (has_fillarea)
+                    set(obj, MUIA_FillArea, FALSE);
+            }
+            else if (has_fillarea)
+            {
                 set(obj, MUIA_FillArea, TRUE);
+            }
         }
 
         if ((data->img != NULL) && (data->img->type == IST_BRUSH))
@@ -579,4 +595,3 @@ const struct __MUIBuiltinClass _MUI_Image_desc = {
     sizeof(struct MUI_ImageData),
     (void*)Image_Dispatcher
 };
-
