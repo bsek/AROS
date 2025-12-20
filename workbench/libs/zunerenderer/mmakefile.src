@@ -1,0 +1,75 @@
+#
+#   Generate zunerenderer.library - Simplified Implementation
+#
+
+include $(SRCDIR)/config/aros.cfg
+
+# Function implementations (library functions with AROS_LH macros)
+FUNCS :=
+
+# Source files organized by module
+CORE_FILES := \
+        src/zunerenderer_core           \
+        src/zunerenderer_drawingboard   \
+        src/zunerenderer_batching       \
+        src/zunerenderer_clipping       \
+        src/zunerenderer_utils          \
+        src/zunerenderer_texture        \
+        src/zunerenderer_fallback
+
+DRAWING_FILES := \
+        src/zunerenderer_drawing        \
+        src/zunerenderer_antialiasing   \
+        src/zunerenderer_rectangle
+
+BACKEND_FILES := \
+        src/backends/backend_manager        \
+        src/backends/cybergfx/cybergfx_backend \
+        src/backends/cybergfx/cybergfx_antialiasing \
+        src/backends/cybergfx/cybergfx_texture \
+        src/backends/cybergfx/cybergfx_clipping \
+        src/backends/cybergfx/rectangle/cybergfx_draw_rectangle \
+        src/backends/cybergfx/rectangle/cybergfx_draw_rectangle_to_locked_board \
+        src/backends/cybergfx/rectangle/cybergfx_draw_rectangle_to_raster_port \
+        src/backends/cybergfx/rectangle/cybergfx_draw_rounded_rectangle_to_raster_port \
+        src/backends/cybergfx/rectangle/cybergfx_draw_rounded_rectangle_to_locked_board \
+        src/backends/cybergfx/rectangle/cybergfx_draw_rectangle_aa_drawingboard \
+        src/backends/cybergfx/rectangle/cybergfx_draw_rectangle_aa_raster_port \
+        src/backends/cybergfx/cybergfx_simd \
+        src/backends/cybergfx/cybergfx_line \
+        src/backends/cybergfx/cybergfx_circle \
+        src/backends/cybergfx/cybergfx_brush_sampler \
+        src/backends/opengl/opengl_backend
+
+ROOT_FILES := \
+        zunerenderer_init
+
+# Combine all source files
+FILES := \
+        $(CORE_FILES)                   \
+        $(DRAWING_FILES)                \
+        $(BACKEND_FILES)                \
+        $(ROOT_FILES)
+
+#MM- workbench-libs-zunerenderer : linklibs
+#MM- workbench-libs-zunerenderer-kobj : linklibs
+
+#MM- workbench-libs-zunerenderer-includes :    \
+#MM      kernel-exec-includes                  \
+#MM      includes-copy
+#MM- core-linklibs: linklibs-zunerenderer
+
+INCLUDE_FILES := $(call WILDCARD, include/*.h)
+
+%copy_includes path=libraries dir=include
+
+%build_module mmake=workbench-libs-zunerenderer \
+  modname=zunerenderer modtype=library \
+  files="$(FUNCS) $(FILES)" \
+  uselibs="graphics cybergraphics"
+
+# Additional build flags for debugging
+USER_CPPFLAGS := -DDEBUG=1 -DAROS_LITTLE_ENDIAN=1 -mavx2
+
+# Make sure include headers are found
+USER_INCLUDES := -I$(SRCDIR)/$(CURDIR)/include
