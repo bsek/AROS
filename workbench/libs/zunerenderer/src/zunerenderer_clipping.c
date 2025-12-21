@@ -151,7 +151,7 @@ AROS_LH2(struct Region *, ZuneCreateCircleRegion,
          AROS_LHA(WORD, radius, D0),
 
          /*  LOCATION */
-         struct Library *, ZuneRendererBase, 92, zunerenderer)
+         struct Library *, ZuneRendererBase, 93, zunerenderer)
 
 /*  FUNCTION
     Creates a circular region for clipping operations.
@@ -252,7 +252,7 @@ AROS_LH2(struct Region *, ZuneCreateRoundedRectRegion,
          AROS_LHA(WORD, corner_radius, D0),
 
          /*  LOCATION */
-         struct Library *, ZuneRendererBase, 93, zunerenderer)
+         struct Library *, ZuneRendererBase, 94, zunerenderer)
 
 /*  FUNCTION
     Creates a rounded rectangle region for clipping operations.

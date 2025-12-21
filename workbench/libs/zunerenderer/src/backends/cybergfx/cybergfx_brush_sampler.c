@@ -245,7 +245,8 @@ void SampleBrush(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
   }
 
   switch (brush->type) {
-  case ZUNE_BRUSH_TYPE_SOLID: {
+  case ZUNE_BRUSH_TYPE_SOLID:
+  case ZUNE_BRUSH_TYPE_PEN: {
     /* Use stored ARGB components directly - they're already in correct format */
     *a = brush->internal.color->a;
     *r = brush->internal.color->r;
@@ -357,7 +358,8 @@ void SampleBrushBatch4(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
   }
 
   switch (brush->type) {
-  case ZUNE_BRUSH_TYPE_SOLID: {
+  case ZUNE_BRUSH_TYPE_SOLID:
+  case ZUNE_BRUSH_TYPE_PEN: {
     /* All pixels get same color */
     ULONG color = brush->internal.color->original_pixel;
     UBYTE sa = ZUNE_GET_ALPHA(color);
@@ -440,9 +442,10 @@ void SampleBrushBatch8(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
   }
 
   switch (brush->type) {
-  case ZUNE_BRUSH_TYPE_SOLID: {
+  case ZUNE_BRUSH_TYPE_SOLID:
+  case ZUNE_BRUSH_TYPE_PEN: {
     /* All pixels get same color */
-    ULONG color = brush->data.solid.color;
+    ULONG color = brush->internal.color->original_pixel;
     UBYTE sa = ZUNE_GET_ALPHA(color);
     UBYTE sr = ZUNE_GET_RED(color);
     UBYTE sg = ZUNE_GET_GREEN(color);

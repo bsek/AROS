@@ -11,13 +11,14 @@
 #include "backends/backend_interface.h"
 #include "include/zunerenderer.h"
 #include <aros/libcall.h>
-#define DEBUG 0
+#define DEBUG 1
 #include <aros/debug.h>
 #include <clib/alib_protos.h>
 #include <cybergraphx/cybergraphics.h>
 #include <exec/libraries.h>
 #include <exec/memory.h>
 #include <exec/types.h>
+#include <aros/cpu.h>
 #include <graphics/gfx.h>
 #include <graphics/rastport.h>
 #include <proto/cybergraphics.h>
@@ -290,27 +291,26 @@ static struct ZuneTexture *CreateTextureFromDatatypeInternal(APTR dt_handle, ULO
     pa.pbpa_Height = tex_h;
 
     DoMethodA(dt_obj, (Msg)&pa);
-    // if (DoMethodA(dt_obj, (Msg)&pa) == 0) {
-    //    D(bug("ZuneRenderer: CreateTextureFromDatatype - PDTM_READPIXELARRAY failed, trying bitmap fallback\n"));
 
-    //   if (bm && tex_w > 0 && tex_h > 0) {
-    //     struct RastPort rp;
-    //     InitRastPort(&rp);
-    //     rp.BitMap = bm;
-
-    //     ULONG rc = ReadPixelArray(pixels, 0, 0, tex_w * 4, &rp, 0, 0, tex_w,
-    //                               tex_h, RECTFMT_ARGB);
-    //     if (rc == 0) {
-    //       D(bug("ZuneRenderer: CreateTextureFromDatatype - ReadPixelArray fallback failed\n"));
-    //       FreeVec(pixels);
-    //       return NULL;
-    //     }
-    //   } else {
-    //     D(bug("ZuneRenderer: CreateTextureFromDatatype - no valid BitMap fallback\n"));
-    //     FreeVec(pixels);
-    //     return NULL;
-    //   }
-    // }
+    /* 
+     * Fix alpha channel for images without alpha.
+     * PDTM_READPIXELARRAY with PBPAFMT_ARGB returns 32-bit pixels, but for
+     * images without alpha the alpha byte is undefined (often 0x00 = fully
+     * transparent). We must set it to 0xFF (fully opaque) to render correctly.
+     * This matches the behavior in datatypescache.c GetImageFromFile().
+     */
+    if (mask != mskHasAlpha)
+    {
+        ULONG pixel_count = (ULONG)tex_w * (ULONG)tex_h;
+        ULONG i;
+#if !AROS_BIG_ENDIAN
+        for (i = 0; i < pixel_count; i++)
+            pixels[i] |= 0x000000ff;  /* Set alpha to 0xFF (little-endian: BGRA in memory) */
+#else
+        for (i = 0; i < pixel_count; i++)
+            pixels[i] |= 0xff000000;  /* Set alpha to 0xFF (big-endian: ARGB in memory) */
+#endif
+    }
 
     if (mask == mskHasAlpha)
         flags |= ZUNE_TEXTURE_ALPHA;
@@ -652,13 +652,168 @@ SEE ALSO
 /*****************************************************************************
 
     NAME */
+AROS_LH3(struct ZuneTexture *, CreateTextureFromFile,
+
+         /*  SYNOPSIS */
+         AROS_LHA(CONST_STRPTR, filename, A0),
+         AROS_LHA(struct Screen *, screen, A1),
+         AROS_LHA(ULONG, flags, D0),
+
+         /*  LOCATION */
+         struct Library *, ZuneRendererBase, 74, zunerenderer)
+
+/*  FUNCTION
+    Creates a new texture by loading an image file using DataTypes.
+    This is a convenience function that handles the entire loading
+    process internally, without requiring the caller to manage a
+    DataTypes object.
+
+    The function loads the image, extracts pixel data, creates the
+    texture, and immediately releases the DataTypes object, resulting
+    in lower memory usage compared to keeping the DataTypes object
+    around.
+
+INPUTS
+    filename - Path to the image file to load
+    screen - Screen context for color remapping (may be NULL)
+    flags - Texture creation flags (ZUNE_TEXTURE_*)
+            Common flags:
+            - ZUNE_TEXTURE_WRAPPING: Enable texture wrapping for tiling
+            - ZUNE_TEXTURE_ALPHA: Preserve alpha channel (auto-detected)
+            - ZUNE_TEXTURE_FILTERING: Enable bilinear filtering
+
+RESULT
+    Pointer to new ZuneTexture structure, or NULL if loading failed.
+
+    The returned texture contains:
+    - width, height: Image dimensions
+    - format: ZUNE_TEXTURE_FORMAT_ARGB32
+    - pixel_data: Copy of the image pixels
+    - flags: Including ZUNE_TEXTURE_ALPHA if image has alpha
+
+NOTES
+    - Supports any image format that has a DataTypes handler installed
+    - Alpha channel is automatically detected and preserved
+    - The DataTypes object is freed immediately after pixel extraction,
+      so no reference to it is kept
+    - The texture must be freed with DestroyTexture() when no longer needed
+    - For tiled backgrounds, include ZUNE_TEXTURE_WRAPPING in flags
+
+EXAMPLE
+    // Load a background image for tiling
+    struct ZuneTexture *bg = CreateTextureFromFile(
+        "THEME:backgrounds/window.png",
+        screen,
+        ZUNE_TEXTURE_WRAPPING);
+
+    if (bg) {
+        // Use texture...
+        DestroyTexture(bg);
+    }
+
+SEE ALSO
+    CreateTextureFromDatatype(), CreateTexture(), DestroyTexture(),
+    ZuneDrawTextureTiled()
+
+*****************************************************************************/
+{
+    AROS_LIBFUNC_INIT
+
+    struct IntZuneRendererBase *base = ZRB(ZuneRendererBase);
+    struct ZuneTexture *texture = NULL;
+    Object *dt_obj = NULL;
+    struct Process *myproc;
+    APTR oldwindowptr;
+
+    ENTER_FUNCTION("CreateTextureFromFile");
+
+    // D(bug("ZuneRenderer: CreateTextureFromFile(filename=%s, screen=%p, flags=0x%08x)\n",
+    //       filename ? filename : "(null)", screen, flags));
+
+    if (!filename) {
+        D(bug("ZuneRenderer: CreateTextureFromFile - NULL filename\n"));
+        return NULL;
+    }
+
+    /* Suppress DOS requesters during loading */
+    myproc = (struct Process *)FindTask(NULL);
+    oldwindowptr = myproc->pr_WindowPtr;
+    myproc->pr_WindowPtr = (APTR)-1;
+
+    /* Load the image via DataTypes */
+    dt_obj = NewDTObject((APTR)filename,
+        DTA_SourceType,     DTST_FILE,
+        DTA_GroupID,        GID_PICTURE,
+        OBP_Precision,      PRECISION_EXACT,
+        PDTA_DestMode,      PMODE_V43,
+        PDTA_Remap,         FALSE,          /* We want raw pixels */
+        PDTA_FreeSourceBitMap, TRUE,
+        screen ? PDTA_Screen : TAG_IGNORE, (IPTR)screen,
+        TAG_DONE);
+
+    /* Restore window pointer */
+    myproc->pr_WindowPtr = oldwindowptr;
+
+    if (!dt_obj) {
+        D(bug("ZuneRenderer: CreateTextureFromFile - Failed to load '%s'\n", filename));
+        return NULL;
+    }
+
+    /* Perform layout to make pixel data available */
+    {
+        struct FrameInfo fri = {0};
+        DoMethod(dt_obj, DTM_FRAMEBOX, NULL, (IPTR)&fri, (IPTR)&fri,
+                 sizeof(struct FrameInfo), 0);
+
+        if (fri.fri_Dimensions.Depth > 0) {
+            if (!DoMethod(dt_obj, DTM_PROCLAYOUT, NULL, 1)) {
+                D(bug("ZuneRenderer: CreateTextureFromFile - DTM_PROCLAYOUT failed\n"));
+                DisposeDTObject(dt_obj);
+                return NULL;
+            }
+        }
+    }
+
+    /* Create texture from the DataTypes object */
+    texture = CreateTextureFromDatatypeInternal(dt_obj, flags);
+
+    /* Immediately dispose of the DataTypes object - we have the pixels now */
+    DisposeDTObject(dt_obj);
+    dt_obj = NULL;
+
+    if (texture) {
+        /* Initialize backend if available */
+        ZuneBackend *backend = SelectTextureBackend(texture);
+        if (backend && backend->ops && backend->ops->InitTexture) {
+            if (backend->ops->InitTexture(texture)) {
+                texture->backend_type = backend->ops->type;
+            }
+        }
+        AddTextureToList(base, texture);
+
+        D(bug("ZuneRenderer: CreateTextureFromFile - Success: %dx%d texture from '%s'\n",
+              texture->width, texture->height, filename));
+    } else {
+        D(bug("ZuneRenderer: CreateTextureFromFile - Failed to create texture from '%s'\n",
+              filename));
+    }
+
+    EXIT_FUNCTION("CreateTextureFromFile");
+    return texture;
+
+    AROS_LIBFUNC_EXIT
+}
+
+/*****************************************************************************
+
+    NAME */
 AROS_LH1(void, DestroyTexture,
 
          /*  SYNOPSIS */
          AROS_LHA(struct ZuneTexture *, texture, A0),
 
          /*  LOCATION */
-         struct Library *, ZuneRendererBase, 74, zunerenderer)
+         struct Library *, ZuneRendererBase, 75, zunerenderer)
 
 /*  FUNCTION
     Destroys a texture and frees all associated resources.
@@ -737,10 +892,12 @@ SEE ALSO
 AROS_LH3(BOOL, UpdateTextureData,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct ZuneTexture *, texture, A0), AROS_LHA(APTR, data, A1), AROS_LHA(struct ZuneRect *, rect, A2),
+         AROS_LHA(struct ZuneTexture *, texture, A0),
+         AROS_LHA(APTR, data, A1),
+         AROS_LHA(struct ZuneRect *, rect, A2),
 
          /*  LOCATION */
-         struct Library *, ZuneRendererBase, 76, zunerenderer)
+         struct Library *, ZuneRendererBase, 77, zunerenderer)
 
 /*  FUNCTION
     Updates a rectangular region of texture data.
@@ -825,7 +982,7 @@ AROS_LH2(APTR, LockTexturePixels,
          AROS_LHA(struct ZuneTexture *, texture, A0), AROS_LHA(ULONG *, pitch, A1),
 
          /*  LOCATION */
-         struct Library *, ZuneRendererBase, 77, zunerenderer)
+         struct Library *, ZuneRendererBase, 78, zunerenderer)
 
 /*  FUNCTION
     Locks texture pixels for direct access.
@@ -897,7 +1054,7 @@ AROS_LH1(void, UnlockTexturePixels,
          AROS_LHA(struct ZuneTexture *, texture, A0),
 
          /*  LOCATION */
-         struct Library *, ZuneRendererBase, 78, zunerenderer)
+         struct Library *, ZuneRendererBase, 79, zunerenderer)
 
 /*  FUNCTION
     Unlocks texture pixels previously locked with LockTexturePixels().
@@ -948,7 +1105,7 @@ AROS_LH2(ULONG, GetTexturePixel,
          AROS_LHA(struct ZuneTexture *, texture, A0), AROS_LHA(struct ZunePoint *, point, A1),
 
          /*  LOCATION */
-         struct Library *, ZuneRendererBase, 79, zunerenderer)
+         struct Library *, ZuneRendererBase, 80, zunerenderer)
 
 /*  FUNCTION
     Gets the color value of a pixel in the texture.
@@ -1039,7 +1196,7 @@ AROS_LH3(void, SetTexturePixel,
          AROS_LHA(struct ZuneTexture *, texture, A0), AROS_LHA(struct ZunePoint *, point, A1), AROS_LHA(ULONG, color, D0),
 
          /*  LOCATION */
-         struct Library *, ZuneRendererBase, 80, zunerenderer)
+         struct Library *, ZuneRendererBase, 81, zunerenderer)
 
 /*  FUNCTION
     Sets the color value of a pixel in the texture.
@@ -1138,10 +1295,12 @@ SEE ALSO
 AROS_LH3(void, ZuneDrawTexture,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0), AROS_LHA(struct ZuneTexture *, texture, A1), AROS_LHA(struct ZunePoint *, position, A2),
+         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct ZuneTexture *, texture, A1),
+         AROS_LHA(struct ZunePoint *, position, A2),
 
          /*  LOCATION */
-         struct Library *, ZuneRendererBase, 82, zunerenderer)
+         struct Library *, ZuneRendererBase, 83, zunerenderer)
 
 /*  FUNCTION
     Draws a texture at the specified position.
@@ -1191,10 +1350,12 @@ SEE ALSO
 AROS_LH3(void, ZuneDrawTextureScaled,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0), AROS_LHA(struct ZuneTexture *, texture, A1), AROS_LHA(struct ZuneRect *, dest_rect, A2),
+         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct ZuneTexture *, texture, A1),
+         AROS_LHA(struct ZuneRect *, dest_rect, A2),
 
          /*  LOCATION */
-         struct Library *, ZuneRendererBase, 83, zunerenderer)
+         struct Library *, ZuneRendererBase, 84, zunerenderer)
 
 /*  FUNCTION
     Draws a texture scaled to the specified dimensions.
@@ -1242,11 +1403,13 @@ SEE ALSO
 AROS_LH4(void, ZuneDrawTextureRegion,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0), AROS_LHA(struct ZuneTexture *, texture, A1), AROS_LHA(struct ZuneRect *, src_rect, A2),
+         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct ZuneTexture *, texture, A1),
+         AROS_LHA(struct ZuneRect *, src_rect, A2),
          AROS_LHA(struct ZuneRect *, dest_rect, A3),
 
          /*  LOCATION */
-         struct Library *, ZuneRendererBase, 84, zunerenderer)
+         struct Library *, ZuneRendererBase, 85, zunerenderer)
 
 /*  FUNCTION
     Draws a region of a texture with scaling.
@@ -1305,11 +1468,13 @@ SEE ALSO
 AROS_LH4(void, ZuneDrawTextureTinted,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0), AROS_LHA(struct ZuneTexture *, texture, A1), AROS_LHA(struct ZunePoint *, position, A2),
+         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct ZuneTexture *, texture, A1),
+         AROS_LHA(struct ZunePoint *, position, A2),
          AROS_LHA(ULONG, tint_color, D0),
 
          /*  LOCATION */
-         struct Library *, ZuneRendererBase, 85, zunerenderer)
+         struct Library *, ZuneRendererBase, 86, zunerenderer)
 
 /*  FUNCTION
     Draws a texture with color tinting at the specified position.
@@ -1359,11 +1524,13 @@ SEE ALSO
 AROS_LH4(void, ZuneDrawTextureScaledTinted,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0), AROS_LHA(struct ZuneTexture *, texture, A1), AROS_LHA(struct ZuneRect *, dest_rect, A2),
+         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct ZuneTexture *, texture, A1),
+         AROS_LHA(struct ZuneRect *, dest_rect, A2),
          AROS_LHA(ULONG, tint_color, D0),
 
          /*  LOCATION */
-         struct Library *, ZuneRendererBase, 86, zunerenderer)
+         struct Library *, ZuneRendererBase, 87, zunerenderer)
 
 /*  FUNCTION
     Draws a texture scaled with color tinting.
@@ -1415,11 +1582,14 @@ SEE ALSO
 AROS_LH5(void, ZuneDrawTextureRegionTinted,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0), AROS_LHA(struct ZuneTexture *, texture, A1), AROS_LHA(struct ZuneRect *, src_rect, A2),
-         AROS_LHA(struct ZuneRect *, dest_rect, A3), AROS_LHA(ULONG, tint_color, D0),
+         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct ZuneTexture *, texture, A1),
+         AROS_LHA(struct ZuneRect *, src_rect, A2),
+         AROS_LHA(struct ZuneRect *, dest_rect, A3),
+         AROS_LHA(ULONG, tint_color, D0),
 
          /*  LOCATION */
-         struct Library *, ZuneRendererBase, 87, zunerenderer)
+         struct Library *, ZuneRendererBase, 88, zunerenderer)
 
 /*  FUNCTION
     Draws a region of a texture with scaling and color tinting.
@@ -1482,10 +1652,12 @@ SEE ALSO
 AROS_LH3(void, ZuneDrawTextureTiled,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0), AROS_LHA(struct ZuneTexture *, texture, A1), AROS_LHA(struct ZuneRect *, dest_rect, A2),
+         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct ZuneTexture *, texture, A1),
+         AROS_LHA(struct ZuneRect *, dest_rect, A2),
 
          /*  LOCATION */
-         struct Library *, ZuneRendererBase, 88, zunerenderer)
+         struct Library *, ZuneRendererBase, 89, zunerenderer)
 
 /*  FUNCTION
     Draws a texture tiled across the specified destination rectangle.
@@ -1591,7 +1763,7 @@ AROS_LH1(BOOL, ZuneIsTextureValid,
          AROS_LHA(struct ZuneTexture *, texture, A0),
 
          /*  LOCATION */
-         struct Library *, ZuneRendererBase, 90, zunerenderer)
+         struct Library *, ZuneRendererBase, 91, zunerenderer)
 
 /*  FUNCTION
     Validates that a texture is properly initialized and ready for use.

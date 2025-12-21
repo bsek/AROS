@@ -729,6 +729,7 @@ struct dt_node *dt_load_picture(CONST_STRPTR filename, struct Screen *scr)
         dt_initialized = 1;
     }
 
+    /* Check cache first */
     node = List_First(&dt_list);
     while (node)
     {
@@ -741,63 +742,110 @@ struct dt_node *dt_load_picture(CONST_STRPTR filename, struct Screen *scr)
         node = Node_Next(node);
     }
 
-    if ((node =
-        (struct dt_node *)AllocVec(sizeof(struct dt_node), MEMF_CLEAR)))
+    /* Allocate new node */
+    node = (struct dt_node *)AllocVec(sizeof(struct dt_node), MEMF_CLEAR);
+    if (!node)
     {
-
-        if ((node->filename = StrDup(filename)))
-        {
-            /* create the datatypes object */
-            D(bug("[Zune:DTC] %s: loading %s\n", __func__, filename));
-
-            /* special configuration image for prop gadgets */
-            if ((Stricmp(FilePart(filename), "prop.config") == 0)
-                || (Stricmp(FilePart(filename), "config") == 0))
-            {
-                if (ReadPropConfig(node, scr))
-                {
-
-                    node->mode = MODE_PROP;
-                    node->scr = scr;
-                    node->count = 1;
-                    AddTail((struct List *)&dt_list, (struct Node *)node);
-                    ReleaseSemaphore(&MUIMB(MUIMasterBase)->ZuneSemaphore);
-                    return node;
-                }
-                else
-                {
-                    FreePropConfig(node);
-                }
-            }
-            else
-            {
-                if ((node->o = LoadDTPicture(filename, scr, TRUE, TRUE)))
-                {
-                    struct BitMapHeader *bmhd = NULL;
-                    GetDTAttrs(node->o, PDTA_BitMapHeader, (IPTR) & bmhd,
-                        TAG_DONE);
-                    D(bug("[Zune:DTC] %s: picture @ 0x%p\n", __func__, node->o));
-
-                    if (bmhd)
-                    {
-                        node->width = bmhd->bmh_Width;
-                    node->height = bmhd->bmh_Height;
-                    node->mask = bmhd->bmh_Masking;
-                    node->zune_texture = NULL;
-                        D(bug("[Zune:DTC] %s: picture @ 0x%p = %ldx%ld\n", __func__, node->o,
-                                node->width, node->height));
-                    }
-                    node->scr = scr;
-                    node->count = 1;
-                    AddTail((struct List *)&dt_list, (struct Node *)node);
-                    ReleaseSemaphore(&MUIMB(MUIMasterBase)->ZuneSemaphore);
-                    return node;
-                }
-            }
-            FreeVec(node->filename);
-        }
-        FreeVec(node);
+        ReleaseSemaphore(&MUIMB(MUIMasterBase)->ZuneSemaphore);
+        return NULL;
     }
+
+    node->filename = StrDup(filename);
+    if (!node->filename)
+    {
+        FreeVec(node);
+        ReleaseSemaphore(&MUIMB(MUIMasterBase)->ZuneSemaphore);
+        return NULL;
+    }
+
+    D(bug("[Zune:DTC] %s: loading %s\n", __func__, filename));
+
+    /* Check for special prop gadget configuration */
+    if ((Stricmp(FilePart(filename), "prop.config") == 0)
+        || (Stricmp(FilePart(filename), "config") == 0))
+    {
+        /* Legacy prop gadget path - keep using old system for now */
+        if (ReadPropConfig(node, scr))
+        {
+            node->mode = MODE_PROP;
+            node->scr = scr;
+            node->count = 1;
+            node->texture = NULL;
+            node->o = NULL;
+            node->bfi = NULL;
+            AddTail((struct List *)&dt_list, (struct Node *)node);
+            ReleaseSemaphore(&MUIMB(MUIMasterBase)->ZuneSemaphore);
+            return node;
+        }
+        else
+        {
+            FreePropConfig(node);
+            FreeVec(node->filename);
+            FreeVec(node);
+            ReleaseSemaphore(&MUIMB(MUIMasterBase)->ZuneSemaphore);
+            return NULL;
+        }
+    }
+
+    /* 
+     * New path: Load directly as ZuneTexture via CreateTextureFromFile.
+     * This avoids keeping the DataTypes object around.
+     */
+    node->texture = CreateTextureFromFile(filename, scr, 
+                                          ZUNE_TEXTURE_WRAPPING | ZUNE_TEXTURE_ALPHA);
+    
+    if (node->texture)
+    {
+        node->mode = MODE_DEFAULT;
+        node->scr = scr;
+        node->count = 1;
+        node->o = NULL;         /* No DataTypes object needed */
+        node->bfi = NULL;       /* No legacy tiling cache needed */
+        node->mask = (node->texture->flags & ZUNE_TEXTURE_ALPHA) ? mskHasAlpha : 0;
+        
+        D(bug("[Zune:DTC] %s: loaded texture %dx%d from %s\n", __func__,
+              node->texture->width, node->texture->height, filename));
+        
+        AddTail((struct List *)&dt_list, (struct Node *)node);
+        ReleaseSemaphore(&MUIMB(MUIMasterBase)->ZuneSemaphore);
+        return node;
+    }
+
+    /* 
+     * Fallback: Try legacy DataTypes path if ZuneTexture creation failed.
+     * This ensures backwards compatibility with edge cases.
+     */
+    D(bug("[Zune:DTC] %s: ZuneTexture failed, trying legacy path for %s\n", 
+          __func__, filename));
+    
+    node->o = LoadDTPicture(filename, scr, TRUE, TRUE);
+    if (node->o)
+    {
+        struct BitMapHeader *bmhd = NULL;
+        GetDTAttrs(node->o, PDTA_BitMapHeader, (IPTR)&bmhd, TAG_DONE);
+        
+        if (bmhd)
+        {
+            node->mask = bmhd->bmh_Masking;
+        }
+        
+        node->mode = MODE_DEFAULT;
+        node->scr = scr;
+        node->count = 1;
+        node->texture = NULL;
+        node->bfi = NULL;
+        
+        D(bug("[Zune:DTC] %s: legacy load succeeded for %s\n", __func__, filename));
+        
+        AddTail((struct List *)&dt_list, (struct Node *)node);
+        ReleaseSemaphore(&MUIMB(MUIMasterBase)->ZuneSemaphore);
+        return node;
+    }
+
+    /* Both paths failed */
+    D(bug("[Zune:DTC] %s: failed to load %s\n", __func__, filename));
+    FreeVec(node->filename);
+    FreeVec(node);
     ReleaseSemaphore(&MUIMB(MUIMasterBase)->ZuneSemaphore);
     return NULL;
 }
@@ -811,20 +859,38 @@ void dt_dispose_picture(struct dt_node *node)
         if (!node->count)
         {
             Remove((struct Node *)node);
+            
+            /* Free legacy tiling cache if present */
             if (node->bfi != NULL)
             {
                 if (node->bfi->BitMap != NULL)
                     FreeBitMap(node->bfi->BitMap);
                 FreeVec(node->bfi);
+                node->bfi = NULL;
             }
+            
+            /* Free based on mode */
             if (node->mode == MODE_PROP)
+            {
                 FreePropConfig(node);
-            else
-                DisposeDTObject(node->o);
-            if (node->zune_texture) {
-                DestroyTexture(node->zune_texture);
-                node->zune_texture = NULL;
             }
+            else
+            {
+                /* Free ZuneTexture (new path) */
+                if (node->texture)
+                {
+                    DestroyTexture(node->texture);
+                    node->texture = NULL;
+                }
+                
+                /* Free legacy DataTypes object (fallback path) */
+                if (node->o)
+                {
+                    DisposeDTObject(node->o);
+                    node->o = NULL;
+                }
+            }
+            
             FreeVec(node->filename);
             FreeVec(node);
         }
@@ -834,18 +900,51 @@ void dt_dispose_picture(struct dt_node *node)
 
 int dt_width(struct dt_node *node)
 {
-    if (node)
-        return node->width;
-    else
+    if (!node)
         return 0;
+    
+    /* New path: Get dimensions from ZuneTexture */
+    if (node->texture)
+        return node->texture->width;
+    
+    /* Legacy path: Get from DataTypes object */
+    if (node->o)
+    {
+        struct BitMapHeader *bmhd = NULL;
+        GetDTAttrs(node->o, PDTA_BitMapHeader, (IPTR)&bmhd, TAG_DONE);
+        if (bmhd)
+            return bmhd->bmh_Width;
+    }
+    
+    return 0;
 }
 
 int dt_height(struct dt_node *node)
 {
-    if (node)
-        return node->height;
-    else
+    if (!node)
         return 0;
+    
+    /* New path: Get dimensions from ZuneTexture */
+    if (node->texture)
+        return node->texture->height;
+    
+    /* Legacy path: Get from DataTypes object */
+    if (node->o)
+    {
+        struct BitMapHeader *bmhd = NULL;
+        GetDTAttrs(node->o, PDTA_BitMapHeader, (IPTR)&bmhd, TAG_DONE);
+        if (bmhd)
+            return bmhd->bmh_Height;
+    }
+    
+    return 0;
+}
+
+struct ZuneTexture *dt_get_texture(struct dt_node *node)
+{
+    if (!node)
+        return NULL;
+    return node->texture;
 }
 
 void dt_put_on_rastport(struct dt_node *node, struct RastPort *rp, int x,

@@ -51,7 +51,7 @@ void CybergfxDrawRectangleToLockedDrawingBoard(struct RenderPort *renderport,
     ULONG pitch_pixels = board->pitch / 4;
 
     /* Fast path for solid color brushes */
-    if (fill_brush->type == ZUNE_BRUSH_TYPE_SOLID) {
+    if (fill_brush->type == ZUNE_BRUSH_TYPE_SOLID || fill_brush->type == ZUNE_BRUSH_TYPE_PEN) {
       /* Use pack_argb32 for correct format when writing directly to memory */
       ULONG fill_pixel = pack_argb32(255, fill_brush->internal.color->r,
                                      fill_brush->internal.color->g,

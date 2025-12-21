@@ -44,6 +44,9 @@
 #include "penspec.h"
 #include "imspec_intern.h"
 
+#include <proto/zunerenderer.h>
+#include <libraries/zunerenderer.h>
+
 extern struct Library *MUIMasterBase;
 
 static struct MUI_ImageSpec_intern *get_brush_imspec(CONST_STRPTR filename);
@@ -821,33 +824,63 @@ void zune_imspec_drawbuffered(struct MUI_ImageSpec_intern *spec,
             state = 0;
         if (spec->u.brush.dt[state])
         {
+            struct dt_node *node = spec->u.brush.dt[state];
             const char *straddr;
             long len;
             straddr = *(spec->u.brush.filename);
             len = strlen(straddr);
-            if (len > 4)
+            
+            /* Handle .mim (multi-image) files specially */
+            if (len > 4 && strcmp(&straddr[len - 4], ".mim") == 0)
             {
-                if (strcmp(&straddr[len - 4], ".mim") == 0)
-                {
-                    dt_put_mim_on_rastport(spec->u.brush.dt[0],
-                        mri->mri_RastPort, left - dx, top - dy, state);
-                    break;
-                }
+                dt_put_mim_on_rastport(spec->u.brush.dt[0],
+                    mri->mri_RastPort, left - dx, top - dy, state);
+                break;
             }
-            dt_put_on_rastport(spec->u.brush.dt[state], mri->mri_RastPort,
-                left - dx, top - dy);
-            /*              dt_put_on_rastport_tiled(spec->u.brush.dt[state], mri->mri_RastPort, */
-            /*                                       left, top, right, bottom, */
-            /*                                       xoffset - left, yoffset - top); */
+            
+            /* New path: Use ZuneTexture directly if available */
+            struct ZuneTexture *tex = dt_get_texture(node);
+            if (tex && mri->mri_RenderPort)
+            {
+                struct ZunePoint pos = {
+                    .x = left - dx,
+                    .y = top - dy
+                };
+                ZuneDrawTexture(mri->mri_RenderPort, tex, &pos);
+            }
+            else
+            {
+                /* Legacy fallback */
+                dt_put_on_rastport(node, mri->mri_RastPort,
+                    left - dx, top - dy);
+            }
         }
         break;
 
     case IST_BITMAP:
         if (spec->u.bitmap.dt)
         {
-            dt_put_on_rastport_tiled(spec->u.bitmap.dt, rp,
-                left - dx, top - dy, right - dx, bottom - dy,
-                xoffset - left, yoffset - top);
+            struct dt_node *node = spec->u.bitmap.dt;
+            struct ZuneTexture *tex = dt_get_texture(node);
+            
+            /* New path: Use ZuneTexture directly if available */
+            if (tex && mri->mri_RenderPort)
+            {
+                struct ZuneRect dest = {
+                    .x = left - dx,
+                    .y = top - dy,
+                    .width = right - left + 1,
+                    .height = bottom - top + 1
+                };
+                ZuneDrawTextureTiled(mri->mri_RenderPort, tex, &dest);
+            }
+            else
+            {
+                /* Legacy fallback */
+                dt_put_on_rastport_tiled(node, rp,
+                    left - dx, top - dy, right - dx, bottom - dy,
+                    xoffset - left, yoffset - top);
+            }
         }
         break;
 

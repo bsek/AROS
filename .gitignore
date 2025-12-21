@@ -19,7 +19,7 @@
 /.vscode
 /.clangd
 /.clang-format
-
+/.zed/
 # /arch/.unmaintained/amiga/workbench/hidds/graphics/intuition/
 /arch/.unmaintained/amiga/workbench/hidds/graphics/intuition/*.bak
 /arch/.unmaintained/amiga/workbench/hidds/graphics/intuition/mmakefile

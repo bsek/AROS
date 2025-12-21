@@ -162,7 +162,8 @@ void CybergfxDrawRoundedRectangleToRasterPort(struct RenderPort *renderport, str
                     /* Sample brush for gradient/pattern */
                     UBYTE fc_r, fc_g, fc_b, fc_a;
                     SampleBrush(fill_brush, x, y, width, height, px, py, &fc_r, &fc_g, &fc_b, &fc_a);
-                    row_buffer[buf_x] = pack_argb32(0xFF, fc_r, fc_g, fc_b);
+                    /* Use logical format for WritePixelArray with CYBERGFX_PIXELFORMAT_ARGB32 */
+                    row_buffer[buf_x] = pack_argb32_logical(0xFF, fc_r, fc_g, fc_b);
                 }
                 pixel_mask[buf_x] = 1;
             }

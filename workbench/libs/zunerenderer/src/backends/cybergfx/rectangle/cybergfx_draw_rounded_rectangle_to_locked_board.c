@@ -38,7 +38,7 @@ void CybergfxDrawRoundedRectangleToLockedDrawingBoard(struct RenderPort *rp, UWO
     /* Get fill color for solid brushes */
     ULONG fill_color = 0;
     BOOL solid_fill = FALSE;
-    if (filled && fill_brush && fill_brush->type == ZUNE_BRUSH_TYPE_SOLID) {
+    if (filled && fill_brush && (fill_brush->type == ZUNE_BRUSH_TYPE_SOLID || fill_brush->type == ZUNE_BRUSH_TYPE_PEN)) {
         /* Use pack_argb32 for correct format when writing directly to memory */
         fill_color = pack_argb32(255, fill_brush->internal.color->r,
                                  fill_brush->internal.color->g,

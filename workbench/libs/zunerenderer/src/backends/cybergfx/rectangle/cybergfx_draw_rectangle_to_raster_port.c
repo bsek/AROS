@@ -93,7 +93,8 @@ void CybergfxDrawRectangleToRasterPort(struct RenderPort *renderport,
                       &fc_g, &fc_b, &fc_a);
 
           /* Write opaque pixel directly (no alpha blending) */
-          row_buffer[px] = pack_argb32(0xFF, fc_r, fc_g, fc_b);
+          /* Use logical format for WritePixelArray with CYBERGFX_PIXELFORMAT_ARGB32 */
+          row_buffer[px] = pack_argb32_logical(0xFF, fc_r, fc_g, fc_b);
         }
 
         /* Write the entire row to the raster port */

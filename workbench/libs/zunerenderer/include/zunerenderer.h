@@ -616,6 +616,9 @@ struct ZuneTexture *CreateTextureFromData(APTR data, UWORD width, UWORD height,
 struct ZuneTexture *CreateTextureFromDrawingBoard(struct RenderPort *rp,
                                                   ULONG flags);
 struct ZuneTexture *CreateTextureFromDatatype(APTR dt_object, ULONG flags);
+struct ZuneTexture *CreateTextureFromFile(CONST_STRPTR filename, 
+                                          struct Screen *screen, 
+                                          ULONG flags);
 void DestroyTexture(struct ZuneTexture *texture);
 
 /*****************************************************************************/

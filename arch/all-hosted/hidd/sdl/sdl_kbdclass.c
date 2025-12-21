@@ -72,7 +72,7 @@ VOID SDLKbd__Hidd_Kbd_SDL__HandleEvent(OOP_Class *cl, OOP_Object *o, struct pHid
         kEvt.kbdevt |= IECODE_UP_PREFIX;
 
     if (kbddata->callback != NULL)
-        kbddata->callback(kbddata->callbackdata, &kEvt);
+        kbddata->callback(kbddata->callbackdata, (ULONG)&kEvt);
 }
 
 VOID Hidd_Kbd_SDL_HandleEvent(OOP_Object *o, SDL_Event *e) {

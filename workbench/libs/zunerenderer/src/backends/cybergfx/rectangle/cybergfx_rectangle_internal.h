@@ -17,6 +17,7 @@
 #include "../../backend_interface.h"
 #include "../cybergfx_antialiasing.h"
 #include "../cybergfx_backend.h"
+#include "../cybergfx_pixel_format.h"
 #include "../cybergfx_simd.h"
 
 void CybergfxDrawRoundedRectangleToLockedDrawingBoard(struct RenderPort *renderport, UWORD x, UWORD y, UWORD width, UWORD height, UBYTE border_width,

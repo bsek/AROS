@@ -199,6 +199,8 @@ struct MUI_SystemPData
     Object *arexx_checkmark;
     Object *first_bubble_slider;
     Object *next_bubble_slider;
+    Object *antialias_checkmark;
+    Object *doublebuffer_checkmark;
     struct Hook psiHook;
 };
 
@@ -230,8 +232,8 @@ static IPTR SystemP_New(struct IClass *cl, Object *obj, struct opSet *msg)
     (
         cl, obj, NULL,
         
-        MUIA_Group_Columns, 2,
-        MUIA_Group_SameSize, TRUE,
+        Child, (IPTR) ColGroup(2),
+            MUIA_Group_SameSize, TRUE,
 
         Child, (IPTR) VGroup,
             GroupFrameT(_(MSG_PUBLIC_SCREEN)),
@@ -300,6 +302,27 @@ static IPTR SystemP_New(struct IClass *cl, Object *obj, struct opSet *msg)
                 Child, (IPTR) Label1(_(MSG_NEXT_BUBBLE)),
                 Child, (IPTR) (d.next_bubble_slider = NewObject(BubbleSlider_CLASS->mcc_Class, NULL, MUIA_Numeric_Min, 0, MUIA_Numeric_Max, 50, TAG_END)),
                 End,
+
+            End,  /* ColGroup(2) */
+
+        Child, (IPTR) VGroup,
+            GroupFrameT("Renderer"),
+            MUIA_Group_VertSpacing, 0,
+            Child, (IPTR) VSpace(0),
+            Child, (IPTR) HGroup,
+                Child, HSpace(0),
+                Child, (IPTR) Label1("Anti-aliasing"),
+                Child, (IPTR) (d.antialias_checkmark = MakeCheck(NULL)),
+                Child, HSpace(0),
+                End,
+            Child, (IPTR) HGroup,
+                Child, HSpace(0),
+                Child, (IPTR) Label1("Double buffering"),
+                Child, (IPTR) (d.doublebuffer_checkmark = MakeCheck(NULL)),
+                Child, HSpace(0),
+                End,
+            Child, (IPTR) VSpace(0),
+            End,
             Child, (IPTR) VSpace(0),
             End,
 
@@ -341,6 +364,8 @@ static IPTR SystemP_ConfigToGadgets(struct IClass *cl, Object *obj,
     ConfigToCheckmark(msg->configdata, MUICFG_Interfaces_EnableARexx, data->arexx_checkmark);
     ConfigToSlider(msg->configdata, MUICFG_BubbleHelp_FirstDelay, data->first_bubble_slider);
     ConfigToSlider(msg->configdata, MUICFG_BubbleHelp_NextDelay, data->next_bubble_slider);
+    ConfigToCheckmark(msg->configdata, MUICFG_Renderer_Antialias, data->antialias_checkmark);
+    ConfigToCheckmark(msg->configdata, MUICFG_Renderer_DoubleBuffer, data->doublebuffer_checkmark);
 
     return 1;
 }
@@ -360,6 +385,8 @@ static IPTR SystemP_GadgetsToConfig(struct IClass *cl, Object *obj,
     CheckmarkToConfig(data->arexx_checkmark, msg->configdata, MUICFG_Interfaces_EnableARexx);
     SliderToConfig(data->first_bubble_slider, msg->configdata, MUICFG_BubbleHelp_FirstDelay);
     SliderToConfig(data->next_bubble_slider, msg->configdata, MUICFG_BubbleHelp_NextDelay);
+    CheckmarkToConfig(data->antialias_checkmark, msg->configdata, MUICFG_Renderer_Antialias);
+    CheckmarkToConfig(data->doublebuffer_checkmark, msg->configdata, MUICFG_Renderer_DoubleBuffer);
     
     return TRUE;
 }

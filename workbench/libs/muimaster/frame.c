@@ -243,14 +243,15 @@ static BOOL frame_renderer_background_to_brush(struct MUI_ImageSpec_intern *back
         BOOL cached = FALSE;
         struct ZuneTexture *tex = NULL;
 
-        if (node->zune_texture) {
-            tex = node->zune_texture;
+        if (node->texture) {
+            tex = node->texture;
             tex->ref_count++; /* retain while brush is in use */
             cached = TRUE;
         } else if (node->o) {
+            /* Legacy fallback: create texture from DataTypes object */
             tex = CreateTextureFromDatatype((APTR)node->o, ZUNE_TEXTURE_WRAPPING);
             if (tex) {
-                node->zune_texture = tex;
+                node->texture = tex;
                 tex->ref_count++; /* retain while brush is in use */
             }
         }
@@ -1052,7 +1053,7 @@ static BOOL rect_draw_with_zunerenderer(struct MUI_RenderInfo *mri, int left,
     };
 
     ZuneDrawRectangleOutline(mri->mri_RenderPort, &rect, border_color);
-    
+
     return TRUE;
 }
 
@@ -1067,7 +1068,7 @@ static void frame_white_rect_draw(struct dt_frame_image *fi,
     /* Try zunerenderer first, fallback to classic rendering */
     if (rect_draw_with_zunerenderer(mri, left, top, width, height, MPEN_SHINE))
         return;
-    
+
     rect_draw(fi, mri, left, top, width, height, MPEN_SHINE);
 }
 
@@ -1082,7 +1083,7 @@ static void frame_black_rect_draw(struct dt_frame_image *fi,
     /* Try zunerenderer first, fallback to classic rendering */
     if (rect_draw_with_zunerenderer(mri, left, top, width, height, MPEN_SHADOW))
         return;
-    
+
     rect_draw(fi, mri, left, top, width, height, MPEN_SHADOW);
 }
 
@@ -1257,53 +1258,6 @@ static void frame_thick_border_down_draw(struct dt_frame_image *fi,
 /**************************************************************************
  5 : FST_ROUND_BEVEL
 **************************************************************************/
-/**
- * Helper function to draw rounded bevel using zunerenderer
- * Since zunerenderer doesn't support two-color borders directly, we use
- * a single color approach when both pens are the same, or fallback otherwise
- */
-static BOOL round_bevel_draw_with_zunerenderer(struct MUI_RenderInfo *mri,
-                                               int left, int top, int width,
-                                               int height, MPen ul, MPen lr)
-{
-    if (!frame_renderer_can_use_zunerenderer(mri))
-        return FALSE;
-
-    if (width <= 8 || height <= 4)
-        return FALSE;
-
-    if ((ULONG)width > 0xFFFF || (ULONG)height > 0xFFFF)
-        return FALSE;
-
-    /* For now, only handle single-color borders with zunerenderer */
-    /* Two-color 3D effect requires fallback to classic rendering */
-    if (ul != lr)
-        return FALSE;
-
-    LONG pen_index = mri->mri_Pens[ul];
-    if (pen_index < 0 || !mri->mri_Colormap)
-        return FALSE;
-
-    ULONG rgb[3];
-    GetRGB32(mri->mri_Colormap, pen_index, 1, rgb);
-    ULONG border_color = ZUNE_COLOR_ARGB32(0xFF, rgb[0] >> 24, rgb[1] >> 24, rgb[2] >> 24);
-
-    /* Use corner radius of 2 pixels for round bevel (from __builtinFrameGfx) */
-    UBYTE radius = 2;
-    UBYTE border_width = 2;
-
-    struct ZuneRect rect = {
-        .x = (WORD)left,
-        .y = (WORD)top,
-        .width = (UWORD)width,
-        .height = (UWORD)height,
-    };
-
-    ZuneDrawRectangleRoundedOutlineStyledAA(mri->mri_RenderPort, &rect, radius,
-                                            border_width, border_color);
-
-    return TRUE;
-}
 
 /**
  * Draw a rounded bevel frame
@@ -1315,10 +1269,6 @@ static void round_bevel_draw(struct dt_frame_image *fi,
                              int width, int height, MPen ul, MPen lr)
 {
     struct RastPort *rp = mri->mri_RastPort;
-
-    /* Try zunerenderer first for single-color borders */
-    if (round_bevel_draw_with_zunerenderer(mri, left, top, width, height, ul, lr))
-        return;
 
     /* Fallback to classic rendering for two-color 3D effect */
     if (width <= 8 || height <= 4)
@@ -1421,53 +1371,6 @@ static void frame_border_button_down_draw(struct dt_frame_image *fi,
 /**************************************************************************
  7 : FST_ROUND_THICK_BORDER
 **************************************************************************/
-/**
- * Helper function to draw rounded thick border using zunerenderer
- * Only handles single-color case (when all pens are the same)
- */
-static BOOL round_thick_border_draw_with_zunerenderer(struct MUI_RenderInfo *mri,
-                                                      int left, int top, int width,
-                                                      int height, MPen pen1,
-                                                      MPen pen2, MPen pen3,
-                                                      MPen pen4, MPen pen5)
-{
-    if (!frame_renderer_can_use_zunerenderer(mri))
-        return FALSE;
-
-    if (width <= 8 || height <= 8)
-        return FALSE;
-
-    if ((ULONG)width > 0xFFFF || (ULONG)height > 0xFFFF)
-        return FALSE;
-
-    /* Only handle single-color borders - multi-pen gradients require fallback */
-    if (pen1 != pen2 || pen1 != pen3 || pen1 != pen4 || pen1 != pen5)
-        return FALSE;
-
-    LONG pen_index = mri->mri_Pens[pen1];
-    if (pen_index < 0 || !mri->mri_Colormap)
-        return FALSE;
-
-    ULONG rgb[3];
-    GetRGB32(mri->mri_Colormap, pen_index, 1, rgb);
-    ULONG border_color = ZUNE_COLOR_ARGB32(0xFF, rgb[0] >> 24, rgb[1] >> 24, rgb[2] >> 24);
-
-    /* Use corner radius of 3 and border width of 4 (from __builtinFrameGfx) */
-    UBYTE radius = 3;
-    UBYTE border_width = 4;
-
-    struct ZuneRect rect = {
-        .x = (WORD)left,
-        .y = (WORD)top,
-        .width = (UWORD)width,
-        .height = (UWORD)height,
-    };
-
-    ZuneDrawRectangleRoundedOutlineStyledAA(mri->mri_RenderPort, &rect, radius,
-                                            border_width, border_color);
-
-    return TRUE;
-}
 
 static void round_thick_border_draw(struct dt_frame_image *fi,
                                     struct MUI_RenderInfo *mri, int left,
@@ -1476,11 +1379,6 @@ static void round_thick_border_draw(struct dt_frame_image *fi,
                                     MPen pen5)
 {
     struct RastPort *rp = mri->mri_RastPort;
-
-    /* Try zunerenderer first for single-color borders */
-    if (round_thick_border_draw_with_zunerenderer(mri, left, top, width, height,
-                                                   pen1, pen2, pen3, pen4, pen5))
-        return;
 
     /* Fallback to classic rendering for multi-color gradient effect */
 
@@ -1540,53 +1438,6 @@ static void frame_round_thick_border_down_draw(struct dt_frame_image *fi,
 /**************************************************************************
  8 : FST_ROUND_THIN_BORDER
 **************************************************************************/
-/**
- * Helper function to draw rounded thin border using zunerenderer
- * Only handles single-color case (when all pens are the same)
- */
-static BOOL round_thin_border_draw_with_zunerenderer(struct MUI_RenderInfo *mri,
-                                                     int left, int top, int width,
-                                                     int height, MPen pen1,
-                                                     MPen pen2, MPen pen3,
-                                                     MPen pen4, MPen pen5)
-{
-    if (!frame_renderer_can_use_zunerenderer(mri))
-        return FALSE;
-
-    if (width <= 6 || height <= 6)
-        return FALSE;
-
-    if ((ULONG)width > 0xFFFF || (ULONG)height > 0xFFFF)
-        return FALSE;
-
-    /* Only handle single-color borders - multi-pen gradients require fallback */
-    if (pen1 != pen2 || pen1 != pen3 || pen1 != pen4 || pen1 != pen5)
-        return FALSE;
-
-    LONG pen_index = mri->mri_Pens[pen1];
-    if (pen_index < 0 || !mri->mri_Colormap)
-        return FALSE;
-
-    ULONG rgb[3];
-    GetRGB32(mri->mri_Colormap, pen_index, 1, rgb);
-    ULONG border_color = ZUNE_COLOR_ARGB32(0xFF, rgb[0] >> 24, rgb[1] >> 24, rgb[2] >> 24);
-
-    /* Use corner radius of 2 and border width of 2 (from __builtinFrameGfx) */
-    UBYTE radius = 2;
-    UBYTE border_width = 2;
-
-    struct ZuneRect rect = {
-        .x = (WORD)left,
-        .y = (WORD)top,
-        .width = (UWORD)width,
-        .height = (UWORD)height,
-    };
-
-    ZuneDrawRectangleRoundedOutlineStyledAA(mri->mri_RenderPort, &rect, radius,
-                                            border_width, border_color);
-
-    return TRUE;
-}
 
 /**
  * Draw a rounded thin border - complex multi-pen effect
@@ -1598,11 +1449,6 @@ static void round_thin_border_draw(struct dt_frame_image *fi,
                                    MPen pen2, MPen pen3, MPen pen4, MPen pen5)
 {
     struct RastPort *rp = mri->mri_RastPort;
-
-    /* Try zunerenderer first for single-color borders */
-    if (round_thin_border_draw_with_zunerenderer(mri, left, top, width, height,
-                                                  pen1, pen2, pen3, pen4, pen5))
-        return;
 
     /* Fallback to classic rendering for multi-color gradient effect */
     if (width <= 6 || height <= 6)
