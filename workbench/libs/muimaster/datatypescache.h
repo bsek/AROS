@@ -1,5 +1,5 @@
 /*
-    Copyright  2002, The AROS Development Team. 
+    Copyright  2002-2025, The AROS Development Team. 
     All rights reserved.
     
 */
@@ -43,18 +43,29 @@ struct dt_frame_image
     short frame_width;      /* Border width for clipping calculations */
 };
 
+/*
+ * Cached image/texture node.
+ * 
+ * For MODE_DEFAULT: Uses ZuneTexture directly (no DataTypes object kept).
+ * For MODE_PROP: Uses legacy NewImage structures for prop gadget rendering.
+ */
 struct dt_node
 {
     struct MinNode node;
     char *filename;
-    Object *o;
-    struct ZuneTexture *zune_texture; /* Cached texture for Zune brushes */
-    int width, height;
     struct Screen *scr;
-    int count;
-    struct BackFillInfo *bfi;
-    UBYTE mask;
-    UWORD mode;
+    int count;                          /* Reference count */
+    UWORD mode;                         /* MODE_DEFAULT or MODE_PROP */
+
+    /* MODE_DEFAULT: ZuneTexture-based rendering (new path) */
+    struct ZuneTexture *texture;        /* Primary storage - loaded via CreateTextureFromFile */
+
+    /* Legacy fields for backwards compatibility during transition */
+    Object *o;                          /* DataTypes object (legacy, NULL for new path) */
+    struct BackFillInfo *bfi;           /* Legacy tiling cache (unused with ZuneTexture) */
+    UBYTE mask;                         /* mskHasAlpha etc. (legacy) */
+
+    /* MODE_PROP only: Prop gadget images and configuration */
     struct NewImage *img_verticalcontainer;
     struct NewImage *img_verticalknob;
     struct NewImage *img_horizontalcontainer;
@@ -80,7 +91,6 @@ struct dt_node
     int KnobHorGripper_o, KnobHorGripper_s;
     int KnobTileRight_o, KnobTileRight_s;
     int KnobRight_o, KnobRight_s;
-
 };
 
 void DisposeImageContainer(struct NewImage *ni);
@@ -103,6 +113,12 @@ void dt_put_on_rastport_quicktiled(struct RastPort *rp,
 struct dt_frame_image *load_custom_frame(CONST_STRPTR filename,
     struct Screen *scr);
 void dispose_custom_frame(struct dt_frame_image *fi);
+
+/* Get ZuneTexture from dt_node (returns NULL if using legacy path) */
+struct ZuneTexture *dt_get_texture(struct dt_node *node);
+
+/* Check if node uses new ZuneTexture path */
+#define DT_HAS_TEXTURE(node) ((node) && (node)->texture != NULL)
 
 #if AROS_BIG_ENDIAN
 #define GET_A(rgb) ((rgb >> 24) & 0xff)

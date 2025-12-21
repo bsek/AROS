@@ -499,7 +499,7 @@ AROS_LH3(void, ZuneInitPenCache,
          AROS_LHA(UWORD, count, D0),
 
          /*  LOCATION */
-         struct Library *, ZuneRendererBase, 95, zunerenderer)
+         struct Library *, ZuneRendererBase, 96, zunerenderer)
 
 /*  FUNCTION
     Pre-initializes the pen color cache with a list of pen indices.
