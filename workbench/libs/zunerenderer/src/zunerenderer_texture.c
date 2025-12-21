@@ -262,9 +262,11 @@ static struct ZuneTexture *CreateTextureFromDatatypeInternal(APTR dt_handle, ULO
         tex_w = bmhd->bmh_Width;
         tex_h = bmhd->bmh_Height;
         mask = bmhd->bmh_Masking;
+        D(bug("ZuneRenderer: CreateTextureFromDatatype - from bmhd: %dx%d, mask=%d\n", tex_w, tex_h, mask));
     } else if (bm) {
         tex_w = GetBitMapAttr(bm, BMA_WIDTH);
         tex_h = GetBitMapAttr(bm, BMA_HEIGHT);
+        D(bug("ZuneRenderer: CreateTextureFromDatatype - from bitmap: %dx%d\n", tex_w, tex_h));
     }
 
     if (tex_w <= 0 || tex_h <= 0) {
@@ -291,6 +293,11 @@ static struct ZuneTexture *CreateTextureFromDatatypeInternal(APTR dt_handle, ULO
     pa.pbpa_Height = tex_h;
 
     DoMethodA(dt_obj, (Msg)&pa);
+
+    D(bug("ZuneRenderer: CreateTextureFromDatatype - after PDTM_READPIXELARRAY:\n"));
+    D(bug("  First 4 pixels: %08lx %08lx %08lx %08lx\n", 
+          (unsigned long)pixels[0], (unsigned long)pixels[1], 
+          (unsigned long)pixels[2], (unsigned long)pixels[3]));
 
     /* 
      * Fix alpha channel for images without alpha.
@@ -740,15 +747,12 @@ SEE ALSO
     oldwindowptr = myproc->pr_WindowPtr;
     myproc->pr_WindowPtr = (APTR)-1;
 
-    /* Load the image via DataTypes */
+    /* Load the image via DataTypes - match working legacy code from datatypescache.c */
     dt_obj = NewDTObject((APTR)filename,
         DTA_SourceType,     DTST_FILE,
         DTA_GroupID,        GID_PICTURE,
-        OBP_Precision,      PRECISION_EXACT,
-        PDTA_DestMode,      PMODE_V43,
         PDTA_Remap,         FALSE,          /* We want raw pixels */
-        PDTA_FreeSourceBitMap, TRUE,
-        screen ? PDTA_Screen : TAG_IGNORE, (IPTR)screen,
+        PDTA_DestMode,      PMODE_V43,
         TAG_DONE);
 
     /* Restore window pointer */
@@ -757,21 +761,6 @@ SEE ALSO
     if (!dt_obj) {
         D(bug("ZuneRenderer: CreateTextureFromFile - Failed to load '%s'\n", filename));
         return NULL;
-    }
-
-    /* Perform layout to make pixel data available */
-    {
-        struct FrameInfo fri = {0};
-        DoMethod(dt_obj, DTM_FRAMEBOX, NULL, (IPTR)&fri, (IPTR)&fri,
-                 sizeof(struct FrameInfo), 0);
-
-        if (fri.fri_Dimensions.Depth > 0) {
-            if (!DoMethod(dt_obj, DTM_PROCLAYOUT, NULL, 1)) {
-                D(bug("ZuneRenderer: CreateTextureFromFile - DTM_PROCLAYOUT failed\n"));
-                DisposeDTObject(dt_obj);
-                return NULL;
-            }
-        }
     }
 
     /* Create texture from the DataTypes object */
