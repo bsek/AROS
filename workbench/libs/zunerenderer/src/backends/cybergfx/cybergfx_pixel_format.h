@@ -11,6 +11,7 @@
 #ifndef CYBERGFX_PIXEL_FORMAT_H
 #define CYBERGFX_PIXEL_FORMAT_H
 
+#include <aros/cpu.h>
 #include <exec/types.h>
 
 /**
@@ -93,6 +94,86 @@ static inline void unpack_argb32_logical(ULONG pixel, UBYTE *a, UBYTE *r, UBYTE 
     *r = (pixel >> 16) & 0xFF;
     *g = (pixel >> 8) & 0xFF;
     *b = pixel & 0xFF;
+}
+
+/**
+ * blend_argb32
+ *
+ * Alpha blends a source pixel over a destination pixel using integer math.
+ * Uses the standard Porter-Duff "source over" compositing operation:
+ *   out = src * src_alpha + dst * (1 - src_alpha)
+ *
+ * Uses fixed-point arithmetic (scale to 0-256) for efficient integer blending.
+ *
+ * Parameters:
+ *   dst_pixel: Destination pixel in native ARGB32 format
+ *   src_pixel: Source pixel in native ARGB32 format
+ *
+ * Returns:
+ *   Blended pixel in native ARGB32 format
+ */
+static inline ULONG blend_argb32(ULONG dst_pixel, ULONG src_pixel) {
+    UBYTE src_a, src_r, src_g, src_b;
+    UBYTE dst_a, dst_r, dst_g, dst_b;
+    
+    unpack_argb32(src_pixel, &src_a, &src_r, &src_g, &src_b);
+    
+    /* Fast path: fully transparent source - return destination unchanged */
+    if (src_a == 0)
+        return dst_pixel;
+    
+    /* Fast path: fully opaque source - return source */
+    if (src_a == 255)
+        return src_pixel;
+    
+    unpack_argb32(dst_pixel, &dst_a, &dst_r, &dst_g, &dst_b);
+    
+    /* Fixed-point blending: scale alpha to 0-256 for efficient integer math */
+    unsigned int alpha = src_a + 1;  /* 1-256 range avoids divide by 255 */
+    unsigned int inv_alpha = 257 - alpha;  /* Complementary for 256 total */
+    
+    UBYTE out_r = (UBYTE)((alpha * src_r + inv_alpha * dst_r) >> 8);
+    UBYTE out_g = (UBYTE)((alpha * src_g + inv_alpha * dst_g) >> 8);
+    UBYTE out_b = (UBYTE)((alpha * src_b + inv_alpha * dst_b) >> 8);
+    UBYTE out_a = 255;  /* Result is fully opaque after blending */
+    
+    return pack_argb32(out_a, out_r, out_g, out_b);
+}
+
+/**
+ * blend_argb32_alpha
+ *
+ * Alpha blends source color components over a destination pixel.
+ * Useful when source components are already unpacked.
+ *
+ * Parameters:
+ *   dst_pixel: Destination pixel in native ARGB32 format
+ *   src_a, src_r, src_g, src_b: Source color components (0-255)
+ *
+ * Returns:
+ *   Blended pixel in native ARGB32 format
+ */
+static inline ULONG blend_argb32_alpha(ULONG dst_pixel, UBYTE src_a, UBYTE src_r, UBYTE src_g, UBYTE src_b) {
+    /* Fast path: fully transparent source - return destination unchanged */
+    if (src_a == 0)
+        return dst_pixel;
+    
+    /* Fast path: fully opaque source - return source */
+    if (src_a == 255)
+        return pack_argb32(255, src_r, src_g, src_b);
+    
+    UBYTE dst_a, dst_r, dst_g, dst_b;
+    unpack_argb32(dst_pixel, &dst_a, &dst_r, &dst_g, &dst_b);
+    
+    /* Fixed-point blending: scale alpha to 0-256 for efficient integer math */
+    unsigned int alpha = src_a + 1;
+    unsigned int inv_alpha = 257 - alpha;
+    
+    UBYTE out_r = (UBYTE)((alpha * src_r + inv_alpha * dst_r) >> 8);
+    UBYTE out_g = (UBYTE)((alpha * src_g + inv_alpha * dst_g) >> 8);
+    UBYTE out_b = (UBYTE)((alpha * src_b + inv_alpha * dst_b) >> 8);
+    
+    return pack_argb32(255, out_r, out_g, out_b);
 }
 
 #endif /* CYBERGFX_PIXEL_FORMAT_H */

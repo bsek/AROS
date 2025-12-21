@@ -21,6 +21,7 @@
 #include "../../zunerenderer_intern.h"
 #include "../backend_interface.h"
 #include "cybergfx_backend.h"
+#include "cybergfx_pixel_format.h"
 #include "cybergfx_simd.h"
 #include "libraries/zunerenderer.h"
 #include <stdbool.h>
@@ -88,10 +89,7 @@ static ULONG ConvertPixelWithTint(ULONG pixel, ULONG format,
   /* Extract components based on format */
   switch (format) {
   case ZUNE_TEXTURE_FORMAT_ARGB32:
-    a = (pixel >> 24) & 0xFF;
-    r = (pixel >> 16) & 0xFF;
-    g = (pixel >> 8) & 0xFF;
-    b = pixel & 0xFF;
+    unpack_argb32(pixel, &a, &r, &g, &b);
     break;
   case ZUNE_TEXTURE_FORMAT_RGB24:
     a = 0xFF;
@@ -115,10 +113,10 @@ static ULONG ConvertPixelWithTint(ULONG pixel, ULONG format,
   b = (b * tb) >> 8;
   a = (a * ta) >> 8;
 
-  /* Reconstruct pixel */
+  /* Reconstruct pixel in native format */
   switch (format) {
   case ZUNE_TEXTURE_FORMAT_ARGB32:
-    return (a << 24) | (r << 16) | (g << 8) | b;
+    return pack_argb32(a, r, g, b);
   case ZUNE_TEXTURE_FORMAT_RGB24:
     return (r << 16) | (g << 8) | b;
   case ZUNE_TEXTURE_FORMAT_RGB16:
@@ -307,11 +305,8 @@ void CybergfxDrawTextureToRastPort(struct RenderPort *rp,
 
       switch (texture->format) {
       case ZUNE_TEXTURE_FORMAT_ARGB32:
-        /* Extract ARGB components from texture pixel */
-        a = (pixel >> 24) & 0xFF;
-        r = (pixel >> 16) & 0xFF;
-        g = (pixel >> 8) & 0xFF;
-        b = pixel & 0xFF;
+        /* Texture data is in native ARGB32 format - use unpack macro */
+        unpack_argb32(pixel, &a, &r, &g, &b);
         break;
       case ZUNE_TEXTURE_FORMAT_RGB24:
         a = 0xFF;
@@ -326,11 +321,38 @@ void CybergfxDrawTextureToRastPort(struct RenderPort *rp,
         b = (pixel & 0x1F) << 3;
         break;
       default:
-        a = (pixel >> 24) & 0xFF;
-        r = (pixel >> 16) & 0xFF;
-        g = (pixel >> 8) & 0xFF;
-        b = pixel & 0xFF;
+        /* Default assumes ARGB32 format */
+        unpack_argb32(pixel, &a, &r, &g, &b);
         break;
+      }
+
+      /* Skip fully transparent pixels */
+      if (a == 0)
+        continue;
+
+      /* Apply clipping before drawing pixel */
+      WORD pixel_x = dest_x + dx;
+      WORD pixel_y = dest_y + dy;
+
+      if (!CybergfxClipPixel(rp, pixel_x, pixel_y))
+        continue;
+
+      /* For partially transparent pixels (0 < a < 255), we need alpha blending.
+       * For fully opaque pixels (a == 255), we can just write directly.
+       */
+      if (a < 255 && bitmap_obj) {
+        /* Read destination pixel for alpha blending */
+        HIDDT_Pixel dest_native = HIDD_BM_GetPixel(bitmap_obj, 
+                                                    pixel_x + window_offset_x,
+                                                    pixel_y + window_offset_y);
+        HIDDT_Color dest_col;
+        HIDD_BM_UnmapPixel(bitmap_obj, dest_native, &dest_col);
+        
+        /* Use blend function with unpacked components */
+        ULONG dest_pixel = pack_argb32(dest_col.alpha >> 8, dest_col.red >> 8, 
+                                       dest_col.green >> 8, dest_col.blue >> 8);
+        ULONG blended = blend_argb32_alpha(dest_pixel, a, r, g, b);
+        unpack_argb32(blended, &a, &r, &g, &b);
       }
 
       /* Convert to HIDD color format (16-bit components) */
@@ -339,27 +361,15 @@ void CybergfxDrawTextureToRastPort(struct RenderPort *rp,
       col.green = g << 8;
       col.blue = b << 8;
 
-      /* Apply clipping before drawing pixel */
-      WORD pixel_x = dest_x + dx;
-      WORD pixel_y = dest_y + dy;
-
-      if (CybergfxClipPixel(rp, pixel_x, pixel_y)) {
-
-        if (bitmap_obj) {
-          /* Use cached HIDD bitmap object for efficient operations */
-          HIDDT_Pixel native_pixel = HIDD_BM_MapColor(bitmap_obj, &col);
-          HIDD_BM_PutPixel(bitmap_obj, pixel_x + window_offset_x,
-                           pixel_y + window_offset_y, native_pixel);
-        } else {
-          /* Fallback to standard RastPort write if no HIDD object is available */
-          UBYTE fa = col.alpha >> 8;
-          UBYTE fr = col.red >> 8;
-          UBYTE fg = col.green >> 8;
-          UBYTE fb = col.blue >> 8;
-          ULONG fallback_pixel =
-              (fa << 24) | (fr << 16) | (fg << 8) | fb;
-          WriteRGBPixel(rastport, pixel_x, pixel_y, fallback_pixel);
-        }
+      if (bitmap_obj) {
+        /* Use cached HIDD bitmap object for efficient operations */
+        HIDDT_Pixel native_pixel = HIDD_BM_MapColor(bitmap_obj, &col);
+        HIDD_BM_PutPixel(bitmap_obj, pixel_x + window_offset_x,
+                         pixel_y + window_offset_y, native_pixel);
+      } else {
+        /* Fallback to standard RastPort write if no HIDD object is available */
+        ULONG fallback_pixel = pack_argb32_logical(a, r, g, b);
+        WriteRGBPixel(rastport, pixel_x, pixel_y, fallback_pixel);
       }
     }
   }
@@ -459,28 +469,16 @@ void CybergfxDrawTextureToDrawingBoard(
               pixel = ConvertPixelWithTint(pixel, texture->format, tint);
             }
 
-            /* Convert pixel to match DrawingBoard's native format
-             * AROS PIXFMT_ARGB32 means 0xAA 0xRR 0xGG 0xBB in memory
-             * On little-endian: ULONG access becomes BGRA32 due to byte order
-             */
-            ULONG native_pixel;
-            if (texture->format == ZUNE_TEXTURE_FORMAT_ARGB32) {
-              UBYTE a = (pixel >> 24) & 0xFF;
-              UBYTE r = (pixel >> 16) & 0xFF;
-              UBYTE g = (pixel >> 8) & 0xFF;
-              UBYTE b = pixel & 0xFF;
-
-#if AROS_BIG_ENDIAN
-              native_pixel = (a << 24) | (r << 16) | (g << 8) | b;
-#else
-              native_pixel = (b << 24) | (g << 16) | (r << 8) | a;
-#endif
-            } else {
-              native_pixel = pixel;
-            }
+            /* Alpha blend source pixel over destination */
+            ULONG dest_pixel = dest_pixels[py * pitch_pixels + px];
+            ULONG blended = blend_argb32(dest_pixel, pixel);
+            
+            /* Skip if pixel unchanged (fully transparent source) */
+            if (blended == dest_pixel)
+              continue;
 
             CybergfxWritePixelClamped(dest_pixels, pitch_pixels, board->width,
-                                      board->height, px, py, native_pixel);
+                                      board->height, px, py, blended);
           }
         }
       }

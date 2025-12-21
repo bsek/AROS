@@ -25,6 +25,9 @@
 #include <string.h>
 #include <stdio.h>
 
+#define DEBUG 1
+#include <aros/debug.h>
+
 struct Library *ZuneRendererBase = NULL;
 
 struct Screen *pub_screen = NULL;
@@ -215,11 +218,35 @@ static void RunTextureFromFileTest(const char *filename)
         return;
     }
 
-    printf("Texture loaded successfully!\n");
-    printf("  Dimensions: %d x %d\n", texture->width, texture->height);
-    printf("  Format: 0x%08lx\n", (unsigned long)texture->format);
-    printf("  Flags: 0x%08lx\n", (unsigned long)texture->flags);
-    printf("  Has Alpha: %s\n", (texture->flags & ZUNE_TEXTURE_ALPHA) ? "Yes" : "No");
+    D(bug("TextureTest: Texture loaded successfully!\n"));
+    D(bug("TextureTest:   Dimensions: %d x %d\n", texture->width, texture->height));
+    D(bug("TextureTest:   Format: 0x%08lx\n", (unsigned long)texture->format));
+    D(bug("TextureTest:   Flags: 0x%08lx\n", (unsigned long)texture->flags));
+    D(bug("TextureTest:   Has Alpha: %s\n", (texture->flags & ZUNE_TEXTURE_ALPHA) ? "Yes" : "No"));
+    D(bug("TextureTest:   Pitch: %lu\n", (unsigned long)texture->pitch));
+    D(bug("TextureTest:   pixel_data: %p\n", texture->pixel_data));
+
+    /* Dump first pixels for debugging */
+    if (texture->pixel_data) {
+        ULONG *pixels = (ULONG *)texture->pixel_data;
+        UBYTE *bytes = (UBYTE *)texture->pixel_data;
+        int num_pixels = (texture->width * texture->height);
+        if (num_pixels > 16) num_pixels = 16;
+        
+        D(bug("TextureTest: First %d pixels as ULONG (hex):\n", num_pixels));
+        for (int i = 0; i < num_pixels; i++) {
+            D(bug("  [%d] = 0x%08lx\n", i, (unsigned long)pixels[i]));
+        }
+        
+        D(bug("TextureTest: First 64 bytes (hex):\n"));
+        for (int i = 0; i < 64 && i < (int)texture->data_size; i += 16) {
+            D(bug("  %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
+                bytes[i], bytes[i+1], bytes[i+2], bytes[i+3],
+                bytes[i+4], bytes[i+5], bytes[i+6], bytes[i+7],
+                bytes[i+8], bytes[i+9], bytes[i+10], bytes[i+11],
+                bytes[i+12], bytes[i+13], bytes[i+14], bytes[i+15]));
+        }
+    }
 
     /* Validate texture */
     if (!ZuneIsTextureValid(texture)) {
