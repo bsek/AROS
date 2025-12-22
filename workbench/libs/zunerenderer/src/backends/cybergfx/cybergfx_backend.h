@@ -58,6 +58,10 @@ void CybergfxSetTexturePixel(struct ZuneTexture *texture, WORD x, WORD y,
                              struct InternalColor *color);
 ULONG CybergfxGetMaxTextureSize(void);
 BOOL CybergfxSupportsTextureFormat(ULONG format);
+BOOL CybergfxDrawTextureTiledFast(struct RenderPort *rp,
+                                  struct ZuneTexture *texture,
+                                  WORD dest_x, WORD dest_y,
+                                  UWORD dest_width, UWORD dest_height);
 
 /* Rectangle operations - defined in cybergfx_rectangle.c */
 void CybergfxDrawRectangle(struct RenderPort *rp, WORD x, WORD y, UWORD width,

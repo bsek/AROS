@@ -700,7 +700,7 @@ AROS_UFH3
         }
 
         /* Flush the prop region from the double buffer to the window */
-        if (mri->mri_BufferBM || mri->mri_DrawingBoard) {
+        if (mri->mri_BufferBM) {
             FlushDoubleBufferRegion(mri,
                 prop_rect->MinX, prop_rect->MinY,
                 prop_rect->MaxX - prop_rect->MinX + 1,

@@ -33,14 +33,14 @@ extern struct Library *MUIMasterBase;
    Tested with MUI under UAE/AOS.
 
     notifyclass:
-    
+
     MUIA_HelpLine
     MUIA_HelpNode
     MUIA_ObjectID
     MUIA_UserData
-   
+
     areaclass:
-     
+
     MUIA_ContextMenu
     MUIA_ContextMenuTrigger
     MUIA_ControlChar
@@ -56,7 +56,7 @@ extern struct Library *MUIMasterBase;
     MUIA_ShowMe
     MUIA_VertWeight
     MUIA_Weight
-    
+
 */
 
 /* Private attribute/method definitions */
@@ -137,7 +137,7 @@ struct MUI_GroupData
 
 /* During minmax calculations objects with a weight of 0 shall
    be treated like they had identical min/def/max size, ie. fixed size.
-   
+
    During layout objects with 0 weight must be treated like fixed-sized
    too, but for hgroups only in x direction, and for vgroups only in
    y direction. I think ... */
@@ -1267,7 +1267,7 @@ IPTR Group__MUIM_Draw(struct IClass *cl, Object *obj,
             ScrollWindowRaster(_window(obj), diff_virt_offx, diff_virt_offy,
                 left, top, right, bottom);
 
-            if (muiRenderInfo(obj)->mri_BufferBM && !muiRenderInfo(obj)->mri_DrawingBoard)
+            if (muiRenderInfo(obj)->mri_BufferBM)
             {
                 ScrollRasterBF(_rp(obj), diff_virt_offx, diff_virt_offy,
                     left, top, right, bottom);
