@@ -233,7 +233,7 @@
     /* copy buffer to window if needed */
     {
         struct MUI_RenderInfo *ri = muiRenderInfo(obj);
-        if (ri && (ri->mri_DrawingBoard || ri->mri_BufferBM))
+        if (ri && ri->mri_BufferBM)
         {
             BOOL in_refresh = (ri->mri_Flags & MUIMRI_REFRESHMODE) != 0;
             BOOL in_batch = (ri->mri_BufferBatchDepth > 0);
@@ -246,6 +246,11 @@
                           (unsigned)ri->mri_BufferBatchDepth, ri->mri_Flags));
                 }
                 ri->mri_BufferDirty = TRUE;
+                
+                /* Accumulate dirty rectangle for optimized batch flushing */
+                if (in_batch) {
+                    WindowAccumulateDirtyRect(ri, _left(obj), _top(obj), _width(obj), _height(obj));
+                }
             }
             else
             {

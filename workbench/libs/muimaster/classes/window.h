@@ -338,6 +338,10 @@ struct MUI_RenderInfo {
     struct DrawingBoard *mri_DrawingBoard;
     BOOL mri_BufferDirty;
     UWORD mri_BufferBatchDepth;
+
+    /* Dirty rectangle accumulation for optimized batch flushing */
+    struct Rectangle mri_DirtyRect;  /* Accumulated dirty region during batch */
+    BOOL mri_DirtyRectValid;         /* TRUE if mri_DirtyRect contains valid data */
 };
 
 #define MUIMRI_RECTFILL (1 << 0)
@@ -347,6 +351,7 @@ struct MUI_RenderInfo {
 
 void WindowBeginBufferedBatch(struct MUI_RenderInfo *mri);
 void WindowEndBufferedBatch(struct MUI_RenderInfo *mri);
+void WindowAccumulateDirtyRect(struct MUI_RenderInfo *mri, LONG left, LONG top, LONG width, LONG height);
 
 /**************************************************************************
  MUI_EventHandlerNode as used by

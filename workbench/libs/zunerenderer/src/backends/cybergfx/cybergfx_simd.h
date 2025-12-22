@@ -144,4 +144,33 @@ void cybergfx_circle_alphas_batch8(const float dist[8], float border_width,
                                    int hasFill, int hasBorder, float fill_a[8],
                                    float border_a[8]);
 
+/* Texture alpha blending - batch operations for ARGB32 textures
+ *
+ * These functions perform Porter-Duff "source over" alpha compositing
+ * on batches of 4 or 8 pixels using SIMD instructions when available.
+ *
+ * The blending formula is:
+ *   out = src * src_alpha + dst * (1 - src_alpha)
+ *
+ * Parameters:
+ *   dst: Array of destination pixels (ARGB32 format, modified in-place)
+ *   src: Array of source pixels (ARGB32 format)
+ *
+ * Note: Pixels are expected in native ARGB32 format (0xAARRGGBB)
+ */
+void cybergfx_blend_argb32_batch4(ULONG dst[4], const ULONG src[4]);
+void cybergfx_blend_argb32_batch8(ULONG dst[8], const ULONG src[8]);
+
+/* Texture alpha blending for scanlines
+ *
+ * Blends an entire row of source pixels over destination pixels.
+ * Automatically uses the best available SIMD path (AVX2 > SSE2 > scalar).
+ *
+ * Parameters:
+ *   dst: Destination pixel buffer (ARGB32 format, modified in-place)
+ *   src: Source pixel buffer (ARGB32 format)
+ *   count: Number of pixels to blend
+ */
+void cybergfx_blend_argb32_row(ULONG *dst, const ULONG *src, int count);
+
 #endif /* CYBERGFX_SIMD_H */

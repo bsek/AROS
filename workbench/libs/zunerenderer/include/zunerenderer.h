@@ -99,6 +99,7 @@
 #define ZUNE_TEXTURE_WRAPPING (1 << 3)  /* Enable texture wrapping */
 #define ZUNE_TEXTURE_DYNAMIC (1 << 4)   /* Frequently updated texture */
 #define ZUNE_TEXTURE_ALPHA (1 << 5)     /* Support alpha blending */
+#define ZUNE_TEXTURE_OPAQUE (1 << 6)    /* All pixels fully opaque (optimization) */
 
 /*****************************************************************************/
 /* Texture Formats */
@@ -456,6 +457,20 @@ struct ZuneTexture {
   /* State and management */
   BOOL valid;      /* Texture is ready for use */
   ULONG ref_count; /* Reference counting for cleanup */
+
+  /* Pre-tiled cache for optimized tiled rendering.
+   * When a texture is used for tiled rendering (e.g., backgrounds),
+   * we create a larger pre-tiled version (e.g., 256x256) on first use.
+   * This avoids repeatedly tiling small textures across large areas.
+   * Similar to the legacy BackFillInfo system in datatypescache.c.
+   * 
+   * We store both a native BitMap (for hardware BltBitMap) and ARGB32 pixels
+   * (for software fallback). The BitMap path is preferred when available. */
+  struct BitMap *tiled_cache_bitmap;  /* Native pre-tiled bitmap for BltBitMap */
+  APTR tiled_cache_pixels;            /* Pre-tiled pixel data (ARGB32) for software path */
+  UWORD tiled_cache_width;            /* Width of pre-tiled cache (e.g., 256) */
+  UWORD tiled_cache_height;           /* Height of pre-tiled cache (e.g., 256) */
+  ULONG tiled_cache_pitch;            /* Bytes per row in pixel cache */
 };
 
 /*****************************************************************************/

@@ -11,7 +11,7 @@
 #include "backends/backend_interface.h"
 #include "include/zunerenderer.h"
 #include <aros/libcall.h>
-#define DEBUG 1
+#define DEBUG 0
 #include <aros/debug.h>
 #include <clib/alib_protos.h>
 #include <cybergraphx/cybergraphics.h>
@@ -33,6 +33,7 @@
 #include <datatypes/pictureclass.h>
 
 #include "src/zunerenderer_intern.h"
+#include "backends/cybergfx/cybergfx_backend.h"
 
 #ifndef mskHasAlpha
 #define mskHasAlpha 4
@@ -295,11 +296,11 @@ static struct ZuneTexture *CreateTextureFromDatatypeInternal(APTR dt_handle, ULO
     DoMethodA(dt_obj, (Msg)&pa);
 
     D(bug("ZuneRenderer: CreateTextureFromDatatype - after PDTM_READPIXELARRAY:\n"));
-    D(bug("  First 4 pixels: %08lx %08lx %08lx %08lx\n", 
-          (unsigned long)pixels[0], (unsigned long)pixels[1], 
+    D(bug("  First 4 pixels: %08lx %08lx %08lx %08lx\n",
+          (unsigned long)pixels[0], (unsigned long)pixels[1],
           (unsigned long)pixels[2], (unsigned long)pixels[3]));
 
-    /* 
+    /*
      * Fix alpha channel for images without alpha.
      * PDTM_READPIXELARRAY with PBPAFMT_ARGB returns 32-bit pixels, but for
      * images without alpha the alpha byte is undefined (often 0x00 = fully
@@ -370,9 +371,50 @@ struct ZuneTexture *CreateTextureFromDataInternal(APTR data, UWORD width, UWORD 
         dst_ptr += texture->pitch;
     }
 
+    /*
+     * Detect opaque textures for rendering optimization.
+     * If all pixels have alpha == 0xFF, we can skip alpha blending entirely
+     * in the rendering path, which is significantly faster.
+     * 
+     * Only check ARGB32 format textures that have the ALPHA flag set,
+     * as those are the ones where this optimization matters.
+     */
+    if (format == ZUNE_TEXTURE_FORMAT_ARGB32 && (flags & ZUNE_TEXTURE_ALPHA)) {
+        BOOL is_opaque = TRUE;
+        ULONG pixel_count = (ULONG)width * (ULONG)height;
+        ULONG *pixels = (ULONG *)texture->pixel_data;
+        ULONG i;
+
+#if !AROS_BIG_ENDIAN
+        /* Little-endian: alpha is in the low byte (BGRA memory layout) */
+        for (i = 0; i < pixel_count; i++) {
+            if ((pixels[i] & 0x000000FF) != 0xFF) {
+                is_opaque = FALSE;
+                break;
+            }
+        }
+#else
+        /* Big-endian: alpha is in the high byte (ARGB memory layout) */
+        for (i = 0; i < pixel_count; i++) {
+            if ((pixels[i] & 0xFF000000) != 0xFF000000) {
+                is_opaque = FALSE;
+                break;
+            }
+        }
+#endif
+
+        if (is_opaque) {
+            texture->flags |= ZUNE_TEXTURE_OPAQUE;
+            D(bug("ZuneRenderer: CreateTextureFromDataInternal - Texture is fully opaque\n"));
+        }
+    } else if (!(flags & ZUNE_TEXTURE_ALPHA)) {
+        /* No alpha channel means fully opaque by definition */
+        texture->flags |= ZUNE_TEXTURE_OPAQUE;
+    }
+
     D(bug("ZuneRenderer: CreateTextureFromDataInternal - Texture created "
-          "successfully (%p)\n",
-          texture));
+          "successfully (%p), opaque=%d\n",
+          texture, (texture->flags & ZUNE_TEXTURE_OPAQUE) ? 1 : 0));
 
     return texture;
 }
@@ -1699,6 +1741,28 @@ SEE ALSO
     WORD dest_y = dest_rect->y;
     UWORD dest_width = dest_rect->width;
     UWORD dest_height = dest_rect->height;
+
+    /*
+     * FAST PATH: Try optimized tiled rendering for ARGB32 textures.
+     * 
+     * CybergfxDrawTextureTiledFast uses row-by-row WritePixelArray calls
+     * which is significantly faster than drawing individual tiles.
+     * This matches the performance characteristics of the legacy
+     * dt_put_on_rastport_tiled() function.
+     */
+    if (CybergfxDrawTextureTiledFast(rp, texture, dest_x, dest_y, 
+                                     dest_width, dest_height)) {
+        /* Fast path succeeded */
+        D(bug("ZuneRenderer: Used fast tiled rendering path\n"));
+        EXIT_FUNCTION("ZuneDrawTextureTiled");
+        return;
+    }
+
+    /*
+     * SLOW PATH: Fall back to drawing individual tiles.
+     * Used when fast path is unavailable (non-ARGB32, DrawingBoard target, etc.)
+     */
+    D(bug("ZuneRenderer: Using slow tiled rendering path\n"));
 
     /* Calculate how many complete tiles we need */
     UWORD tiles_x = (dest_width + texture_width - 1) / texture_width;

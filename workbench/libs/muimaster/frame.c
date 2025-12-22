@@ -376,7 +376,7 @@ BOOL zune_frame_try_renderer(Object *obj, struct MUI_AreaData *data, const struc
      * Only use draw buffer when window double buffering is enabled, because
      * ReadPixelArray needs valid background content to blend with. When window
      * double buffering is off, the parent background hasn't been drawn yet. */
-    BOOL window_has_buffer = (mri->mri_DrawingBoard || mri->mri_BufferBM);
+    BOOL window_has_buffer = mri->mri_BufferBM != NULL;
     BOOL use_drawbuffer = use_aa &&
                           window_has_buffer &&
                           bgw >= FRAME_DRAWBUFFER_MIN_WIDTH &&

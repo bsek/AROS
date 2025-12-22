@@ -151,5 +151,6 @@ struct MUIMasterBase_intern
 /* Double buffering functions */
 void FlushDoubleBuffer(struct MUI_RenderInfo *mri);
 void FlushDoubleBufferRegion(struct MUI_RenderInfo *mri, LONG left, LONG top, LONG width, LONG height);
+void WindowAccumulateDirtyRect(struct MUI_RenderInfo *mri, LONG left, LONG top, LONG width, LONG height);
 
 #endif /* MUIMASTER_INTERN_H */

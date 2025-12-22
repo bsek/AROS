@@ -863,7 +863,20 @@ void zune_imspec_drawbuffered(struct MUI_ImageSpec_intern *spec,
             struct dt_node *node = spec->u.bitmap.dt;
             struct ZuneTexture *tex = dt_get_texture(node);
             
-            /* New path: Use ZuneTexture directly if available */
+            /* Use ZuneTexture for optimal tiled rendering performance.
+             * 
+             * The ZuneTexture system now uses per-texture pre-tiled caching
+             * (similar to the legacy BackFillInfo system in datatypescache.c):
+             * 
+             * 1. On first tiled render, creates a 256x256 pre-tiled cache
+             * 2. Uses the cache for all subsequent renders
+             * 3. Cache persists for the lifetime of the texture
+             * 
+             * This is more efficient than per-window caching because:
+             * - Cache is created once per texture, not once per window
+             * - Cache is reused across all windows using the same texture
+             * - No cache invalidation needed when drawing different areas
+             */
             if (tex && mri->mri_RenderPort)
             {
                 struct ZuneRect dest = {
@@ -876,7 +889,7 @@ void zune_imspec_drawbuffered(struct MUI_ImageSpec_intern *spec,
             }
             else
             {
-                /* Legacy fallback */
+                /* Legacy fallback for when ZuneTexture is not available */
                 dt_put_on_rastport_tiled(node, rp,
                     left - dx, top - dy, right - dx, bottom - dy,
                     xoffset - left, yoffset - top);

@@ -3431,6 +3431,36 @@ void WindowBeginBufferedBatch(struct MUI_RenderInfo *mri) {
     if (!(mri->mri_DrawingBoard || mri->mri_BufferBM))
         return;
     mri->mri_BufferBatchDepth++;
+    
+    /* Reset dirty rectangle at start of outermost batch */
+    if (mri->mri_BufferBatchDepth == 1) {
+        mri->mri_DirtyRectValid = FALSE;
+    }
+}
+
+void WindowAccumulateDirtyRect(struct MUI_RenderInfo *mri, LONG left, LONG top, LONG width, LONG height) {
+    if (!mri)
+        return;
+    if (width <= 0 || height <= 0)
+        return;
+    
+    LONG right = left + width - 1;
+    LONG bottom = top + height - 1;
+    
+    if (!mri->mri_DirtyRectValid) {
+        /* First dirty rectangle - initialize */
+        mri->mri_DirtyRect.MinX = left;
+        mri->mri_DirtyRect.MinY = top;
+        mri->mri_DirtyRect.MaxX = right;
+        mri->mri_DirtyRect.MaxY = bottom;
+        mri->mri_DirtyRectValid = TRUE;
+    } else {
+        /* Expand bounding box to include this rectangle */
+        if (left < mri->mri_DirtyRect.MinX) mri->mri_DirtyRect.MinX = left;
+        if (top < mri->mri_DirtyRect.MinY) mri->mri_DirtyRect.MinY = top;
+        if (right > mri->mri_DirtyRect.MaxX) mri->mri_DirtyRect.MaxX = right;
+        if (bottom > mri->mri_DirtyRect.MaxY) mri->mri_DirtyRect.MaxY = bottom;
+    }
 }
 
 void WindowEndBufferedBatch(struct MUI_RenderInfo *mri) {
@@ -3444,8 +3474,20 @@ void WindowEndBufferedBatch(struct MUI_RenderInfo *mri) {
     mri->mri_BufferBatchDepth--;
 
     if (mri->mri_BufferBatchDepth == 0 && mri->mri_BufferDirty) {
-        D(bug("WindowEndBufferedBatch: Flushing double buffer after batch\n"));
-        FlushDoubleBuffer(mri);
+        if (mri->mri_DirtyRectValid) {
+            /* Flush only the accumulated dirty region */
+            LONG width = mri->mri_DirtyRect.MaxX - mri->mri_DirtyRect.MinX + 1;
+            LONG height = mri->mri_DirtyRect.MaxY - mri->mri_DirtyRect.MinY + 1;
+            D(bug("WindowEndBufferedBatch: Flushing dirty region (%ld,%ld %ldx%ld)\n",
+                  mri->mri_DirtyRect.MinX, mri->mri_DirtyRect.MinY, width, height));
+            FlushDoubleBufferRegion(mri, mri->mri_DirtyRect.MinX, mri->mri_DirtyRect.MinY, width, height);
+            mri->mri_DirtyRectValid = FALSE;
+        } else {
+            /* No specific dirty rect tracked, fall back to full flush */
+            D(bug("WindowEndBufferedBatch: Flushing full double buffer (no dirty rect)\n"));
+            FlushDoubleBuffer(mri);
+        }
+        mri->mri_BufferDirty = FALSE;
     }
 }
 
@@ -3486,7 +3528,7 @@ static void DeinstallBackbuffer(struct IClass *cl, Object *obj) {
 static void WindowShow(struct IClass *cl, Object *obj) {
     struct MUI_WindowData *data = INST_DATA(cl, obj);
     struct Window *win = data->wd_RenderInfo.mri_Window;
-    BOOL using_double_buffer = (data->wd_RenderInfo.mri_DrawingBoard || data->wd_RenderInfo.mri_BufferBM);
+    BOOL using_double_buffer = data->wd_RenderInfo.mri_BufferBM != NULL;
     /*      D(bug("WindowShow %s %d\n", __FILE__, __LINE__)); */
 
     _left(data->wd_RootObject) = win->BorderLeft;
@@ -3552,7 +3594,7 @@ static ULONG WindowOpen(struct IClass *cl, Object *obj) {
 
     WindowShow(cl, obj);
 
-    BOOL using_double_buffer = (data->wd_RenderInfo.mri_DrawingBoard || data->wd_RenderInfo.mri_BufferBM);
+    BOOL using_double_buffer = data->wd_RenderInfo.mri_BufferBM != NULL;
 
     if (using_double_buffer) {
         WindowBeginBufferedBatch(&data->wd_RenderInfo);
