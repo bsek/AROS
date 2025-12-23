@@ -243,4 +243,7 @@ CreateTextureFromDataInternal(APTR data,
 
 extern struct List ZuneBackendList;
 
+/* Library bases - declared in zunerenderer_init.c or backend files */
+extern struct Library *GLBase;
+
 #endif /* ZUNERENDERER_INTERN_H */

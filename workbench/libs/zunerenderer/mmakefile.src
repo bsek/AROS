@@ -66,7 +66,7 @@ INCLUDE_FILES := $(call WILDCARD, include/*.h)
 %build_module mmake=workbench-libs-zunerenderer \
   modname=zunerenderer modtype=library \
   files="$(FUNCS) $(FILES)" \
-  uselibs="graphics cybergraphics"
+  uselibs="graphics cybergraphics GL"
 
 # Additional build flags for debugging
 USER_CPPFLAGS := -DDEBUG=1 -DAROS_LITTLE_ENDIAN=1 -mavx2

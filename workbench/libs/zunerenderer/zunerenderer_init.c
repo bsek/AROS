@@ -36,6 +36,7 @@
 
 /* These will be available to all library functions */
 struct Library *CyberGfxBase = NULL;
+struct Library *GLBase = NULL;
 
 /*****************************************************************************/
 /* Library Initialization Functions */
