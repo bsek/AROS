@@ -110,11 +110,31 @@ BOOL MESA3DGLStandardInit(struct mesa3dgl_context * ctx, struct TagItem *tagList
     requestedheight = GetTagData(GLA_Height, -1 , tagList);
 
     /* Calculate rastport dimensions */
-    ctx->visible_rp_width =
-        ctx->visible_rp->Layer->bounds.MaxX - ctx->visible_rp->Layer->bounds.MinX + 1;
+    if (ctx->visible_rp->Layer)
+    {
+        /* RastPort has a Layer - get dimensions from layer bounds */
+        ctx->visible_rp_width =
+            ctx->visible_rp->Layer->bounds.MaxX - ctx->visible_rp->Layer->bounds.MinX + 1;
 
-    ctx->visible_rp_height =
-        ctx->visible_rp->Layer->bounds.MaxY - ctx->visible_rp->Layer->bounds.MinY + 1;
+        ctx->visible_rp_height =
+            ctx->visible_rp->Layer->bounds.MaxY - ctx->visible_rp->Layer->bounds.MinY + 1;
+    }
+    else
+    {
+        /* RastPort without Layer (e.g., off-screen buffer) - require explicit dimensions */
+        if (requestedwidth < 0 || requestedheight < 0)
+        {
+            D(bug("[MESA3DGL] %s: ERROR - RastPort has no Layer, GLA_Width and GLA_Height must be provided!\n", __func__));
+            FreeRastPort(ctx->visible_rp);
+            ctx->visible_rp = NULL;
+            return FALSE;
+        }
+        /* Use GLA_Width/GLA_Height as the rastport dimensions */
+        ctx->visible_rp_width = ctx->left + requestedwidth + (requestedright >= 0 ? requestedright : 0);
+        ctx->visible_rp_height = ctx->top + requestedheight + (requestedbottom >= 0 ? requestedbottom : 0);
+        D(bug("[MESA3DGL] %s: RastPort has no Layer, using explicit dimensions %ldx%ld\n", 
+              __func__, ctx->visible_rp_width, ctx->visible_rp_height));
+    }
 
     /* right will be either passed or calculated from width or 0 */
     ctx->right = 0;
@@ -166,11 +186,16 @@ VOID MESA3DGLRecalculateBufferWidthHeight(struct mesa3dgl_context * ctx)
     
     D(bug("[MESA3DGL] %s(0x%p)\n", __func__, ctx));
     
-    ctx->visible_rp_width =
-        ctx->visible_rp->Layer->bounds.MaxX - ctx->visible_rp->Layer->bounds.MinX + 1;
+    /* Only recalculate if we have a Layer - off-screen buffers don't change size */
+    if (ctx->visible_rp->Layer)
+    {
+        ctx->visible_rp_width =
+            ctx->visible_rp->Layer->bounds.MaxX - ctx->visible_rp->Layer->bounds.MinX + 1;
 
-    ctx->visible_rp_height =
-        ctx->visible_rp->Layer->bounds.MaxY - ctx->visible_rp->Layer->bounds.MinY + 1;
+        ctx->visible_rp_height =
+            ctx->visible_rp->Layer->bounds.MaxY - ctx->visible_rp->Layer->bounds.MinY + 1;
+    }
+    /* else: dimensions remain unchanged from initialization */
 
 
     newwidth = ctx->visible_rp_width - ctx->left - ctx->right;
