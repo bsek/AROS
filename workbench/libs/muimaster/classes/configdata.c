@@ -233,6 +233,7 @@ const static struct def_ulval DefULValues[] = {
     {MUICFG_BubbleHelp_NextDelay, 10},
     {MUICFG_Renderer_Antialias, TRUE},
     {MUICFG_Renderer_DoubleBuffer, TRUE},
+    {MUICFG_Renderer_DirtyRegion, TRUE},
     {0, 0},
 };
 
@@ -657,6 +658,8 @@ IPTR Configdata__OM_NEW(struct IClass *cl, Object *obj, struct opSet *msg)
         GetConfigULong(obj, MUICFG_Renderer_Antialias);
     data->prefs.renderer_doublebuffer =
         GetConfigULong(obj, MUICFG_Renderer_DoubleBuffer);
+    data->prefs.renderer_dirtyregion =
+        GetConfigULong(obj, MUICFG_Renderer_DirtyRegion);
 
     /*---------- window stuff ----------*/
 
