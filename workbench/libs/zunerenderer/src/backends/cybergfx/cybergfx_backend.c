@@ -214,14 +214,14 @@ static BOOL CybergfxInitBackend(ZuneBackendContext *ctx) {
         return FALSE;
     }
 
-    /* Try to open CyberGraphics library */
-    priv->CyberGfxBase = OpenLibrary("cybergraphics.library", 40);
-    if (!priv->CyberGfxBase) {
-        D(bug("CybergfxInitBackend: Failed to open cybergraphics.library\n"));
+    /* CyberGfxBase is opened centrally in DetectLibraries() - just check it */
+    if (!CyberGfxBase) {
+        D(bug("CybergfxInitBackend: cybergraphics.library not available\n"));
         FreeVec(priv);
         EXIT_FUNCTION("CybergfxInitBackend");
         return FALSE;
     }
+    priv->CyberGfxBase = CyberGfxBase;
 
     /* Check hardware capabilities */
     priv->hardware_available = TRUE;
@@ -259,9 +259,8 @@ static void CybergfxCleanupBackend(ZuneBackendContext *ctx) {
 
     CybergfxPrivateData *priv = (CybergfxPrivateData *)ctx->private_data;
     if (priv) {
-        if (priv->CyberGfxBase) {
-            CloseLibrary(priv->CyberGfxBase);
-        }
+        /* CyberGfxBase is closed centrally in CleanupZuneRenderer() */
+        priv->CyberGfxBase = NULL;
         FreeVec(priv);
     }
 

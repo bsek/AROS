@@ -11,7 +11,7 @@
 
 #include "exec/lists.h"
 #include <aros/libcall.h>
-#define DEBUG 0
+#define DEBUG 1
 #include <aros/debug.h>
 #include <cybergraphx/cybergraphics.h>
 #include <exec/libraries.h>
@@ -49,13 +49,21 @@ BOOL DetectLibraries(void) {
   /* Try to open CyberGraphics library */
   CyberGfxBase = OpenLibrary("cybergraphics.library", 0);
   if (CyberGfxBase) {
-    D(bug("ZuneRenderer: CyberGraphics library available\n"));
+    D(bug("ZuneRenderer: CyberGraphics library v%ld.%ld available\n",
+          CyberGfxBase->lib_Version, CyberGfxBase->lib_Revision));
   } else {
     D(bug("ZuneRenderer: CyberGraphics library not available, using "
           "graphics.library\n"));
   }
 
-  // TODO: Add opengl library
+  /* Try to open GL library (mesa3dgl or hostgl) */
+  GLBase = OpenLibrary("gl.library", 20);
+  if (GLBase) {
+    D(bug("ZuneRenderer: GL library v%ld.%ld available\n",
+          GLBase->lib_Version, GLBase->lib_Revision));
+  } else {
+    D(bug("ZuneRenderer: GL library not available, OpenGL backend disabled\n"));
+  }
 
   EXIT_FUNCTION("DetectLibraries");
   return TRUE;
@@ -125,6 +133,11 @@ void CleanupZuneRenderer(struct IntZuneRendererBase *base) {
   ZuneCleanupBackends();
 
   /* Close libraries */
+  if (GLBase) {
+    CloseLibrary(GLBase);
+    GLBase = NULL;
+  }
+
   if (CyberGfxBase) {
     CloseLibrary(CyberGfxBase);
     CyberGfxBase = NULL;
@@ -465,11 +478,6 @@ struct RenderPort *CreateRenderPortInternal(struct IntZuneRendererBase *base,
 
   /* Add to tracking list */
   AddRenderPortToList(base, rp);
-
-  D(bug("ZuneRenderer: RenderPort created internally (backend: %s)\n",
-        backend && backend->context && backend->context->name
-            ? backend->context->name
-            : "fallback"));
 
   EXIT_FUNCTION("CreateRenderPortInternal");
   return rp;
