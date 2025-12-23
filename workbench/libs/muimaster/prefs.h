@@ -126,6 +126,7 @@ struct ZunePrefsNew
     /* Renderer */
     BOOL     renderer_antialias;
     BOOL     renderer_doublebuffer;
+    BOOL     renderer_dirtyregion;
     
     /* Groups */
     GroupTitlePosition group_title_position;

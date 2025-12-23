@@ -392,9 +392,23 @@ IPTR Clock__MUIM_Draw(Class *cl, Object *obj, struct MUIP_Draw *msg)
     }
     
     obj_rp = _rp(obj);
+    
+    /* Draw background to the window's rastport first, then copy to our private bitmap.
+     * MUIM_DrawBackground draws to mri->mri_RastPort (the window's buffer), not _rp(obj).
+     */
+    DoMethod(obj, MUIM_DrawBackground, clock_posx, clock_posy, data->clockbmw, data->clockbmh, clock_posx, clock_posy, 0);
+    
+    /* Copy the background from window buffer to our private clock bitmap.
+     * Use BltBitMap to copy between bitmaps directly.
+     */
+    BltBitMap(obj_rp->BitMap,
+              clock_posx, clock_posy,
+              data->clockbm,
+              0, 0,
+              data->clockbmw, data->clockbmh,
+              0xC0, 0xFF, NULL);
+    
     _rp(obj) = &data->clockrp;
-
-    DoMethod(obj, MUIM_DrawBackground, 0, 0, data->clockbmw , data->clockbmh, clock_posx, clock_posy, 0);
    
     cx = r + SHADOW_OFFX;
     cy = r + SHADOW_OFFY;

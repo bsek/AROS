@@ -3464,6 +3464,8 @@ void WindowAccumulateDirtyRect(struct MUI_RenderInfo *mri, LONG left, LONG top, 
 }
 
 void WindowEndBufferedBatch(struct MUI_RenderInfo *mri) {
+    BOOL use_dirty_region = FALSE;
+
     if (!mri)
         return;
     if (!(mri->mri_DrawingBoard || mri->mri_BufferBM))
@@ -3473,8 +3475,15 @@ void WindowEndBufferedBatch(struct MUI_RenderInfo *mri) {
 
     mri->mri_BufferBatchDepth--;
 
+    /* Check if dirty region optimization is enabled in preferences */
+    if (mri->mri_WindowObject) {
+        struct MUI_GlobalInfo *gi = muiGlobalInfo(mri->mri_WindowObject);
+        if (gi && gi->mgi_Prefs)
+            use_dirty_region = gi->mgi_Prefs->renderer_dirtyregion;
+    }
+
     if (mri->mri_BufferBatchDepth == 0 && mri->mri_BufferDirty) {
-        if (mri->mri_DirtyRectValid) {
+        if (use_dirty_region && mri->mri_DirtyRectValid) {
             /* Flush only the accumulated dirty region */
             LONG width = mri->mri_DirtyRect.MaxX - mri->mri_DirtyRect.MinX + 1;
             LONG height = mri->mri_DirtyRect.MaxY - mri->mri_DirtyRect.MinY + 1;
@@ -3483,7 +3492,7 @@ void WindowEndBufferedBatch(struct MUI_RenderInfo *mri) {
             FlushDoubleBufferRegion(mri, mri->mri_DirtyRect.MinX, mri->mri_DirtyRect.MinY, width, height);
             mri->mri_DirtyRectValid = FALSE;
         } else {
-            /* No specific dirty rect tracked, fall back to full flush */
+            /* No specific dirty rect tracked or dirty region disabled, fall back to full flush */
             D(bug("WindowEndBufferedBatch: Flushing full double buffer (no dirty rect)\n"));
             FlushDoubleBuffer(mri);
         }

@@ -173,8 +173,9 @@
 #define MUICFG_Interfaces_EnableARexx 0x705
 #define MUICFG_BubbleHelp_FirstDelay 0x706
 #define MUICFG_BubbleHelp_NextDelay 0x707
-#define MUICFG_Renderer_Antialias 0x800    /* ULONG, false = 0, true (def) */
-#define MUICFG_Renderer_DoubleBuffer 0x801 /* ULONG, false = 0, true (def) */
+#define MUICFG_Renderer_Antialias 0x800     /* ULONG, false = 0, true (def) */
+#define MUICFG_Renderer_DoubleBuffer 0x801  /* ULONG, false = 0, true (def) */
+#define MUICFG_Renderer_DirtyRegion 0x802   /* ULONG, false = 0, true (def) */
 
 #define MUIM_Configdata_LoadPubScreens (MUIB_Configdata | 0x00000028)
 #define MUIM_Configdata_GetPubScrnDesc (MUIB_Configdata | 0x00000029)
