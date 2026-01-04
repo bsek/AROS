@@ -63,7 +63,7 @@ RESULT
   const WORD centerX = center->x;
   const WORD centerY = center->y;
 
-  ZUNE_BACKEND_CALL(rp, DrawCircle, centerX, centerY, radius, 0.0f, brush, NULL, TRUE, FALSE);
+  ZUNE_BACKEND_CALL(rp, DrawCircle, centerX, centerY, radius, (UBYTE)0, brush, NULL, TRUE, FALSE);
 
   EXIT_FUNCTION("DrawCircle");
 
@@ -119,7 +119,7 @@ RESULT
 
   struct InternalColor internal_color =
       ZuneColorToInternal(rp, color, rp->pixel_format);
-  ZUNE_BACKEND_CALL(rp, DrawCircle, centerX, centerY, radius, 1.0f, NULL,
+  ZUNE_BACKEND_CALL(rp, DrawCircle, centerX, centerY, radius, (UBYTE)1, NULL,
                     &internal_color, FALSE, FALSE);
 
   EXIT_FUNCTION("DrawCircle");

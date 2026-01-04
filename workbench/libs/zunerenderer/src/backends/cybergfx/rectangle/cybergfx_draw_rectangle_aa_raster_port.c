@@ -142,11 +142,18 @@ void CybergfxAARectangleRasterPort(struct RastPort *rp, UWORD x, UWORD y, UWORD 
         return;
     }
 
-    ULONG *row_buffer = malloc((size_t)row_width * sizeof(ULONG));
-    if (!row_buffer) {
-        D(bug("CybergfxAARectangleRasterPort: Failed to allocate row buffer\n"));
+    /* Use multi-scanline batching to reduce ReadPixelArray/WritePixelArray syscall overhead */
+    #define SCANLINE_BATCH 32
+    int total_height = params.max_y - params.min_y + 1;
+    
+    ULONG *batch_buffer = malloc((size_t)row_width * SCANLINE_BATCH * sizeof(ULONG));
+    if (!batch_buffer) {
+        D(bug("CybergfxAARectangleRasterPort: Failed to allocate batch buffer\n"));
         return;
     }
+    
+    /* Track which rows in the batch are dirty */
+    BOOL batch_dirty[SCANLINE_BATCH];
 
     UBYTE o_a = 0, o_r = 0, o_g = 0, o_b = 0;
     float o_alpha_scale = 0.0f;
@@ -162,103 +169,139 @@ void CybergfxAARectangleRasterPort(struct RastPort *rp, UWORD x, UWORD y, UWORD 
     float outer_half_h = params.half_h + params.halfLine;
     float outer_radius = params.max_radius + params.halfLine;
 
-    for (int py = params.min_y; py <= params.max_y; ++py) {
-        float rel_y = (py + 0.5f) - params.center_y;
-        float rel_y_abs = fabsf(rel_y);
-        if (rel_y_abs > outer_half_h + cybergfx_aa_smoothness) {
-            continue;
+    /* Process rows in batches */
+    for (int batch_start_y = params.min_y; batch_start_y <= params.max_y; batch_start_y += SCANLINE_BATCH) {
+        int batch_height = (batch_start_y + SCANLINE_BATCH <= params.max_y + 1) 
+                              ? SCANLINE_BATCH 
+                              : (params.max_y - batch_start_y + 1);
+        
+        /* Read entire batch from raster port */
+        ReadPixelArray(batch_buffer, 0, 0, (ULONG)row_width * 4, rp, 
+                       params.min_x, batch_start_y, row_width, batch_height, CYBERGFX_PIXELFORMAT_ARGB32);
+        
+        /* Reset dirty flags */
+        for (int i = 0; i < batch_height; ++i) {
+            batch_dirty[i] = FALSE;
         }
+        
+        BOOL any_dirty = FALSE;
 
-        BOOL row_in_core = core_prefilled && py >= core_min_y && py <= core_max_y;
-        ReadPixelArray(row_buffer, 0, 0, (ULONG)row_width * 4, rp, params.min_x, py, row_width, 1, CYBERGFX_PIXELFORMAT_ARGB32);
-
-        BOOL row_dirty = FALSE;
-        for (int px = params.min_x; px <= params.max_x; px += 4) {
-            if (row_in_core && px >= core_min_x && px + 3 <= core_max_x) {
+        for (int row_in_batch = 0; row_in_batch < batch_height; ++row_in_batch) {
+            int py = batch_start_y + row_in_batch;
+            ULONG *row_buffer = batch_buffer + (row_in_batch * row_width);
+            
+            float rel_y = (py + 0.5f) - params.center_y;
+            float rel_y_abs = fabsf(rel_y);
+            if (rel_y_abs > outer_half_h + cybergfx_aa_smoothness) {
                 continue;
             }
 
-            float rel_x[4];
-            for (int i = 0; i < 4; ++i) {
-                rel_x[i] = px + i + base_rel_x;
-            }
+            BOOL row_in_core = core_prefilled && py >= core_min_y && py <= core_max_y;
 
-            float dist_outer[4];
-            cybergfx_sdf_roundrect_batch4(rel_x, rel_y, outer_half_w, outer_half_h, outer_radius, dist_outer);
-
-            /* Early exit: if all 4 pixels are fully outside, skip this batch */
-            if (dist_outer[0] > cybergfx_aa_smoothness && dist_outer[1] > cybergfx_aa_smoothness &&
-                dist_outer[2] > cybergfx_aa_smoothness && dist_outer[3] > cybergfx_aa_smoothness) {
-                continue;
-            }
-
-            float dist_inner[4];
-            cybergfx_sdf_roundrect_batch4(rel_x, rel_y, params.half_w, params.half_h, params.max_radius, dist_inner);
-
-            float alphaFill[4] = {0}, alphaLine[4] = {0};
-            cybergfx_compute_alphas_batch4(dist_inner, dist_outer, params.aa_edge_neg, params.aa_edge_pos, hasFill, hasBorder, alphaFill, alphaLine);
-
-            UBYTE fc_r[4], fc_g[4], fc_b[4];
-            if (hasFill) {
-                cybergfx_sample_fill_block(&fill_state, x, y, width, height, px, py, fc_r, fc_g, fc_b);
-            }
-
-            int valid = (px + 3 <= params.max_x) ? 4 : (params.max_x - px + 1);
-            int buffer_index = px - params.min_x;
-
-            for (int i = 0; i < valid; ++i) {
-                float totalAlpha = alphaFill[i] + alphaLine[i];
-                if (totalAlpha < CYBERGFX_AA_MIN_ALPHA_THRESHOLD) {
-                    continue; /* Skip fully transparent pixels */
-                }
-
-                /* Fast path for solid fill with no blending needed */
-                if (fill_state.solid && alphaFill[i] > 0.9999f && alphaLine[i] < CYBERGFX_AA_MIN_ALPHA_THRESHOLD) {
-                    row_buffer[buffer_index + i] = fill_state.brush->internal.color->original_pixel;
-                    row_dirty = TRUE;
+            for (int px = params.min_x; px <= params.max_x; px += 4) {
+                if (row_in_core && px >= core_min_x && px + 3 <= core_max_x) {
                     continue;
                 }
 
-                UBYTE bg_a, bg_r, bg_g, bg_b;
-                /* Use logical ARGB32 for ReadPixelArray/WritePixelArray buffers */
-                unpack_argb32_logical(row_buffer[buffer_index + i], &bg_a, &bg_r, &bg_g, &bg_b);
-
-                BOOL pixel_changed = FALSE;
-                if (hasFill && alphaFill[i] > CYBERGFX_AA_MIN_ALPHA_THRESHOLD) {
-                    float final_alpha = alphaFill[i];
-                    if (fill_state.solid && final_alpha > 0.9999f) {
-                        bg_r = fill_state.solid_r;
-                        bg_g = fill_state.solid_g;
-                        bg_b = fill_state.solid_b;
-                        pixel_changed = TRUE;
-                    } else if (final_alpha > 0.0f) {
-                        blend_over(&bg_r, &bg_g, &bg_b, fc_r[i], fc_g[i], fc_b[i], final_alpha);
-                        pixel_changed = TRUE;
-                    }
+                float rel_x[4];
+                for (int i = 0; i < 4; ++i) {
+                    rel_x[i] = px + i + base_rel_x;
                 }
 
-                if (hasBorder && alphaLine[i] > CYBERGFX_AA_MIN_ALPHA_THRESHOLD) {
-                    float final_alpha = o_alpha_scale * alphaLine[i];
-                    if (final_alpha > 0.0f) {
-                        blend_over(&bg_r, &bg_g, &bg_b, o_r, o_g, o_b, final_alpha);
-                        pixel_changed = TRUE;
-                    }
+                float dist_outer[4];
+                cybergfx_sdf_roundrect_batch4(rel_x, rel_y, outer_half_w, outer_half_h, outer_radius, dist_outer);
+
+                /* Early exit: if all 4 pixels are fully outside, skip this batch */
+                if (dist_outer[0] > cybergfx_aa_smoothness && dist_outer[1] > cybergfx_aa_smoothness &&
+                    dist_outer[2] > cybergfx_aa_smoothness && dist_outer[3] > cybergfx_aa_smoothness) {
+                    continue;
                 }
 
-                if (pixel_changed) {
+                float dist_inner[4];
+                cybergfx_sdf_roundrect_batch4(rel_x, rel_y, params.half_w, params.half_h, params.max_radius, dist_inner);
+
+                float alphaFill[4] = {0}, alphaLine[4] = {0};
+                cybergfx_compute_alphas_batch4(dist_inner, dist_outer, params.aa_edge_neg, params.aa_edge_pos, hasFill, hasBorder, alphaFill, alphaLine);
+
+                UBYTE fc_r[4], fc_g[4], fc_b[4];
+                if (hasFill) {
+                    cybergfx_sample_fill_block(&fill_state, x, y, width, height, px, py, fc_r, fc_g, fc_b);
+                }
+
+                int valid = (px + 3 <= params.max_x) ? 4 : (params.max_x - px + 1);
+                int buffer_index = px - params.min_x;
+
+                for (int i = 0; i < valid; ++i) {
+                    float totalAlpha = alphaFill[i] + alphaLine[i];
+                    if (totalAlpha < CYBERGFX_AA_MIN_ALPHA_THRESHOLD) {
+                        continue; /* Skip fully transparent pixels */
+                    }
+
+                    /* Fast path for solid fill with no blending needed */
+                    if (fill_state.solid && alphaFill[i] > 0.9999f && alphaLine[i] < CYBERGFX_AA_MIN_ALPHA_THRESHOLD) {
+                        row_buffer[buffer_index + i] = fill_state.brush->internal.color->original_pixel;
+                        batch_dirty[row_in_batch] = TRUE;
+                        any_dirty = TRUE;
+                        continue;
+                    }
+
+                    UBYTE bg_a, bg_r, bg_g, bg_b;
                     /* Use logical ARGB32 for ReadPixelArray/WritePixelArray buffers */
-                    row_buffer[buffer_index + i] = pack_argb32_logical(bg_a, bg_r, bg_g, bg_b);
-                    row_dirty = TRUE;
+                    unpack_argb32_logical(row_buffer[buffer_index + i], &bg_a, &bg_r, &bg_g, &bg_b);
+
+                    BOOL pixel_changed = FALSE;
+                    if (hasFill && alphaFill[i] > CYBERGFX_AA_MIN_ALPHA_THRESHOLD) {
+                        float final_alpha = alphaFill[i];
+                        if (fill_state.solid && final_alpha > 0.9999f) {
+                            bg_r = fill_state.solid_r;
+                            bg_g = fill_state.solid_g;
+                            bg_b = fill_state.solid_b;
+                            pixel_changed = TRUE;
+                        } else if (final_alpha > 0.0f) {
+                            blend_over(&bg_r, &bg_g, &bg_b, fc_r[i], fc_g[i], fc_b[i], final_alpha);
+                            pixel_changed = TRUE;
+                        }
+                    }
+
+                    if (hasBorder && alphaLine[i] > CYBERGFX_AA_MIN_ALPHA_THRESHOLD) {
+                        float final_alpha = o_alpha_scale * alphaLine[i];
+                        if (final_alpha > 0.0f) {
+                            blend_over(&bg_r, &bg_g, &bg_b, o_r, o_g, o_b, final_alpha);
+                            pixel_changed = TRUE;
+                        }
+                    }
+
+                    if (pixel_changed) {
+                        /* Use logical ARGB32 for ReadPixelArray/WritePixelArray buffers */
+                        row_buffer[buffer_index + i] = pack_argb32_logical(bg_a, bg_r, bg_g, bg_b);
+                        batch_dirty[row_in_batch] = TRUE;
+                        any_dirty = TRUE;
+                    }
                 }
             }
         }
 
-        if (row_dirty) {
-            WritePixelArray(row_buffer, 0, 0, (ULONG)row_width * 4, rp, params.min_x, py, row_width, 1, CYBERGFX_PIXELFORMAT_ARGB32);
+        /* Write back dirty rows - find contiguous dirty regions for optimal writes */
+        if (any_dirty) {
+            int write_start = -1;
+            for (int i = 0; i <= batch_height; ++i) {
+                BOOL is_dirty = (i < batch_height) && batch_dirty[i];
+                if (is_dirty && write_start < 0) {
+                    write_start = i;
+                } else if (!is_dirty && write_start >= 0) {
+                    /* Write contiguous dirty region */
+                    int write_height = i - write_start;
+                    WritePixelArray(batch_buffer + (write_start * row_width), 0, 0, (ULONG)row_width * 4, 
+                                    rp, params.min_x, batch_start_y + write_start, row_width, write_height, 
+                                    CYBERGFX_PIXELFORMAT_ARGB32);
+                    write_start = -1;
+                }
+            }
         }
     }
 
-    free(row_buffer);
+    free(batch_buffer);
+    #undef SCANLINE_BATCH
 
     EXIT_FUNCTION("CybergfxAARectangleRasterPort");
 }

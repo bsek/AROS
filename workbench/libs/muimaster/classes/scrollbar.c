@@ -19,7 +19,7 @@
 #include "support.h"
 #include "prefs.h"
 
-#define MYDEBUG 1
+#define MYDEBUG 0
 #include "debug.h"
 
 extern struct Library *MUIMasterBase;

@@ -94,6 +94,8 @@
 #define ICONLIST_DISP_SHOWHIDDEN        (1<<6)  /* show system "hidden" files */
 #define ICONLIST_DISP_SHOWINFO          (1<<7)  /* only show icon(s) which have .info files */
 
+#define ICONLIST_DISP_BORROWED_RP       (1<<8)  /* using borrowed rastport from Zune (don't free) */
+
 #define ICONLIST_DISP_NOICONS           (1<<10) /* name only mode */
 
 #define ICONLIST_DISP_MODE_MASK         (ICONLIST_DISP_MODEDEFAULT | ICONLIST_DISP_MODELABELRIGHT | ICONLIST_DISP_MODELIST)

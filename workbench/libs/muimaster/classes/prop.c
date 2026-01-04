@@ -28,8 +28,8 @@
 #include "support.h"
 #include "prefs.h"
 
-#define MYDEBUG 1
-#include "debug.h"
+#define DEBUG 0
+#include <aros/debug.h>
 
 extern struct Library *MUIMasterBase;
 
@@ -624,7 +624,7 @@ AROS_UFH3
             (pi->Flags & KNOBHIT) ? 1 : 0));
 
         struct MUI_RenderInfo *mri = muiRenderInfo(muiobj);
-        struct RenderPort *rp = mri->mri_WindowRenderPort ? mri->mri_WindowRenderPort : mri->mri_RenderPort;
+        struct RenderPort *rp = mri->mri_RenderPort;
 
         D(bug("[ZuneProp]   msg->wdp_RPort=%p, rp=%p, rp->target_rp=%p\n",
             msg->wdp_RPort, rp, rp ? rp->target_rp : NULL));
@@ -699,8 +699,14 @@ AROS_UFH3
             ZuneFillRectangleRoundedStyledAA(rp, &knob, corner_radius, 1, &knob_brush, knob_border_color);
         }
 
-        /* Flush the prop region from the double buffer to the window */
-        if (mri->mri_BufferBM) {
+        /*
+         * Note: We no longer flush here explicitly. The double buffer flush
+         * is now handled by the window's batch mechanism. FlushDoubleBufferRegion
+         * will automatically defer the blit if we're in batch mode, or flush
+         * immediately if not. This prevents excessive blitting when multiple
+         * widgets are being redrawn.
+         */
+        if (mri->mri_DrawingBoard || mri->mri_BufferBM) {
             FlushDoubleBufferRegion(mri,
                 prop_rect->MinX, prop_rect->MinY,
                 prop_rect->MaxX - prop_rect->MinX + 1,
@@ -1080,7 +1086,7 @@ IPTR Prop__MUIM_Show(struct IClass *cl, Object *obj, struct MUIP_Show *msg)
                 /* Use zunerenderer for STANDARD and NEWLOOK scrollbar types
                  * when we have sufficient color depth */
                 struct MUI_RenderInfo *mri = muiRenderInfo(obj);
-                if (mri && (mri->mri_RenderPort || mri->mri_WindowRenderPort))
+                if (mri && mri->mri_RenderPort)
                 {
                     data->dhook.h_Entry = (HOOKFUNC) ZunePropRenderFunc;
                     data->dhook.h_Data = data;

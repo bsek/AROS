@@ -182,6 +182,10 @@ struct ZuneBrush {
       float t_start;  /* Gradient t-value at rectangle origin */
       float t_step_x; /* Increment per pixel in x-direction */
       float t_step_y; /* Increment per pixel in y-direction */
+      /* Pre-rasterized gradient texture for fast repeated drawing */
+      ULONG *rasterized_pixels;  /* ARGB32 pixel data, NULL if not cached */
+      UWORD rasterized_width;    /* Width the cache was created for */
+      UWORD rasterized_height;   /* Height the cache was created for */
     } linear_cache;
 
     /* Cached data for TEXTURE - fast pixel access */
@@ -393,6 +397,10 @@ struct DrawingBoard {
 
   /* Backend information */
   BOOL hardware_surface; /* True if in video memory */
+  APTR backend_data;     /* Backend-specific data (e.g., FBO for OpenGL) */
+
+  /* Parent window for OpenGL FBO support */
+  struct Window *parent_window; /* Window this DrawingBoard belongs to (for GL context) */
 
   /* State */
   BOOL valid; /* Surface is ready for use */
@@ -402,15 +410,18 @@ struct DrawingBoard {
 struct RenderPort {
   struct Node node; /* For linking in lists */
 
+  /* Window binding (required for OpenGL context) */
+  struct Window *window;             /* Window this RenderPort belongs to */
+
   /* Target surfaces */
   struct RastPort *target_rp;        /* Target RastPort (screen/window) */
-  struct DrawingBoard *target_board; /* Or target DrawingBoard */
+  struct DrawingBoard *target_board; /* Current target DrawingBoard (or NULL for window) */
   struct ColorMap *colormap;         /* Color mapping */
   ULONG pixel_format;                /* Pixel format identifier */
 
   /* Backend information */
   ULONG backend_type;   /* Active backend */
-  APTR backend_context; /* Backend-specific context */
+  APTR backend_context; /* Backend-specific context (GL context, etc.) */
   APTR backend_vtable;  /* Backend function table */
   APTR hidd_bitmap_obj; /* Cached HIDD bitmap object for direct operations */
   struct PenCache *pen_cache; /* Backend-specific pen cache (graphics) */
@@ -474,13 +485,30 @@ struct ZuneTexture {
 };
 
 /*****************************************************************************/
-/* RenderPort Management (for advanced users) */
+/* RenderPort Management */
 /*****************************************************************************/
 
-struct RenderPort *CreateRenderPort(struct ColorMap *colormap,
-                                    struct RastPort *rastport);
-struct RenderPort *CreateRenderPortWithDrawingBoard(struct ColorMap *colormap,
-                                                    struct DrawingBoard *board);
+/*
+ * CreateRenderPortForWindow - Create a RenderPort bound to a Window
+ *
+ * This is the primary way to create a RenderPort. The RenderPort is bound
+ * to the window and automatically selects the best backend (OpenGL if
+ * available, otherwise CyberGraphics).
+ *
+ * The window reference is required for OpenGL to create a GL context.
+ */
+struct RenderPort *CreateRenderPortForWindow(struct Window *window,
+                                             struct ColorMap *colormap);
+
+/*
+ * CreateDrawingBoardForRenderPort - Create DrawingBoard bound to a RenderPort
+ *
+ * The DrawingBoard always has a BitMap for legacy compatibility (SetAPen, etc).
+ * If OpenGL is active, an FBO is also created for accelerated rendering.
+ */
+struct DrawingBoard *CreateDrawingBoardForRenderPort(struct RenderPort *rp,
+                                                     UWORD width, UWORD height);
+
 void DestroyRenderPort(struct RenderPort *rp);
 void ClearRenderPort(struct RenderPort *rp, ULONG color);
 
@@ -488,10 +516,30 @@ void ClearRenderPort(struct RenderPort *rp, ULONG color);
 /* DrawingBoard Management */
 /*****************************************************************************/
 
-struct DrawingBoard *CreateDrawingBoard(UWORD width, UWORD height, UBYTE depth,
-                                        ULONG flags);
+/*
+ * ZuneSetTarget - Switch render target
+ *
+ * board = NULL: Render to window's RastPort
+ * board != NULL: Render to DrawingBoard
+ *
+ * For OpenGL: Uses glBindFramebuffer() for fast switching
+ * For CyberGfx: Updates internal target pointer
+ */
+BOOL ZuneSetTarget(struct RenderPort *rp, struct DrawingBoard *board);
+
 void DestroyDrawingBoard(struct DrawingBoard *board);
 void ClearDrawingBoard(struct RenderPort *rp, ULONG color);
+
+/*
+ * SyncDrawingBoard - Sync backend buffer to DrawingBoard bitmap
+ *
+ * For OpenGL backend: Copies FBO contents to the DrawingBoard's bitmap.
+ * This is required before using CyberGfx/graphics.library directly on
+ * the DrawingBoard's bitmap after OpenGL rendering.
+ *
+ * For CyberGfx backend: No-op (bitmap is already the render target).
+ */
+BOOL SyncDrawingBoard(struct DrawingBoard *board);
 
 /*****************************************************************************/
 /* Core Drawing API - Clean and Simple */
@@ -697,5 +745,18 @@ ULONG BlendColors(ULONG color1, ULONG color2, UBYTE alpha);
 /*****************************************************************************/
 
 void ZuneInitPenCache(struct RenderPort *rp, LONG *pens, UWORD count);
+
+/*****************************************************************************/
+/* Window Blitting */
+/*****************************************************************************/
+
+/*
+ * ZuneBlitToWindow - Blit DrawingBoard content directly to window
+ *
+ * Blits from the RenderPort's DrawingBoard to its associated window.
+ * This eliminates the need for a separate WindowRenderPort.
+ */
+void ZuneBlitToWindow(struct RenderPort *rp, WORD src_x, WORD src_y,
+                      WORD dst_x, WORD dst_y, UWORD width, UWORD height);
 
 #endif /* LIBRARIES_ZUNERENDERER_H */

@@ -122,7 +122,7 @@ RESULT
   const UWORD width = rect->width;
   const UWORD height = rect->height;
 
-  ZUNE_BACKEND_CALL(rp, DrawRectangle, x, y, width, height, 0.0f, cornerRadius, brush, NULL, TRUE, FALSE);
+  ZUNE_BACKEND_CALL(rp, DrawRectangle, x, y, width, height, (UBYTE)0, cornerRadius, brush, NULL, TRUE, FALSE);
 
   EXIT_FUNCTION("DrawRectangleRounded");
 
@@ -180,7 +180,7 @@ RESULT
 
   struct InternalColor border_color =
       ZuneColorToInternal(rp, color, rp->pixel_format);
-  ZUNE_BACKEND_CALL(rp, DrawRectangle, x, y, width, height, 1.0f, 0, NULL,
+  ZUNE_BACKEND_CALL(rp, DrawRectangle, x, y, width, height, (UBYTE)1, (UBYTE)0, NULL,
                     &border_color, FALSE, FALSE);
 
   EXIT_FUNCTION("DrawRectangleOutline");
@@ -240,7 +240,7 @@ RESULT
 
   struct InternalColor internal_color =
       ZuneColorToInternal(rp, color, rp->pixel_format);
-  ZUNE_BACKEND_CALL(rp, DrawRectangle, x, y, width, height, 1.0f, cornerRadius,
+  ZUNE_BACKEND_CALL(rp, DrawRectangle, x, y, width, height, (UBYTE)1, cornerRadius,
                     NULL, &internal_color, FALSE, FALSE);
 
   EXIT_FUNCTION("DrawRectangleRoundedOutline");

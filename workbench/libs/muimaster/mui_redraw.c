@@ -233,20 +233,15 @@
     /* copy buffer to window if needed */
     {
         struct MUI_RenderInfo *ri = muiRenderInfo(obj);
-        if (ri && ri->mri_BufferBM)
+        if (ri && (ri->mri_DrawingBoard || ri->mri_BufferBM))
         {
             BOOL in_refresh = (ri->mri_Flags & MUIMRI_REFRESHMODE) != 0;
             BOOL in_batch = (ri->mri_BufferBatchDepth > 0);
-            if (in_refresh || in_batch || ri->mri_BufferDirty)
+            if (in_refresh || in_batch)
             {
-                if (!ri->mri_BufferDirty)
-                {
-                    D(bug("MUI_Redraw: buffer marked dirty (obj=%p, refresh=%s, batch=%u, flags=0x%08lx)\n",
-                          obj, in_refresh ? "YES" : "NO",
-                          (unsigned)ri->mri_BufferBatchDepth, ri->mri_Flags));
-                }
+                /* In refresh mode or batch mode: just mark dirty, don't flush yet */
                 ri->mri_BufferDirty = TRUE;
-                
+
                 /* Accumulate dirty rectangle for optimized batch flushing */
                 if (in_batch) {
                     WindowAccumulateDirtyRect(ri, _left(obj), _top(obj), _width(obj), _height(obj));
@@ -254,8 +249,10 @@
             }
             else
             {
+                /* Not in batch/refresh mode: flush immediately */
                 D(bug("MUI_Redraw: immediate FlushDoubleBufferRegion for obj=%p rect=(%ld,%ld %ldx%ld)\n",
                       obj, _left(obj), _top(obj), _width(obj), _height(obj)));
+                D(bug("MUI_Redraw: This redraw was triggered outside of WindowOpen batch mode\n"));
                 FlushDoubleBufferRegion(ri, _left(obj), _top(obj), _width(obj), _height(obj));
             }
         }

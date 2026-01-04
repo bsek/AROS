@@ -20,7 +20,7 @@
 
 #include <string.h>
 
-#define MYDEBUG 1
+#define MYDEBUG 0
 #include "debug.h"
 #include "mui.h"
 #include "muimaster_intern.h"
@@ -127,7 +127,7 @@ IPTR Penadjust__OM_NEW(struct IClass *cl, Object *obj, struct opSet *msg)
     register_labels[1] = _(MSG_PENADJUST_COLORMAP);
     register_labels[2] = _(MSG_PENADJUST_RGB);
     register_labels[3] = NULL;
-    
+
     static const char *lv_labels[9];
     lv_labels[0] = _(MSG_PENADJUST_SHINE);
     lv_labels[1] = _(MSG_PENADJUST_HALFSHINE);
@@ -150,7 +150,7 @@ IPTR Penadjust__OM_NEW(struct IClass *cl, Object *obj, struct opSet *msg)
     obj = (Object *) DoSuperNewTags
     (
         cl, obj, NULL,
-            
+
         MUIA_Register_Titles, (IPTR) register_labels,
         Child, (IPTR) ListviewObject,
             MUIA_Listview_List, (IPTR) (listobj = (Object *)ListObject,
@@ -166,7 +166,7 @@ IPTR Penadjust__OM_NEW(struct IClass *cl, Object *obj, struct opSet *msg)
             MUIA_Numeric_Max,  127,
         End),
         Child, (IPTR) (coloradjobj = (Object *)ColoradjustObject, End),
-        
+
         TAG_MORE, (IPTR) msg->ops_AttrList
     );
 

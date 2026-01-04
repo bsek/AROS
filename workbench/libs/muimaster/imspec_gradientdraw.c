@@ -18,7 +18,7 @@
 #include "mui.h"
 #include "imspec_intern.h"
 #include "support.h"
-#define MYDEBUG 1
+#define MYDEBUG 0
 #include "debug.h"
 
 extern struct Library *MUIMasterBase;

@@ -131,7 +131,7 @@ AROS_LH4(VOID, ZuneFillCircleAA,
   //   return;
   // }
 
-  ZUNE_BACKEND_CALL(rp, DrawCircle, centerX, centerY, radius, 1.0f, brush, NULL, TRUE, TRUE);
+  ZUNE_BACKEND_CALL(rp, DrawCircle, centerX, centerY, radius, (UBYTE)0, brush, NULL, TRUE, TRUE);
 
   AROS_LIBFUNC_EXIT
 }
@@ -391,9 +391,9 @@ AROS_LH4(VOID, ZuneFillRectangleRoundedAA,
   // }
 
   D(bug(
-      "ZuneDrawRectangleRoundedAA: CALLING backend with cornerRadius=%d.%02d\n",
-      (int)cornerRadius, (int)(cornerRadius * 100) % 100));
-  ZUNE_BACKEND_CALL(rp, DrawRectangle, x, y, width, height, 0.0f, cornerRadius,
+      "ZuneFillRectangleRoundedAA: CALLING backend with cornerRadius=%d\n",
+      (int)cornerRadius));
+  ZUNE_BACKEND_CALL(rp, DrawRectangle, x, y, width, height, (UBYTE)0, cornerRadius,
                     brush, NULL, TRUE, TRUE);
 
   AROS_LIBFUNC_EXIT
@@ -648,7 +648,7 @@ AROS_LH4(VOID, ZuneDrawLineAA, AROS_LHA(struct RenderPort *, rp, A0),
   struct InternalColor internal_color =
       ZuneColorToInternal(rp, color, rp->pixel_format);
 
-  ZUNE_BACKEND_CALL(rp, DrawLine, startX, startY, endX, endY, 1.0f,
+  ZUNE_BACKEND_CALL(rp, DrawLine, startX, startY, endX, endY, (UWORD)1,
                     &internal_color, TRUE);
 
   AROS_LIBFUNC_EXIT
