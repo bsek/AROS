@@ -34,7 +34,7 @@
 #include <libraries/zunerenderer.h>
 #include <datatypes/pictureclass.h>
 
-#define DEBUG 0
+#define DEBUG 1
 #include <aros/debug.h>
 
 extern struct Library *MUIMasterBase;
@@ -386,7 +386,8 @@ BOOL zune_frame_try_renderer(Object *obj, struct MUI_AreaData *data, const struc
         struct DrawingBoard *board = NULL;
         struct RenderPort *buffer_port = NULL;
 
-        if (WindowObtainObjectDrawBuffer(mri, obj, (UWORD)bgw, (UWORD)bgh, &board, &buffer_port)) {
+        /* Use LINEARMEM flag to get a bitmap that supports direct pixel locking for AA rendering */
+        if (WindowObtainObjectDrawBuffer(mri, obj, (UWORD)bgw, (UWORD)bgh, ZUNE_DRAWINGBOARD_LINEARMEM, &board, &buffer_port)) {
             /*
              * Copy background from window to DrawingBoard for proper AA blending.
              * This uses ZuneCopyFromRastPort which works with both CyberGfx and
@@ -405,6 +406,12 @@ BOOL zune_frame_try_renderer(Object *obj, struct MUI_AreaData *data, const struc
 
             ULONG pitch;
             APTR lock = LockDrawingBoardPixels(buffer_port, &pitch);
+
+            if (lock) {
+              D(bug("Locking drawingboard succeeded!\n"));
+            } else {
+              D(bug("Locking drawingboard failed!\n"));
+            }
 
             if (border_width == 0) {
                 ZuneFillRectangleRoundedAA(buffer_port, &buffer_rect, radius, fill_brush);
@@ -542,7 +549,8 @@ void zune_frame_draw_deferred_outline(Object *obj, struct MUI_AreaData *data,
         struct DrawingBoard *board = NULL;
         struct RenderPort *buffer_port = NULL;
 
-        if (WindowObtainObjectDrawBuffer(mri, obj, (UWORD)bgw, (UWORD)bgh, &board, &buffer_port)) {
+        /* Use LINEARMEM flag to get a bitmap that supports direct pixel locking for AA rendering */
+        if (WindowObtainObjectDrawBuffer(mri, obj, (UWORD)bgw, (UWORD)bgh, ZUNE_DRAWINGBOARD_LINEARMEM, &board, &buffer_port)) {
             /* Copy background from screen to buffer for proper AA blending.
              * This uses ZuneCopyFromRastPort which works with both CyberGfx and
              * OpenGL backends (OpenGL doesn't support direct pixel access).

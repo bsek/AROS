@@ -244,7 +244,7 @@ BOOL InitDemo(void) {
      * For OpenGL, this creates an FBO. For CyberGfx, a bitmap.
      * The DrawingBoard always has a bitmap for legacy compatibility.
      */
-    board = CreateDrawingBoardForRenderPort(render_port, inner_width, inner_height);
+    board = CreateDrawingBoardForRenderPort(render_port, inner_width, inner_height, 0);
     if (!board) {
         printf("ERROR: Cannot create DrawingBoard\n");
         return FALSE;

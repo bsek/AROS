@@ -119,9 +119,22 @@ BOOL AllocateDrawingBoardBitmap(struct DrawingBoard *board,
 
     /* Software surface fallback */
     if (!board->bitmap) {
-      D(bug("ZuneRenderer: Allocating software surface with friend_bitmap\n"));
-      board->bitmap = AllocBitMap(board->width, board->height, board->depth,
-                                  BMF_CLEAR, friend_bitmap);
+      if (board->flags & ZUNE_DRAWINGBOARD_LINEARMEM) {
+        /* LINEARMEM flag: Force ARGB32 format for direct pixel access.
+         * This gives us linear memory that can be locked, but loses colormap
+         * inheritance from friend_bitmap. Use this for AA rendering. */
+        D(bug("ZuneRenderer: Allocating LINEARMEM surface (ARGB32, no friend)\n"));
+        board->bitmap = AllocBitMap(board->width, board->height, board->depth,
+                                    BMF_CLEAR | BMF_SPECIALFMT | SHIFT_PIXFMT(PIXFMT_ARGB32),
+                                    NULL);
+      } else {
+        /* Default: Use friend_bitmap to inherit colormap for legacy pen drawing.
+         * The bitmap may not support linear memory access (can't be locked),
+         * but AA rendering will fall back to RasterPort path which still works. */
+        D(bug("ZuneRenderer: Allocating software surface with friend_bitmap\n"));
+        board->bitmap = AllocBitMap(board->width, board->height, board->depth,
+                                    BMF_CLEAR, friend_bitmap);
+      }
       board->hardware_surface = FALSE;
     }
 
@@ -351,12 +364,13 @@ void RemoveDrawingBoardFromList(struct IntZuneRendererBase *base,
 /*****************************************************************************
 
     NAME */
-AROS_LH3(struct DrawingBoard *, CreateDrawingBoardForRenderPort,
+AROS_LH4(struct DrawingBoard *, CreateDrawingBoardForRenderPort,
 
          /*  SYNOPSIS */
          AROS_LHA(struct RenderPort *, rp, A0),
          AROS_LHA(UWORD, width, D0),
          AROS_LHA(UWORD, height, D1),
+         AROS_LHA(ULONG, flags, D2),
 
          /*  LOCATION */
          struct Library *, ZuneRendererBase, 6, zunerenderer)
@@ -371,15 +385,25 @@ AROS_LH3(struct DrawingBoard *, CreateDrawingBoardForRenderPort,
 
     The RenderPort's window reference is used for OpenGL context.
 
+    Flags control bitmap allocation:
+    - ZUNE_DRAWINGBOARD_LINEARMEM: Force linear memory for direct pixel access.
+      This enables LockDrawingBoardPixels() to work, but the bitmap won't
+      inherit colormap from the window (legacy pen drawing may not work).
+    - Without LINEARMEM: Bitmap inherits colormap from window for legacy
+      pen drawing, but may not support direct pixel locking.
+
 INPUTS
     rp - Parent RenderPort (must not be NULL, must have window)
     width - Surface width in pixels
     height - Surface height in pixels
+    flags - ZUNE_DRAWINGBOARD_* flags (0 for default behavior)
 
 RESULT
     Pointer to new DrawingBoard, or NULL if creation failed.
 
 NOTES
+    Use ZUNE_DRAWINGBOARD_LINEARMEM when you need LockDrawingBoardPixels().
+    Use 0 for legacy pen drawing compatibility.
     The DrawingBoard must be freed with DestroyDrawingBoard().
     The RenderPort must remain valid for the lifetime of the DrawingBoard.
 
@@ -393,8 +417,8 @@ NOTES
 
   ENTER_FUNCTION("CreateDrawingBoardForRenderPort");
 
-  D(bug("ZuneRenderer: CreateDrawingBoardForRenderPort(rp=%p, %dx%d)\n",
-        rp, width, height));
+  D(bug("ZuneRenderer: CreateDrawingBoardForRenderPort(rp=%p, %dx%d, flags=0x%08x)\n",
+        rp, width, height, flags));
 
   /* Validate parameters */
   if (!rp || !rp->valid) {
@@ -428,7 +452,7 @@ NOTES
   board->width = width;
   board->height = height;
   board->depth = depth;
-  board->flags = ZUNE_DRAWINGBOARD_CACHED;
+  board->flags = flags | ZUNE_DRAWINGBOARD_CACHED;
 
   /* Store parent window for OpenGL FBO support */
   if (rp->window) {
@@ -439,16 +463,15 @@ NOTES
   InitDrawingBoard(board);
 
   /*
-   * ALWAYS allocate BitMap for legacy compatibility.
-   * This ensures SetAPen, RectFill, etc. work on the DrawingBoard.
-   *
-   * We pass the window's BitMap as friend_bitmap so the new BitMap
-   * inherits its colormap. This is critical for legacy pen-based
-   * drawing (SetAPen/RectFill) to work correctly on the off-screen buffer.
+   * Allocate BitMap. If LINEARMEM flag is set, we skip friend_bitmap
+   * to get a bitmap with linear memory access. Otherwise, we use
+   * friend_bitmap for colormap inheritance.
    */
   struct BitMap *friend_bitmap = NULL;
-  if (rp->window && rp->window->RPort && rp->window->RPort->BitMap) {
-    friend_bitmap = rp->window->RPort->BitMap;
+  if (!(flags & ZUNE_DRAWINGBOARD_LINEARMEM)) {
+    if (rp->window && rp->window->RPort && rp->window->RPort->BitMap) {
+      friend_bitmap = rp->window->RPort->BitMap;
+    }
   }
 
   if (!AllocateDrawingBoardBitmap(board, rp->backend_type, friend_bitmap)) {
@@ -456,6 +479,12 @@ NOTES
     FreeVec(board);
     EXIT_FUNCTION("CreateDrawingBoardForRenderPort");
     return NULL;
+  }
+
+  /* Store colormap from RenderPort for legacy pen-based drawing. */
+  if (rp->colormap) {
+    board->colormap = rp->colormap;
+    D(bug("ZuneRenderer: DrawingBoard colormap set from RenderPort: %p\n", board->colormap));
   }
 
   D(bug("ZuneRenderer: DrawingBoard bitmap allocated: %p\n", board->bitmap));
