@@ -2,6 +2,7 @@
     Copyright (C) 2009-2020, The AROS Development Team. All rights reserved.
 */
 
+#define DEBUG 0
 #include <aros/debug.h>
 
 #include "util/os_misc.h"
@@ -32,11 +33,11 @@
 
         Crates a GL rendering context that can be later used in subsequent
         calls.
- 
+
     INPUTS
 
         tagList - a pointer to tags to be used during creation.
- 
+
     TAGS
 
         GLA_Left   - specifies the left rendering offset on the rastport.
@@ -50,7 +51,7 @@
 
         GLA_Bottom - specifies the bottom rendering offset on the rastport.
                      Typically equals to window->BorderBottom.
-    
+
         GLA_Width  - specifies the width of the rendering area.
                      GLA_Width + GLA_Left + GLA_Right should equal the width of
                      the rastport. The GLA_Width is interchangable at cration
@@ -92,7 +93,7 @@
     RESULT
 
         A valid GL context or NULL of creation was not succesfull.
- 
+
     BUGS
 
     INTERNALS
@@ -135,7 +136,11 @@
     pscreen_tags[0].ti_Data = (IPTR)ctx->visible_rp->BitMap;
     D(bug("[MESA3DGL] %s:   _bmap @ 0x%p\n", __func__, pscreen_tags[0].ti_Data));
 
-    MESA3DGLStandardInit(ctx, tagList);
+    if (!MESA3DGLStandardInit(ctx, tagList))
+    {
+        bug("%s: ERROR - failed to initialize context (missing dimensions?)\n", __func__);
+        goto error_out;
+    }
 
     if (CreatePipeV(pscreen_tags))
     {
@@ -176,10 +181,24 @@
     attribs.profile = ST_PROFILE_DEFAULT;
     attribs.visual = ctx->stvis;
 
+    D(bug("[MESA3DGL] %s: Calling glstapi->create_context (glstapi=%p, stmanager=%p)\n", __func__, glstapi, ctx->stmanager));
+    D(bug("[MESA3DGL] %s:   attribs.profile=%d\n", __func__, attribs.profile));
+    D(bug("[MESA3DGL] %s:   visual.color_format=%d depth_stencil_format=%d\n", __func__,
+          ctx->stvis.color_format, ctx->stvis.depth_stencil_format));
+
     ctx->st = glstapi->create_context(glstapi, ctx->stmanager, &attribs, &st_error, NULL);
     if (!ctx->st)
     {
-        bug("%s: ERROR -  failed to create mesa state tracker context\n", __func__);
+        bug("%s: ERROR - failed to create mesa state tracker context (st_error=%d)\n", __func__, st_error);
+        /* ST_CONTEXT_ERROR values:
+         * 0 = ST_CONTEXT_SUCCESS
+         * 1 = ST_CONTEXT_ERROR_NO_MEMORY
+         * 2 = ST_CONTEXT_ERROR_BAD_API
+         * 3 = ST_CONTEXT_ERROR_BAD_VERSION
+         * 4 = ST_CONTEXT_ERROR_BAD_FLAG
+         * 5 = ST_CONTEXT_ERROR_UNKNOWN_ATTRIBUTE
+         * 6 = ST_CONTEXT_ERROR_UNKNOWN_FLAG
+         */
         goto error_out;
     }
 

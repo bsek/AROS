@@ -30,8 +30,8 @@
 #include <proto/dos.h>
 #include <clib/alib_protos.h>
 
-//#define MYDEBUG 1
-#include "debug.h"
+#define DEBUG 0
+#include <aros/debug.h>
 
 #include "mui.h"
 
@@ -267,7 +267,7 @@ static struct MUI_ImageSpec_intern *get_config_imspec(LONG img)
 #ifdef MYDEBUG
 static const char *zune_imspec_to_string(struct MUI_ImageSpec_intern *spec)
 {
-    static char buf[64];
+    static char buf[256];  /* Increased buffer size for long filenames */
 
     if (!spec)
     {
@@ -277,11 +277,11 @@ static const char *zune_imspec_to_string(struct MUI_ImageSpec_intern *spec)
     switch (spec->type)
     {
     case IST_PATTERN:
-        sprintf(buf, "0:%ld", spec->u.pattern);
+        snprintf(buf, sizeof(buf), "0:%ld", spec->u.pattern);
         break;
 
     case IST_VECTOR:
-        sprintf(buf, "1:%ld", spec->u.vect.type);
+        snprintf(buf, sizeof(buf), "1:%ld", spec->u.vect.type);
         break;
 
     case IST_COLOR:
@@ -290,19 +290,19 @@ static const char *zune_imspec_to_string(struct MUI_ImageSpec_intern *spec)
         break;
 
     case IST_BOOPSI:
-        sprintf(buf, "3:%s", spec->u.boopsi.filename);
+        snprintf(buf, sizeof(buf), "3:%s", spec->u.boopsi.filename ? (const char *)spec->u.boopsi.filename : "(null)");
         break;
 
     case IST_BRUSH:            /* this is really 3: too */
-        sprintf(buf, "3:%s", spec->u.brush.filename[0]);
+        snprintf(buf, sizeof(buf), "3:%s", spec->u.brush.filename[0] ? (const char *)spec->u.brush.filename[0] : "(null)");
         break;
 
     case IST_BITMAP:
-        sprintf(buf, "5:%s", spec->u.bitmap.filename);
+        snprintf(buf, sizeof(buf), "5:%s", spec->u.bitmap.filename ? (const char *)spec->u.bitmap.filename : "(null)");
         break;
 
     case IST_CONFIG:
-        sprintf(buf, "6:%ld", spec->u.cfg.muiimg);
+        snprintf(buf, sizeof(buf), "6:%ld", spec->u.cfg.muiimg);
         break;
 
     case IST_SCALED_GRADIENT:
@@ -780,9 +780,14 @@ void zune_imspec_drawbuffered(struct MUI_ImageSpec_intern *spec,
         return;
     }
 
+    D(bug("zune_imspec_drawbuffered: spec=%p, type=%d [%s]\n",
+          spec, spec->type, zune_imspec_to_string(spec)));
+
     if ((spec->type == IST_BITMAP && !spec->u.bitmap.dt)
         || (spec->type == IST_BRUSH && !spec->u.brush.dt[0]))
     {
+        D(bug("zune_imspec_drawbuffered: Bitmap/Brush not loaded yet (type=%d, dt=%p), falling back to solid color\n",
+              spec->type, spec->type == IST_BITMAP ? spec->u.bitmap.dt : spec->u.brush.dt[0]));
         def.type = IST_COLOR;
         zune_penspec_fill_muipen(&def.u.penspec, MPEN_BACKGROUND);
         spec = &def;
@@ -829,7 +834,7 @@ void zune_imspec_drawbuffered(struct MUI_ImageSpec_intern *spec,
             long len;
             straddr = *(spec->u.brush.filename);
             len = strlen(straddr);
-            
+
             /* Handle .mim (multi-image) files specially */
             if (len > 4 && strcmp(&straddr[len - 4], ".mim") == 0)
             {
@@ -837,7 +842,7 @@ void zune_imspec_drawbuffered(struct MUI_ImageSpec_intern *spec,
                     mri->mri_RastPort, left - dx, top - dy, state);
                 break;
             }
-            
+
             /* New path: Use ZuneTexture directly if available */
             struct ZuneTexture *tex = dt_get_texture(node);
             if (tex && mri->mri_RenderPort)
@@ -862,16 +867,16 @@ void zune_imspec_drawbuffered(struct MUI_ImageSpec_intern *spec,
         {
             struct dt_node *node = spec->u.bitmap.dt;
             struct ZuneTexture *tex = dt_get_texture(node);
-            
+
             /* Use ZuneTexture for optimal tiled rendering performance.
-             * 
+             *
              * The ZuneTexture system now uses per-texture pre-tiled caching
              * (similar to the legacy BackFillInfo system in datatypescache.c):
-             * 
+             *
              * 1. On first tiled render, creates a 256x256 pre-tiled cache
              * 2. Uses the cache for all subsequent renders
              * 3. Cache persists for the lifetime of the texture
-             * 
+             *
              * This is more efficient than per-window caching because:
              * - Cache is created once per texture, not once per window
              * - Cache is reused across all windows using the same texture
@@ -924,6 +929,7 @@ void zune_imspec_draw(struct MUI_ImageSpec_intern *spec,
     struct MUI_RenderInfo *mri, LONG left, LONG top, LONG width,
     LONG height, LONG xoffset, LONG yoffset, LONG state)
 {
+  D(bug("Inside zune_imspec_draw, drawing to rastport %p\n", mri->mri_RastPort));
     zune_imspec_drawbuffered(spec, mri->mri_RastPort, mri, left, top, width,
         height, xoffset, yoffset, state, 0, 0, 0, left, top, left + width,
         top + height);

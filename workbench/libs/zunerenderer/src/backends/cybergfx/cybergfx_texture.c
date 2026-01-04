@@ -254,16 +254,16 @@ static BOOL CybergfxDrawTextureToRastPortFast(struct RenderPort *rp,
                                               WORD src_x, WORD src_y,
                                               BOOL needs_alpha_blend) {
   struct RastPort *rastport = rp->target_rp;
-  
+
   if (!rastport || !rastport->BitMap)
     return FALSE;
-    
+
   /* Only handle ARGB32 format in fast path */
   if (texture->format != ZUNE_TEXTURE_FORMAT_ARGB32)
     return FALSE;
-    
+
   /* Calculate source pointer offset */
-  UBYTE *src_pixels = (UBYTE *)texture->pixel_data + 
+  UBYTE *src_pixels = (UBYTE *)texture->pixel_data +
                       (src_y * texture->pitch) + (src_x * 4);
 
   D(bug("CybergfxDrawTextureToRastPortFast: Using bulk %s for %dx%d texture\n",
@@ -282,7 +282,7 @@ static BOOL CybergfxDrawTextureToRastPortFast(struct RenderPort *rp,
                     rastport, dest_x, dest_y, width, height,
                     RECTFMT_ARGB);
   }
-  
+
   return TRUE;
 }
 
@@ -321,19 +321,19 @@ void CybergfxDrawTextureToRastPort(struct RenderPort *rp,
 
   /*
    * FAST PATH: Use bulk CyberGraphics operations when possible.
-   * 
+   *
    * Conditions for fast path:
    * 1. No scaling (unity scale: scale_x == 0x10000 && scale_y == 0x10000)
    * 2. No tinting
    * 3. ARGB32 format
    * 4. Rendering directly to RastPort (not DrawingBoard)
    * 5. No clipping needed (or simple rectangular clip)
-   * 
+   *
    * This matches the performance of the legacy dt_put_on_rastport() function.
    */
   BOOL unity_scale = (scale_x == 0x10000 && scale_y == 0x10000 &&
                       dest_width == src_width && dest_height == src_height);
-  
+
   /* Determine if we need alpha blending:
    * - If ZUNE_TEXTURE_OPAQUE is set, texture is fully opaque - no blending needed
    * - If ZUNE_TEXTURE_ALPHA is set but not OPAQUE, need alpha blending
@@ -436,14 +436,14 @@ void CybergfxDrawTextureToRastPort(struct RenderPort *rp,
        */
       if (a < 255 && bitmap_obj) {
         /* Read destination pixel for alpha blending */
-        HIDDT_Pixel dest_native = HIDD_BM_GetPixel(bitmap_obj, 
+        HIDDT_Pixel dest_native = HIDD_BM_GetPixel(bitmap_obj,
                                                     pixel_x + window_offset_x,
                                                     pixel_y + window_offset_y);
         HIDDT_Color dest_col;
         HIDD_BM_UnmapPixel(bitmap_obj, dest_native, &dest_col);
-        
+
         /* Use blend function with unpacked components */
-        ULONG dest_pixel = pack_argb32(dest_col.alpha >> 8, dest_col.red >> 8, 
+        ULONG dest_pixel = pack_argb32(dest_col.alpha >> 8, dest_col.red >> 8,
                                        dest_col.green >> 8, dest_col.blue >> 8);
         ULONG blended = blend_argb32_alpha(dest_pixel, a, r, g, b);
         unpack_argb32(blended, &a, &r, &g, &b);
@@ -566,7 +566,7 @@ void CybergfxDrawTextureToDrawingBoard(
             /* Alpha blend source pixel over destination */
             ULONG dest_pixel = dest_pixels[py * pitch_pixels + px];
             ULONG blended = blend_argb32(dest_pixel, pixel);
-            
+
             /* Skip if pixel unchanged (fully transparent source) */
             if (blended == dest_pixel)
               continue;
@@ -842,7 +842,7 @@ static void CalculateTiledCacheSize(UWORD tex_width, UWORD tex_height,
     if (*cache_width < TILED_CACHE_MAX_WIDTH)
       *cache_width += tex_width;
   }
-  
+
   if (tex_height >= TILED_CACHE_MAX_HEIGHT) {
     *cache_height = tex_height;
   } else {
@@ -875,34 +875,34 @@ static BOOL CreateTiledCache(struct ZuneTexture *texture, struct RastPort *frien
   ULONG src_pitch_pixels;
   ULONG cache_pitch_pixels;
   struct BitMap *cache_bitmap = NULL;
-  
+
   /* Don't create cache if texture format is not ARGB32 */
   if (texture->format != ZUNE_TEXTURE_FORMAT_ARGB32)
     return FALSE;
-    
+
   /* Don't create cache if texture is already large enough */
   if (tex_width >= TILED_CACHE_MAX_WIDTH && tex_height >= TILED_CACHE_MAX_HEIGHT)
     return FALSE;
-  
+
   /* Calculate optimal cache size */
   CalculateTiledCacheSize(tex_width, tex_height, &cache_width, &cache_height);
-  
+
   /* Allocate ARGB32 pixel buffer for software path and initial tiling */
-  cache_pixels = AllocVec(cache_width * cache_height * sizeof(ULONG), 
+  cache_pixels = AllocVec(cache_width * cache_height * sizeof(ULONG),
                           MEMF_PUBLIC | MEMF_CLEAR);
   if (!cache_pixels) {
-    D(bug("CreateTiledCache: Failed to allocate %dx%d pixel cache\n", 
+    D(bug("CreateTiledCache: Failed to allocate %dx%d pixel cache\n",
           cache_width, cache_height));
     return FALSE;
   }
-  
+
   src_pixels = (ULONG *)texture->pixel_data;
   src_pitch_pixels = texture->pitch / 4;
   cache_pitch_pixels = cache_width;
-  
+
   D(bug("CreateTiledCache: Creating %dx%d cache from %dx%d texture\n",
         cache_width, cache_height, tex_width, tex_height));
-  
+
   /*
    * Step 1: Copy the first tile (texture) into the cache at position (0,0)
    */
@@ -911,7 +911,7 @@ static BOOL CreateTiledCache(struct ZuneTexture *texture, struct RastPort *frien
             cache_pixels + (y * cache_pitch_pixels),
             tex_width * sizeof(ULONG));
   }
-  
+
   /*
    * Step 2: Exponential doubling horizontally
    * Start with one tile width, then double until we fill the cache width.
@@ -922,7 +922,7 @@ static BOOL CreateTiledCache(struct ZuneTexture *texture, struct RastPort *frien
     UWORD copy_width = filled_width;
     if (filled_width + copy_width > cache_width)
       copy_width = cache_width - filled_width;
-    
+
     /* Copy the filled portion to double the width */
     for (UWORD y = 0; y < tex_height; y++) {
       CopyMem(cache_pixels + (y * cache_pitch_pixels),
@@ -931,7 +931,7 @@ static BOOL CreateTiledCache(struct ZuneTexture *texture, struct RastPort *frien
     }
     filled_width += copy_width;
   }
-  
+
   /*
    * Step 3: Exponential doubling vertically
    * Now we have one full row of tiles. Double the rows until we fill
@@ -942,14 +942,14 @@ static BOOL CreateTiledCache(struct ZuneTexture *texture, struct RastPort *frien
     UWORD copy_height = filled_height;
     if (filled_height + copy_height > cache_height)
       copy_height = cache_height - filled_height;
-    
+
     /* Copy filled rows to double the height */
     CopyMem(cache_pixels,
             cache_pixels + (filled_height * cache_pitch_pixels),
             cache_width * copy_height * sizeof(ULONG));
     filled_height += copy_height;
   }
-  
+
   /*
    * Step 4: Create native BitMap and copy pre-tiled data to it.
    * This enables hardware-accelerated BltBitMap operations.
@@ -957,41 +957,41 @@ static BOOL CreateTiledCache(struct ZuneTexture *texture, struct RastPort *frien
    */
   if (friend_rp && friend_rp->BitMap) {
     ULONG depth = GetBitMapAttr(friend_rp->BitMap, BMA_DEPTH);
-    
+
     /* Allocate bitmap compatible with screen for hardware blitting */
     cache_bitmap = AllocBitMap(cache_width, cache_height, depth,
                                BMF_MINPLANES, friend_rp->BitMap);
-    
+
     if (cache_bitmap) {
       /* Write pre-tiled ARGB32 pixels to the native bitmap */
       WritePixelArray(cache_pixels, 0, 0, cache_width * sizeof(ULONG),
                       friend_rp, 0, 0, 0, 0, RECTFMT_ARGB);
-      
+
       /* Actually write to the cache bitmap via a temporary RastPort */
       struct RastPort temp_rp;
       InitRastPort(&temp_rp);
       temp_rp.BitMap = cache_bitmap;
-      
+
       WritePixelArray(cache_pixels, 0, 0, cache_width * sizeof(ULONG),
                       &temp_rp, 0, 0, cache_width, cache_height, RECTFMT_ARGB);
-      
+
       D(bug("CreateTiledCache: Created %dx%d native BitMap cache (depth=%ld)\n",
             cache_width, cache_height, depth));
     } else {
       D(bug("CreateTiledCache: Failed to allocate native BitMap, using software path\n"));
     }
   }
-  
+
   /* Store cache in texture */
   texture->tiled_cache_bitmap = cache_bitmap;
   texture->tiled_cache_pixels = cache_pixels;
   texture->tiled_cache_width = cache_width;
   texture->tiled_cache_height = cache_height;
   texture->tiled_cache_pitch = cache_width * sizeof(ULONG);
-  
+
   D(bug("CreateTiledCache: Successfully created %dx%d pre-tiled cache (bitmap=%p, pixels=%p)\n",
         cache_width, cache_height, cache_bitmap, cache_pixels));
-  
+
   return TRUE;
 }
 
@@ -1003,17 +1003,17 @@ static BOOL CreateTiledCache(struct ZuneTexture *texture, struct RastPort *frien
 static void FreeTiledCache(struct ZuneTexture *texture) {
   if (!texture)
     return;
-    
+
   if (texture->tiled_cache_bitmap) {
     FreeBitMap(texture->tiled_cache_bitmap);
     texture->tiled_cache_bitmap = NULL;
   }
-  
+
   if (texture->tiled_cache_pixels) {
     FreeVec(texture->tiled_cache_pixels);
     texture->tiled_cache_pixels = NULL;
   }
-  
+
   texture->tiled_cache_width = 0;
   texture->tiled_cache_height = 0;
   texture->tiled_cache_pitch = 0;
@@ -1034,7 +1034,7 @@ static BOOL EnsureTiledCache(struct ZuneTexture *texture, struct RastPort *frien
   /* Already have a cache? */
   if (texture->tiled_cache_pixels || texture->tiled_cache_bitmap)
     return TRUE;
-    
+
   /* Try to create one */
   return CreateTiledCache(texture, friend_rp);
 }
@@ -1065,7 +1065,7 @@ static BOOL RenderTiledCacheToRastPort(struct RenderPort *rp,
   UWORD cache_width = texture->tiled_cache_width;
   UWORD cache_height = texture->tiled_cache_height;
   ULONG cache_pitch = texture->tiled_cache_pitch;
-  
+
   /* Determine if we need alpha blending */
   BOOL needs_alpha_blend = (texture->flags & ZUNE_TEXTURE_ALPHA) != 0 &&
                            (texture->flags & ZUNE_TEXTURE_OPAQUE) == 0;
@@ -1079,22 +1079,22 @@ static BOOL RenderTiledCacheToRastPort(struct RenderPort *rp,
    * This is only possible when:
    * 1. We have a native BitMap cache
    * 2. The texture is fully opaque (no alpha blending needed)
-   * 
+   *
    * This matches the legacy CopyTiledBitMap() performance.
    */
   if (cache_bitmap && !needs_alpha_blend && rastport->BitMap) {
     struct BitMap *dest_bitmap = rastport->BitMap;
     UWORD first_width, first_height;
     WORD pos, size;
-    
+
     /* Calculate first tile dimensions (may be clipped) */
     first_width = (cache_width > dest_width) ? dest_width : cache_width;
     first_height = (cache_height > dest_height) ? dest_height : cache_height;
-    
+
     /* Step 1: Blit the first cache chunk to destination */
     BltBitMap(cache_bitmap, 0, 0, dest_bitmap, dest_x, dest_y,
               first_width, first_height, 0xC0, -1, NULL);
-    
+
     /* Step 2: Exponential doubling horizontally */
     for (pos = dest_x + cache_width, size = MIN(cache_width, dest_x + dest_width - pos);
          pos < dest_x + dest_width;
@@ -1104,7 +1104,7 @@ static BOOL RenderTiledCacheToRastPort(struct RenderPort *rp,
       pos += size;
       size = MIN(size << 1, dest_x + dest_width - pos);
     }
-    
+
     /* Step 3: Exponential doubling vertically */
     for (pos = dest_y + cache_height, size = MIN(cache_height, dest_y + dest_height - pos);
          pos < dest_y + dest_height;
@@ -1114,7 +1114,7 @@ static BOOL RenderTiledCacheToRastPort(struct RenderPort *rp,
       pos += size;
       size = MIN(size << 1, dest_y + dest_height - pos);
     }
-    
+
     D(bug("RenderTiledCacheToRastPort: Used BltBitMap fast path\n"));
     return TRUE;
   }
@@ -1127,17 +1127,17 @@ static BOOL RenderTiledCacheToRastPort(struct RenderPort *rp,
     D(bug("RenderTiledCacheToRastPort: No cache available!\n"));
     return FALSE;
   }
-  
+
   for (WORD cy = 0; cy < dest_height; cy += cache_height) {
     UWORD tile_height = cache_height;
     if (cy + tile_height > dest_height)
       tile_height = dest_height - cy;
-      
+
     for (WORD cx = 0; cx < dest_width; cx += cache_width) {
       UWORD tile_width = cache_width;
       if (cx + tile_width > dest_width)
         tile_width = dest_width - cx;
-      
+
       if (needs_alpha_blend) {
         WritePixelArrayAlpha(cache_pixels, 0, 0, cache_pitch,
                              rastport, dest_x + cx, dest_y + cy,
@@ -1149,7 +1149,7 @@ static BOOL RenderTiledCacheToRastPort(struct RenderPort *rp,
       }
     }
   }
-  
+
   D(bug("RenderTiledCacheToRastPort: Used WritePixelArray fallback\n"));
   return TRUE;
 }
@@ -1170,12 +1170,12 @@ static BOOL RenderTiledCacheToDrawingBoard(struct RenderPort *rp,
   UWORD cache_height = texture->tiled_cache_height;
   ULONG *dest_pixels = (ULONG *)board->pixels;
   ULONG dest_pitch_pixels = board->pitch / 4;
-  
+
   if (!cache_pixels) {
     D(bug("RenderTiledCacheToDrawingBoard: No pixel cache available!\n"));
     return FALSE;
   }
-  
+
   /* Determine if we need alpha blending */
   BOOL needs_alpha_blend = (texture->flags & ZUNE_TEXTURE_ALPHA) != 0 &&
                            (texture->flags & ZUNE_TEXTURE_OPAQUE) == 0;
@@ -1185,7 +1185,7 @@ static BOOL RenderTiledCacheToDrawingBoard(struct RenderPort *rp,
   if (dest_y < 0) { dest_height += dest_y; dest_y = 0; }
   if (dest_x + dest_width > board->width) dest_width = board->width - dest_x;
   if (dest_y + dest_height > board->height) dest_height = board->height - dest_y;
-  
+
   if (dest_width <= 0 || dest_height <= 0)
     return TRUE;
 
@@ -1206,7 +1206,7 @@ static BOOL RenderTiledCacheToDrawingBoard(struct RenderPort *rp,
         UWORD copy_width = cache_width - cache_x;
         if (dx + copy_width > dest_width)
           copy_width = dest_width - dx;
-        
+
         /* Use SIMD-accelerated blending for the cache segment */
         cybergfx_blend_argb32_row(dest_row + dx, cache_row + cache_x, copy_width);
         dx += copy_width;
@@ -1219,7 +1219,7 @@ static BOOL RenderTiledCacheToDrawingBoard(struct RenderPort *rp,
         UWORD copy_width = cache_width - cache_x;
         if (dx + copy_width > dest_width)
           copy_width = dest_width - dx;
-        
+
         CopyMem(cache_row + cache_x, dest_row + dx, copy_width * sizeof(ULONG));
         dx += copy_width;
       }
@@ -1245,32 +1245,32 @@ static BOOL RenderTiledCacheToDrawingBoard(struct RenderPort *rp,
 static BOOL CybergfxDrawTextureTiledToDrawingBoard(struct RenderPort *rp,
                                                    struct ZuneTexture *texture,
                                                    WORD dest_x, WORD dest_y,
-                                                   UWORD dest_width, 
+                                                   UWORD dest_width,
                                                    UWORD dest_height) {
   struct DrawingBoard *board = rp->target_board;
-  
+
   if (!board || !board->pixels_locked)
     return FALSE;
-    
+
   /* Only handle ARGB32 pixel formats */
-  if (board->pixel_format != PIXFMT_ARGB32 && 
+  if (board->pixel_format != PIXFMT_ARGB32 &&
       board->pixel_format != PIXFMT_RGBA32)
     return FALSE;
-    
+
   /* Only handle ARGB32 textures */
   if (texture->format != ZUNE_TEXTURE_FORMAT_ARGB32)
     return FALSE;
 
   UWORD tex_width = texture->width;
   UWORD tex_height = texture->height;
-  
+
   /* Determine if we need alpha blending:
    * - If ZUNE_TEXTURE_OPAQUE is set, texture is fully opaque - use fast copy
    * - If ZUNE_TEXTURE_ALPHA is set but not OPAQUE, need alpha blending
    * - If neither ALPHA flag is set, texture is opaque - use fast copy */
   BOOL needs_alpha_blend = (texture->flags & ZUNE_TEXTURE_ALPHA) != 0 &&
                            (texture->flags & ZUNE_TEXTURE_OPAQUE) == 0;
-  
+
   ULONG *src_pixels = (ULONG *)texture->pixel_data;
   ULONG src_pitch_pixels = texture->pitch / 4;
   ULONG *dest_pixels = (ULONG *)board->pixels;
@@ -1284,7 +1284,7 @@ static BOOL CybergfxDrawTextureTiledToDrawingBoard(struct RenderPort *rp,
   if (dest_y < 0) { dest_height += dest_y; dest_y = 0; }
   if (dest_x + dest_width > board->width) dest_width = board->width - dest_x;
   if (dest_y + dest_height > board->height) dest_height = board->height - dest_y;
-  
+
   if (dest_width <= 0 || dest_height <= 0)
     return TRUE; /* Nothing to draw, but not an error */
 
@@ -1302,7 +1302,7 @@ static BOOL CybergfxDrawTextureTiledToDrawingBoard(struct RenderPort *rp,
         UWORD copy_width = tex_width - src_x;
         if (dx + copy_width > dest_width)
           copy_width = dest_width - dx;
-        
+
         /* Use SIMD-accelerated blending for the tile segment */
         cybergfx_blend_argb32_row(dest_row + dx, src_row + src_x, copy_width);
         dx += copy_width;
@@ -1315,7 +1315,7 @@ static BOOL CybergfxDrawTextureTiledToDrawingBoard(struct RenderPort *rp,
         UWORD copy_width = tex_width - src_x;
         if (dx + copy_width > dest_width)
           copy_width = dest_width - dx;
-        
+
         CopyMem(src_row + src_x, dest_row + dx, copy_width * sizeof(ULONG));
         dx += copy_width;
       }
@@ -1339,27 +1339,27 @@ static BOOL CybergfxDrawTextureTiledToDrawingBoard(struct RenderPort *rp,
 static BOOL CybergfxDrawTextureTiledToRastPort(struct RenderPort *rp,
                                                struct ZuneTexture *texture,
                                                WORD dest_x, WORD dest_y,
-                                               UWORD dest_width, 
+                                               UWORD dest_width,
                                                UWORD dest_height) {
   struct RastPort *rastport = rp->target_rp;
-  
+
   if (!rastport || !rastport->BitMap)
     return FALSE;
-    
+
   /* Only handle ARGB32 format */
   if (texture->format != ZUNE_TEXTURE_FORMAT_ARGB32)
     return FALSE;
 
   UWORD tex_width = texture->width;
   UWORD tex_height = texture->height;
-  
+
   /* Determine if we need alpha blending:
    * - If ZUNE_TEXTURE_OPAQUE is set, texture is fully opaque - use WritePixelArray
    * - If ZUNE_TEXTURE_ALPHA is set but not OPAQUE, need WritePixelArrayAlpha
    * - If neither ALPHA flag is set, texture is opaque - use WritePixelArray */
   BOOL needs_alpha_blend = (texture->flags & ZUNE_TEXTURE_ALPHA) != 0 &&
                            (texture->flags & ZUNE_TEXTURE_OPAQUE) == 0;
-  
+
   ULONG *src_pixels = (ULONG *)texture->pixel_data;
   ULONG src_pitch_pixels = texture->pitch / 4;
 
@@ -1385,11 +1385,11 @@ static BOOL CybergfxDrawTextureTiledToRastPort(struct RenderPort *rp,
       /* Calculate how many pixels to copy from the texture row */
       UWORD src_x = dx % tex_width;
       UWORD copy_width = tex_width - src_x;
-      
+
       /* Don't copy beyond destination width */
       if (dx + copy_width > dest_width)
         copy_width = dest_width - dx;
-      
+
       /* Copy pixels from texture row to buffer */
       CopyMem(src_row + src_x, row_buffer + dx, copy_width * sizeof(ULONG));
       dx += copy_width;
@@ -1417,10 +1417,10 @@ static BOOL CybergfxDrawTextureTiledToRastPort(struct RenderPort *rp,
  * CybergfxDrawTextureTiledFast
  *
  * Optimized tiled texture rendering using per-texture pre-tiled cache.
- * 
+ *
  * This function implements the same caching strategy as the legacy
  * dt_put_on_rastport_tiled() function in datatypescache.c:
- * 
+ *
  * 1. On first call, creates a 256x256 pre-tiled cache for the texture
  * 2. Uses the cache for all subsequent tiled renders
  * 3. The cache persists for the lifetime of the texture
@@ -1437,14 +1437,19 @@ BOOL CybergfxDrawTextureTiledFast(struct RenderPort *rp,
                                   struct ZuneTexture *texture,
                                   WORD dest_x, WORD dest_y,
                                   UWORD dest_width, UWORD dest_height) {
+  D(bug("CybergfxDrawTextureTiledFast: ENTER rp=%p target_board=%p target_rp=%p\n",
+        rp, rp ? rp->target_board : NULL, rp ? rp->target_rp : NULL));
+
   /* Validate basic parameters */
-  if (!rp || !texture || !texture->pixel_data)
+  if (!rp || !texture || !texture->pixel_data) {
+    D(bug("CybergfxDrawTextureTiledFast: Invalid params - returning FALSE\n"));
     return FALSE;
-    
+  }
+
   /* Only handle ARGB32 format */
   if (texture->format != ZUNE_TEXTURE_FORMAT_ARGB32)
     return FALSE;
-    
+
   /* Don't bother with tiny textures or destinations */
   if (texture->width == 0 || texture->height == 0 ||
       dest_width == 0 || dest_height == 0)
@@ -1457,40 +1462,47 @@ BOOL CybergfxDrawTextureTiledFast(struct RenderPort *rp,
 
   /*
    * FAST PATH: Use pre-tiled cache if available or can be created.
-   * 
+   *
    * The cache includes:
    * 1. A native BitMap (for hardware BltBitMap - fastest)
    * 2. An ARGB32 pixel buffer (for software fallback)
-   * 
+   *
    * The BitMap is allocated as a friend of the target RastPort's bitmap
    * for optimal hardware compatibility.
    */
   if (EnsureTiledCache(texture, friend_rp)) {
     /* We have a pre-tiled cache - use it */
-    
+
     /* Try DrawingBoard path first (fastest when locked) */
     if (rp->target_board && rp->target_board->pixels_locked) {
+      D(bug("CybergfxDrawTextureTiledFast: Trying locked DrawingBoard path\n"));
       if (RenderTiledCacheToDrawingBoard(rp, texture, dest_x, dest_y,
                                          dest_width, dest_height)) {
+        D(bug("CybergfxDrawTextureTiledFast: Locked DrawingBoard path SUCCESS\n"));
         return TRUE;
       }
     }
-    
+
     /* Try RastPort path */
     if (rp->target_rp && !rp->target_board) {
+      D(bug("CybergfxDrawTextureTiledFast: Trying direct RastPort path\n"));
       if (RenderTiledCacheToRastPort(rp, texture, dest_x, dest_y,
                                      dest_width, dest_height)) {
+        D(bug("CybergfxDrawTextureTiledFast: Direct RastPort path SUCCESS\n"));
         return TRUE;
       }
     }
-    
+
     /* Fall back to unlocked DrawingBoard's rastport if available */
     if (rp->target_board && rp->target_board->rastport) {
+      D(bug("CybergfxDrawTextureTiledFast: Trying unlocked DrawingBoard rastport path (board->rastport=%p, bitmap=%p)\n",
+            rp->target_board->rastport, rp->target_board->rastport ? rp->target_board->rastport->BitMap : NULL));
       struct RenderPort temp_rp = *rp;
       temp_rp.target_rp = rp->target_board->rastport;
       temp_rp.target_board = NULL;
       if (RenderTiledCacheToRastPort(&temp_rp, texture, dest_x, dest_y,
                                      dest_width, dest_height)) {
+        D(bug("CybergfxDrawTextureTiledFast: Unlocked DrawingBoard rastport path SUCCESS\n"));
         return TRUE;
       }
     }
@@ -1500,7 +1512,7 @@ BOOL CybergfxDrawTextureTiledFast(struct RenderPort *rp,
    * FALLBACK: No cache available (texture too large or non-ARGB32).
    * Use direct tiling without cache.
    */
-  
+
   /* Try DrawingBoard path first (fastest when locked) */
   if (rp->target_board && rp->target_board->pixels_locked) {
     if (CybergfxDrawTextureTiledToDrawingBoard(rp, texture, dest_x, dest_y,
@@ -1508,7 +1520,7 @@ BOOL CybergfxDrawTextureTiledFast(struct RenderPort *rp,
       return TRUE;
     }
   }
-  
+
   /* Try RastPort path */
   if (rp->target_rp && !rp->target_board) {
     if (CybergfxDrawTextureTiledToRastPort(rp, texture, dest_x, dest_y,
@@ -1516,7 +1528,7 @@ BOOL CybergfxDrawTextureTiledFast(struct RenderPort *rp,
       return TRUE;
     }
   }
-  
+
   /* Fall back to unlocked DrawingBoard's rastport if available */
   if (rp->target_board && rp->target_board->rastport) {
     struct RenderPort temp_rp = *rp;

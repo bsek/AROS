@@ -1,7 +1,7 @@
 /*
     Copyright (C) 2009-2019, The AROS Development Team. All rights reserved.
 */
-
+#define DEBUG 0
 #include <aros/debug.h>
 
 #include <proto/utility.h>
@@ -132,7 +132,7 @@ BOOL MESA3DGLStandardInit(struct mesa3dgl_context * ctx, struct TagItem *tagList
         /* Use GLA_Width/GLA_Height as the rastport dimensions */
         ctx->visible_rp_width = ctx->left + requestedwidth + (requestedright >= 0 ? requestedright : 0);
         ctx->visible_rp_height = ctx->top + requestedheight + (requestedbottom >= 0 ? requestedbottom : 0);
-        D(bug("[MESA3DGL] %s: RastPort has no Layer, using explicit dimensions %ldx%ld\n", 
+        D(bug("[MESA3DGL] %s: RastPort has no Layer, using explicit dimensions %ldx%ld\n",
               __func__, ctx->visible_rp_width, ctx->visible_rp_height));
     }
 
@@ -164,9 +164,33 @@ BOOL MESA3DGLStandardInit(struct mesa3dgl_context * ctx, struct TagItem *tagList
     }
     ctx->bottom = requestedbottom;
 
-    /* Init screen information */
+    /* Init screen information - get BitsPerPixel */
     if (ctx->Screen)
-        ctx->BitsPerPixel  = GetCyberMapAttr(ctx->Screen->RastPort.BitMap, CYBRMATTR_BPPIX) * 8;
+    {
+        /* Get BitsPerPixel from Screen's RastPort BitMap */
+        ctx->BitsPerPixel = GetCyberMapAttr(ctx->Screen->RastPort.BitMap, CYBRMATTR_BPPIX) * 8;
+    }
+    else if (ctx->visible_rp && ctx->visible_rp->BitMap)
+    {
+        /* No Screen available - get BitsPerPixel directly from the RastPort's BitMap */
+        if (GetCyberMapAttr(ctx->visible_rp->BitMap, CYBRMATTR_ISCYBERGFX))
+        {
+            ctx->BitsPerPixel = GetCyberMapAttr(ctx->visible_rp->BitMap, CYBRMATTR_BPPIX) * 8;
+            D(bug("[MESA3DGL] %s: Got BitsPerPixel from RastPort BitMap: %d\n", __func__, ctx->BitsPerPixel));
+        }
+        else
+        {
+            /* Fallback for non-CyberGfx bitmaps - assume 32-bit */
+            ctx->BitsPerPixel = 32;
+            D(bug("[MESA3DGL] %s: Non-CyberGfx bitmap, assuming 32-bit\n", __func__));
+        }
+    }
+    else
+    {
+        /* No valid source for pixel format - default to 32-bit */
+        ctx->BitsPerPixel = 32;
+        D(bug("[MESA3DGL] %s: No bitmap available, defaulting to 32-bit\n", __func__));
+    }
 
     D(bug("[MESA3DGL] %s: Context Base dimensions set -:\n", __func__));
     D(bug("[MESA3DGL] %s:    ctx->visible_rp_width        = %d\n", __func__, ctx->visible_rp_width));
@@ -175,6 +199,7 @@ BOOL MESA3DGLStandardInit(struct mesa3dgl_context * ctx, struct TagItem *tagList
     D(bug("[MESA3DGL] %s:    ctx->right                   = %d\n", __func__, ctx->right));
     D(bug("[MESA3DGL] %s:    ctx->top                     = %d\n", __func__, ctx->top));
     D(bug("[MESA3DGL] %s:    ctx->bottom                  = %d\n", __func__, ctx->bottom));
+    D(bug("[MESA3DGL] %s:    ctx->BitsPerPixel            = %d\n", __func__, ctx->BitsPerPixel));
 
     return TRUE;
 }
@@ -183,9 +208,16 @@ VOID MESA3DGLRecalculateBufferWidthHeight(struct mesa3dgl_context * ctx)
 {
     ULONG newwidth = 0;
     ULONG newheight = 0;
-    
+
     D(bug("[MESA3DGL] %s(0x%p)\n", __func__, ctx));
-    
+
+    /* Safety check - visible_rp must exist */
+    if (!ctx || !ctx->visible_rp)
+    {
+        D(bug("[MESA3DGL] %s: ERROR - ctx or visible_rp is NULL!\n", __func__));
+        return;
+    }
+
     /* Only recalculate if we have a Layer - off-screen buffers don't change size */
     if (ctx->visible_rp->Layer)
     {
@@ -200,11 +232,17 @@ VOID MESA3DGLRecalculateBufferWidthHeight(struct mesa3dgl_context * ctx)
 
     newwidth = ctx->visible_rp_width - ctx->left - ctx->right;
     newheight = ctx->visible_rp_height - ctx->top - ctx->bottom;
-    
+
     if (newwidth < 0) newwidth = 0;
     if (newheight < 0) newheight = 0;
-    
-    
+
+    /* Safety check - framebuffer must exist */
+    if (!ctx->framebuffer)
+    {
+        D(bug("[MESA3DGL] %s: ERROR - framebuffer is NULL!\n", __func__));
+        return;
+    }
+
     if ((newwidth != ctx->framebuffer->width) || (newheight != ctx->framebuffer->height))
     {
         /* The drawing area size has changed. Buffer must change */
@@ -212,11 +250,11 @@ VOID MESA3DGLRecalculateBufferWidthHeight(struct mesa3dgl_context * ctx)
         D(bug("[MESA3DGL] %s: current width     =   %d\n", __func__, ctx->framebuffer->width));
         D(bug("[MESA3DGL] %s: new height        =   %d\n", __func__, newheight));
         D(bug("[MESA3DGL] %s: new width         =   %d\n", __func__, newwidth));
-        
+
         ctx->framebuffer->width = newwidth;
         ctx->framebuffer->height = newheight;
         ctx->framebuffer->resized = TRUE;
-        
+
         if (ctx->window)
         {
             struct Rectangle rastcliprect;
@@ -226,7 +264,7 @@ VOID MESA3DGLRecalculateBufferWidthHeight(struct mesa3dgl_context * ctx)
                 { RPTAG_ClipRectangleFlags , (RPCRF_RELRIGHT | RPCRF_RELBOTTOM) },
                 { TAG_DONE }
             };
-        
+
             D(bug("[MESA3DGL] %s: Clipping Rastport to Window's dimensions\n", __func__));
 
             /* Clip the rastport to the visible area */

@@ -48,6 +48,41 @@ void PrepareBrushForRendering(struct RenderPort *rp, struct ZuneBrush *brush, WO
       brush->internal.linear_cache.t_step_y = 0.0f;
       brush->internal.linear_cache.t_start = 0.0f;
     }
+
+    /* Pre-rasterize gradient if dimensions are reasonable (max 512KB) */
+    ULONG pixel_count = (ULONG)rect_w * rect_h;
+    if (pixel_count > 0 && pixel_count <= 131072 &&
+        brush->data.linear.stops && brush->data.linear.stop_count > 0) { /* 131072 pixels = 512KB */
+      /* Free old cache - we always regenerate since gradient params may have changed */
+      if (brush->internal.linear_cache.rasterized_pixels) {
+        FreeVec(brush->internal.linear_cache.rasterized_pixels);
+        brush->internal.linear_cache.rasterized_pixels = NULL;
+      }
+
+      /* Allocate new cache */
+      ULONG *pixels = AllocVec(pixel_count * sizeof(ULONG), MEMF_PUBLIC);
+      if (pixels) {
+        ULONG *dst = pixels;
+        float row_t = brush->internal.linear_cache.t_start;
+
+        for (UWORD y = 0; y < rect_h; y++) {
+          float t = row_t;
+          for (UWORD x = 0; x < rect_w; x++) {
+            UBYTE r, g, b, a;
+            InterpolateGradientStops(brush->data.linear.stops,
+                                     brush->data.linear.stop_count, t,
+                                     &r, &g, &b, &a);
+            *dst++ = ZUNE_COLOR_ARGB32(a, r, g, b);
+            t += brush->internal.linear_cache.t_step_x;
+          }
+          row_t += brush->internal.linear_cache.t_step_y;
+        }
+
+        brush->internal.linear_cache.rasterized_pixels = pixels;
+        brush->internal.linear_cache.rasterized_width = rect_w;
+        brush->internal.linear_cache.rasterized_height = rect_h;
+      }
+    }
     break;
   }
 
@@ -101,6 +136,7 @@ void PrepareBrushForRendering(struct RenderPort *rp, struct ZuneBrush *brush, WO
   case ZUNE_BRUSH_TYPE_PATTERN: {
     /* Convert pens to ARGB32 colors */
     if (!brush->data.pattern.colormap) {
+      D(bug("PrepareBrushForRendering: PATTERN - no colormap!\n"));
       brush->internal.valid = FALSE;
       break;
     }
@@ -113,6 +149,8 @@ void PrepareBrushForRendering(struct RenderPort *rp, struct ZuneBrush *brush, WO
                                                                  rgb[0] >> 24,
                                                                  rgb[1] >> 24,
                                                                  rgb[2] >> 24);
+    D(bug("PrepareBrushForRendering: PATTERN fg_pen=%ld -> RGB32=(%08lx,%08lx,%08lx) -> ARGB=%08lx\n",
+          brush->data.pattern.fg_pen, rgb[0], rgb[1], rgb[2], brush->internal.pattern_cache.fg_color));
 
     /* Get background color */
     GetRGB32(brush->data.pattern.colormap, brush->data.pattern.bg_pen, 1, rgb);
@@ -120,6 +158,8 @@ void PrepareBrushForRendering(struct RenderPort *rp, struct ZuneBrush *brush, WO
                                                                  rgb[0] >> 24,
                                                                  rgb[1] >> 24,
                                                                  rgb[2] >> 24);
+    D(bug("PrepareBrushForRendering: PATTERN bg_pen=%ld -> RGB32=(%08lx,%08lx,%08lx) -> ARGB=%08lx\n",
+          brush->data.pattern.bg_pen, rgb[0], rgb[1], rgb[2], brush->internal.pattern_cache.bg_color));
     break;
   }
 
@@ -294,6 +334,30 @@ void SampleBrush(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
       break;
     }
 
+    /* Use pre-rasterized cache if available and valid */
+    if (brush->internal.linear_cache.rasterized_pixels &&
+        brush->internal.linear_cache.rasterized_width > 0 &&
+        brush->internal.linear_cache.rasterized_height > 0) {
+      int rel_x = px - rect_x;
+      int rel_y = py - rect_y;
+
+      /* Clamp to valid range */
+      if (rel_x < 0) rel_x = 0;
+      if (rel_y < 0) rel_y = 0;
+      if (rel_x >= brush->internal.linear_cache.rasterized_width)
+        rel_x = brush->internal.linear_cache.rasterized_width - 1;
+      if (rel_y >= brush->internal.linear_cache.rasterized_height)
+        rel_y = brush->internal.linear_cache.rasterized_height - 1;
+
+      ULONG pixel = brush->internal.linear_cache.rasterized_pixels[
+          rel_y * brush->internal.linear_cache.rasterized_width + rel_x];
+      *a = ZUNE_GET_ALPHA(pixel);
+      *r = ZUNE_GET_RED(pixel);
+      *g = ZUNE_GET_GREEN(pixel);
+      *b = ZUNE_GET_BLUE(pixel);
+      break;
+    }
+
     /* Calculate gradient t using cached increments */
     float rel_x = px - rect_x;
     float rel_y = py - rect_y;
@@ -384,6 +448,33 @@ void SampleBrushBatch4(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
       break;
     }
 
+    /* Use pre-rasterized cache if available and valid */
+    if (brush->internal.linear_cache.rasterized_pixels &&
+        brush->internal.linear_cache.rasterized_width > 0 &&
+        brush->internal.linear_cache.rasterized_height > 0) {
+      int rel_y = py - rect_y;
+      if (rel_y < 0) rel_y = 0;
+      if (rel_y >= brush->internal.linear_cache.rasterized_height)
+        rel_y = brush->internal.linear_cache.rasterized_height - 1;
+
+      ULONG *row = brush->internal.linear_cache.rasterized_pixels +
+                   rel_y * brush->internal.linear_cache.rasterized_width;
+      UWORD cache_w = brush->internal.linear_cache.rasterized_width;
+
+      for (int i = 0; i < 4; i++) {
+        int rel_x = px[i] - rect_x;
+        if (rel_x < 0) rel_x = 0;
+        if (rel_x >= cache_w) rel_x = cache_w - 1;
+
+        ULONG pixel = row[rel_x];
+        a[i] = ZUNE_GET_ALPHA(pixel);
+        r[i] = ZUNE_GET_RED(pixel);
+        g[i] = ZUNE_GET_GREEN(pixel);
+        b[i] = ZUNE_GET_BLUE(pixel);
+      }
+      break;
+    }
+
     /* Calculate base t for this row */
     float rel_y = py - rect_y;
     float base_t = brush->internal.linear_cache.t_start +
@@ -422,6 +513,14 @@ void CleanupBrushInternalState(struct ZuneBrush *brush) {
   if (brush->internal.color) {
     FreeMem(brush->internal.color, sizeof(struct InternalColor));
     brush->internal.color = NULL;
+  }
+
+  /* Free pre-rasterized gradient cache */
+  if (brush->internal.linear_cache.rasterized_pixels) {
+    FreeVec(brush->internal.linear_cache.rasterized_pixels);
+    brush->internal.linear_cache.rasterized_pixels = NULL;
+    brush->internal.linear_cache.rasterized_width = 0;
+    brush->internal.linear_cache.rasterized_height = 0;
   }
 
   /* Mark internal cache as invalid */
@@ -464,6 +563,33 @@ void SampleBrushBatch8(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
     if (!brush->internal.valid) {
       for (int i = 0; i < 8; i++) {
         r[i] = g[i] = b[i] = a[i] = 0;
+      }
+      break;
+    }
+
+    /* Use pre-rasterized cache if available and valid */
+    if (brush->internal.linear_cache.rasterized_pixels &&
+        brush->internal.linear_cache.rasterized_width > 0 &&
+        brush->internal.linear_cache.rasterized_height > 0) {
+      int rel_y = py - rect_y;
+      if (rel_y < 0) rel_y = 0;
+      if (rel_y >= brush->internal.linear_cache.rasterized_height)
+        rel_y = brush->internal.linear_cache.rasterized_height - 1;
+
+      ULONG *row = brush->internal.linear_cache.rasterized_pixels +
+                   rel_y * brush->internal.linear_cache.rasterized_width;
+      UWORD cache_w = brush->internal.linear_cache.rasterized_width;
+
+      for (int i = 0; i < 8; i++) {
+        int rel_x = px[i] - rect_x;
+        if (rel_x < 0) rel_x = 0;
+        if (rel_x >= cache_w) rel_x = cache_w - 1;
+
+        ULONG pixel = row[rel_x];
+        a[i] = ZUNE_GET_ALPHA(pixel);
+        r[i] = ZUNE_GET_RED(pixel);
+        g[i] = ZUNE_GET_GREEN(pixel);
+        b[i] = ZUNE_GET_BLUE(pixel);
       }
       break;
     }

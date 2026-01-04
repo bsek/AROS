@@ -268,6 +268,18 @@ struct RenderPort;
 struct DrawingBoard;
 struct MUI_RenderInfo;
 
+/**************************************************************************
+ Dirty rectangle list for optimized batch flushing.
+ Instead of merging all dirty areas into one large bounding box,
+ we maintain a list of separate rectangles to minimize overdraw.
+**************************************************************************/
+#define MRI_MAX_DIRTY_RECTS 16  /* Maximum rects before falling back to bounding box */
+
+struct MUI_DirtyRect {
+    struct Rectangle rect;     /* The dirty rectangle */
+    BOOL valid;                /* TRUE if this slot is in use */
+};
+
 BOOL WindowObtainObjectDrawBuffer(struct MUI_RenderInfo *mri, Object *obj, UWORD width, UWORD height, struct DrawingBoard **board_out,
                                   struct RenderPort **port_out);
 void WindowReleaseObjectDrawBuffer(struct MUI_RenderInfo *mri, Object *obj);
@@ -334,14 +346,13 @@ struct MUI_RenderInfo {
     struct dt_frame_image *mri_FrameImage[16];
 
     struct RenderPort *mri_RenderPort;
-    struct RenderPort *mri_WindowRenderPort;
     struct DrawingBoard *mri_DrawingBoard;
     BOOL mri_BufferDirty;
     UWORD mri_BufferBatchDepth;
 
-    /* Dirty rectangle accumulation for optimized batch flushing */
-    struct Rectangle mri_DirtyRect;  /* Accumulated dirty region during batch */
-    BOOL mri_DirtyRectValid;         /* TRUE if mri_DirtyRect contains valid data */
+    /* Dirty rectangle list for optimized batch flushing */
+    struct MUI_DirtyRect mri_DirtyRects[MRI_MAX_DIRTY_RECTS];  /* Array of dirty rectangles */
+    UWORD mri_DirtyRectCount;        /* Number of valid dirty rects in array */
 };
 
 #define MUIMRI_RECTFILL (1 << 0)

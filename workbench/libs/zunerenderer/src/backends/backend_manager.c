@@ -288,16 +288,27 @@ BOOL ZuneBindRenderPortToBackend(struct RenderPort *rp, ZuneBackend *backend) {
     ZuneUnbindRenderPortFromBackend(rp);
   }
 
+  /* Store backend information in RenderPort BEFORE calling InitRenderPort */
+  rp->backend_type = backend->ops->type;
+  rp->backend_vtable = backend; /* Store the whole backend structure */
+
+  /*
+   * Note: We do NOT set rp->backend_context here!
+   * The backend's InitRenderPort() is responsible for setting up
+   * rp->backend_context with backend-specific per-RenderPort data.
+   *
+   * For example, the OpenGL backend needs to store per-RenderPort GL
+   * contexts, not the global backend context. Setting backend_context
+   * here would overwrite what the backend sets up.
+   */
+
   /* Initialize RenderPort with backend */
   if (backend->ops->InitRenderPort && !backend->ops->InitRenderPort(rp)) {
     D(bug("ZuneBindRenderPortToBackend: Backend InitRenderPort failed\n"));
+    rp->backend_type = BACKEND_SOFTWARE;
+    rp->backend_vtable = NULL;
     return FALSE;
   }
-
-  /* Store backend information in RenderPort */
-  rp->backend_type = backend->ops->type;
-  rp->backend_vtable = backend; /* Store the whole backend structure */
-  rp->backend_context = backend->context;
 
   /* Increment reference count */
   if (backend->context) {
@@ -389,7 +400,7 @@ BOOL RegisterCyberGfxBackend(void) {
   D(bug("RegisterCyberGfxBackend: Registering CyberGraphics backend\n"));
 
   cybergfx_backend.ops = &cybergfx_backend_ops;
-  cybergfx_backend.priority = 50; /* Medium priority */
+  cybergfx_backend.priority = 150; /* Medium priority */
 
   return ZuneRegisterBackend(&cybergfx_backend);
 }

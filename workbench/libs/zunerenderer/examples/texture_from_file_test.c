@@ -129,8 +129,8 @@ static BOOL OpenTestWindow(void)
         return FALSE;
     }
 
-    /* Create RenderPort for the window */
-    render_port = CreateRenderPort(pub_screen->ViewPort.ColorMap, test_window->RPort);
+    /* Create RenderPort for the window (new API) */
+    render_port = CreateRenderPortForWindow(test_window, pub_screen->ViewPort.ColorMap);
     if (!render_port) {
         printf("ERROR: Failed to create RenderPort\n");
         CloseWindow(test_window);

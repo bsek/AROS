@@ -271,8 +271,11 @@ void zune_penspec_drawdirect(struct MUI_PenSpec_intern *psi,
       return;
     }
 
+    D(bug("zune_penspec_drawdirect: Using legacy SetAPen/RectFill to rp=%p (BitMap=%p)\n",
+          rp, rp ? rp->BitMap : NULL));
     SetAPen(rp, psi->p_pen);
     RectFill(rp, left, top, right, bottom);
+    D(bug("zune_penspec_drawdirect: RectFill completed\n"));
 }
 
 void zune_penspec_draw(struct MUI_PenSpec_intern *psi,

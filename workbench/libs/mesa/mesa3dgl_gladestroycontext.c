@@ -60,7 +60,13 @@
             _ctx->st->destroy(_ctx->st);
             MESA3DGLFreeFrameBuffer(_ctx->framebuffer);
             MESA3DGLFreeStManager(_ctx->driver, _ctx->stmanager);
-            glstapi->destroy(glstapi);
+            /* 
+             * NOTE: Do NOT call glstapi->destroy(glstapi) here!
+             * glstapi is a global singleton initialized in MESA3DGLInit() 
+             * and should only be destroyed in MESA3DGLExit() when the 
+             * library is closed. Destroying it here breaks subsequent
+             * context creation.
+             */
             MESA3DGLFreeContext(_ctx);
         }
     }

@@ -163,8 +163,13 @@ typedef struct ZuneBackendOps {
   BOOL (*SetupClipping)(struct RenderPort *rp, struct Region *region);
   void (*ClearClipping)(struct RenderPort *rp); // For hardware-based backends
 
+  /* RastPort copy (for reading background into DrawingBoard) */
+  void (*CopyFromRastPort)(struct RenderPort *rp, struct RastPort *src_rp,
+                           WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
+                           UWORD width, UWORD height);
+
   /* Future extension slots */
-  APTR reserved[2];
+  APTR reserved[1];
 
 } ZuneBackendOps;
 

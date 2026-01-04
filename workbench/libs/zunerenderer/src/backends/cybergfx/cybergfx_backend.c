@@ -77,6 +77,10 @@ static void CybergfxBlitToScreen(struct RenderPort *source, struct RastPort *scr
 static BOOL CybergfxInitDrawingBoard(struct DrawingBoard *board);
 static void CybergfxCleanupDrawingBoard(struct DrawingBoard *board);
 
+static void CybergfxCopyFromRastPort(struct RenderPort *rp, struct RastPort *src_rp,
+                                     WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
+                                     UWORD width, UWORD height);
+
 /*****************************************************************************/
 /* Backend Operations Table */
 /*****************************************************************************/
@@ -137,7 +141,9 @@ ZuneBackendOps cybergfx_backend_ops = {.name = "CyberGraphics",
                                        .SetupClipping = CybergfxSetupClipping,
                                        .ClearClipping = CybergfxClearClipping,
 
-                                       .reserved = {NULL, NULL}};
+                                       .CopyFromRastPort = CybergfxCopyFromRastPort,
+
+                                       .reserved = {NULL}};
 
 /*****************************************************************************/
 /* DrawingBoard Management */
@@ -278,22 +284,38 @@ static BOOL CybergfxIsAvailable(void) { return (CyberGfxBase != NULL); }
 static BOOL CybergfxIsCompatible(struct RenderPort *rp) {
     ENTER_FUNCTION("CybergfxIsCompatible");
 
-    /* If no RenderPort provided, assume compatible (for DrawingBoard creation) */
+    /* Check if CyberGraphics library is available first */
+    if (!CyberGfxBase) {
+        D(bug("CybergfxIsCompatible: CyberGraphics library not available\n"));
+        EXIT_FUNCTION("CybergfxIsCompatible");
+        return FALSE;
+    }
+
+    /* If no RenderPort provided, assume compatible (for general availability check) */
     if (!rp) {
         EXIT_FUNCTION("CybergfxIsCompatible");
         return TRUE;
     }
 
-    /* Check if we have a target RastPort with a bitmap */
-    if (!rp->target_rp || !rp->target_rp->BitMap) {
-        D(bug("CybergfxIsCompatible: No target RastPort or BitMap\n"));
+    /*
+     * DrawingBoard target: Always compatible if CyberGfxBase is available.
+     * 
+     * This is called BEFORE bitmap allocation (lazy allocation), so we can't
+     * check the bitmap yet. CyberGfx can create bitmaps for any DrawingBoard,
+     * so we report compatible here. The actual bitmap will be allocated later
+     * in CreateRenderPortWithDrawingBoard().
+     */
+    if (rp->target_board) {
+        D(bug("CybergfxIsCompatible: DrawingBoard target - compatible (will allocate bitmap)\n"));
         EXIT_FUNCTION("CybergfxIsCompatible");
-        return FALSE;
+        return TRUE;
     }
 
-    /* Check if CyberGraphics library is available */
-    if (!CyberGfxBase) {
-        D(bug("CybergfxIsCompatible: CyberGraphics library not available\n"));
+    /*
+     * Direct RastPort target: Check if bitmap exists and is CyberGfx compatible.
+     */
+    if (!rp->target_rp || !rp->target_rp->BitMap) {
+        D(bug("CybergfxIsCompatible: No target RastPort or BitMap\n"));
         EXIT_FUNCTION("CybergfxIsCompatible");
         return FALSE;
     }
@@ -591,4 +613,111 @@ static void CybergfxBlitToScreen(struct RenderPort *source, struct RastPort *scr
     }
 
     EXIT_FUNCTION("CybergfxBlitToScreen");
+}
+
+/*****************************************************************************/
+/* RastPort Copy Operations */
+/*****************************************************************************/
+
+/*
+ * CybergfxCopyFromRastPort - Copy pixels from a RastPort into DrawingBoard
+ *
+ * This function reads pixels from a source RastPort (e.g., window background)
+ * and writes them into the DrawingBoard's pixel buffer. This is used for
+ * proper alpha blending when drawing antialiased content over existing
+ * background.
+ *
+ * For CyberGfx backend, this uses ReadPixelArray directly since we have
+ * direct pixel access to the DrawingBoard's bitmap.
+ */
+static void CybergfxCopyFromRastPort(struct RenderPort *rp, struct RastPort *src_rp,
+                                     WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
+                                     UWORD width, UWORD height)
+{
+    struct DrawingBoard *board;
+
+    ENTER_FUNCTION("CybergfxCopyFromRastPort");
+
+    if (!rp || !src_rp) {
+        D(bug("CybergfxCopyFromRastPort: Invalid parameters (rp=%p, src_rp=%p)\n", rp, src_rp));
+        EXIT_FUNCTION("CybergfxCopyFromRastPort");
+        return;
+    }
+
+    board = rp->target_board;
+    if (!board) {
+        D(bug("CybergfxCopyFromRastPort: RenderPort has no DrawingBoard\n"));
+        EXIT_FUNCTION("CybergfxCopyFromRastPort");
+        return;
+    }
+
+    /* Validate dimensions */
+    if (width == 0 || height == 0) {
+        EXIT_FUNCTION("CybergfxCopyFromRastPort");
+        return;
+    }
+
+    /* Clamp to DrawingBoard bounds */
+    if (dst_x < 0) {
+        width += dst_x;
+        src_x -= dst_x;
+        dst_x = 0;
+    }
+    if (dst_y < 0) {
+        height += dst_y;
+        src_y -= dst_y;
+        dst_y = 0;
+    }
+    if (dst_x + width > board->width) {
+        width = board->width - dst_x;
+    }
+    if (dst_y + height > board->height) {
+        height = board->height - dst_y;
+    }
+
+    if (width <= 0 || height <= 0) {
+        EXIT_FUNCTION("CybergfxCopyFromRastPort");
+        return;
+    }
+
+    D(bug("CybergfxCopyFromRastPort: Copying %dx%d from src(%d,%d) to dst(%d,%d)\n",
+          width, height, src_x, src_y, dst_x, dst_y));
+
+    /*
+     * If the DrawingBoard is locked, write directly to the pixel buffer.
+     * Otherwise, use the bitmap's RastPort.
+     */
+    if (board->pixels_locked && board->pixels) {
+        /* Direct pixel buffer access */
+        UBYTE *dst_pixels = (UBYTE *)board->pixels;
+        ULONG dst_offset = dst_y * board->pitch + dst_x * 4; /* Assuming 32-bit ARGB */
+
+        ReadPixelArray(dst_pixels + dst_offset, 0, 0, board->pitch,
+                       src_rp, src_x, src_y, width, height, RECTFMT_ARGB);
+    } else if (board->rastport && board->bitmap) {
+        /* Use bitmap - need to lock temporarily */
+        APTR lock_handle;
+        APTR pixels;
+        ULONG pitch;
+
+        lock_handle = LockBitMapTags(board->bitmap,
+                                     LBMI_BASEADDRESS, &pixels,
+                                     LBMI_BYTESPERROW, &pitch,
+                                     TAG_DONE);
+        if (lock_handle) {
+            UBYTE *dst_pixels = (UBYTE *)pixels;
+            ULONG dst_offset = dst_y * pitch + dst_x * 4;
+
+            ReadPixelArray(dst_pixels + dst_offset, 0, 0, pitch,
+                           src_rp, src_x, src_y, width, height, RECTFMT_ARGB);
+
+            UnLockBitMap(lock_handle);
+        } else {
+            D(bug("CybergfxCopyFromRastPort: Failed to lock bitmap\n"));
+        }
+    } else {
+        D(bug("CybergfxCopyFromRastPort: No valid pixel target available\n"));
+    }
+
+    EXIT_FUNCTION("CybergfxCopyFromRastPort");
 }

@@ -2,6 +2,7 @@
     Copyright (C) 2009-2019, The AROS Development Team. All rights reserved.
 */
 
+#define DEBUG 0
 #include <aros/debug.h>
 
 #include <proto/exec.h>
@@ -39,8 +40,18 @@
 
     D(bug("[MESA3DGL] %s()\n", __func__));
 
+    D(bug("[MESA3DGL] %s: _ctx=0x%p glstapi=0x%p\n", __func__, _ctx, glstapi));
+
+    if (!glstapi)
+    {
+        bug("[MESA3DGL] %s: ERROR - glstapi is NULL! Library not initialized?\n", __func__);
+        return;
+    }
+
     if (_ctx)
     {
+        D(bug("[MESA3DGL] %s: checking _ctx->st=0x%p _ctx->framebuffer=0x%p\n", __func__, _ctx->st, _ctx->framebuffer));
+
         struct st_context_iface * cur_ctx = glstapi->get_current(glstapi);
 
         if (_ctx->st != cur_ctx)

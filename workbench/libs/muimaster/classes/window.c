@@ -300,24 +300,30 @@ BOOL WindowObtainObjectDrawBuffer(struct MUI_RenderInfo *mri, Object *obj, UWORD
         ResetDrawBufferEntry(entry);
 
     if (!entry->board || !entry->port) {
-        struct DrawingBoard *board = CreateDrawingBoard(width, height, 32, ZUNE_DRAWINGBOARD_CACHED);
-
-        if (!board) {
-            RemoveDrawBufferEntry(data, entry);
-            return FALSE;
-        }
-
-        entry->port = CreateRenderPortWithDrawingBoard(mri->mri_Colormap, board);
+        /*
+         * New API: Create RenderPort first (bound to window), then DrawingBoard.
+         * The RenderPort selects the best backend (OpenGL if available).
+         */
+        entry->port = CreateRenderPortForWindow(mri->mri_Window, mri->mri_Colormap);
         if (!entry->port) {
-            DestroyDrawingBoard(board);
             RemoveDrawBufferEntry(data, entry);
             return FALSE;
         }
 
-        entry->board = board;
+        entry->board = CreateDrawingBoardForRenderPort(entry->port, width, height);
+        if (!entry->board) {
+            DestroyRenderPort(entry->port);
+            entry->port = NULL;
+            RemoveDrawBufferEntry(data, entry);
+            return FALSE;
+        }
+
         entry->width = width;
         entry->height = height;
     }
+
+    /* Ensure RenderPort targets the correct DrawingBoard (important for reuse) */
+    ZuneSetTarget(entry->port, entry->board);
 
     if (board_out)
         *board_out = entry->board;
@@ -741,21 +747,35 @@ static void CleanupRenderInfo(Object *obj, struct MUI_WindowData *data, struct M
 
 static void ShowRenderInfo(struct MUI_RenderInfo *mri) {
     if (mri->mri_DrawingBoard) {
-        // Modern double buffering with DrawingBoard
-        // MUI needs to render to the DrawingBoard's bitmap RastPort
+        /* Modern double buffering with DrawingBoard
+         * MUI renders to the DrawingBoard's bitmap RastPort (legacy SetAPen/RectFill)
+         * zunerenderer draws to DrawingBoard via mri_RenderPort (may use FBO for OpenGL) */
         mri->mri_RastPort = mri->mri_DrawingBoard->rastport;
-        D(bug("Using DrawingBoard for double buffering: %p (rastport: %p)\n", mri->mri_DrawingBoard, mri->mri_RastPort));
+        D(bug("ShowRenderInfo: Using DrawingBoard for double buffering\n"));
+        D(bug("  mri_DrawingBoard: %p\n", mri->mri_DrawingBoard));
+        D(bug("  mri_DrawingBoard->rastport: %p\n", mri->mri_DrawingBoard->rastport));
+        D(bug("  mri_DrawingBoard->bitmap: %p\n", mri->mri_DrawingBoard->bitmap));
+        D(bug("  mri_RastPort (set to board->rastport): %p\n", mri->mri_RastPort));
+        if (mri->mri_RastPort) {
+            D(bug("  mri_RastPort->BitMap: %p\n", mri->mri_RastPort->BitMap));
+            D(bug("  MATCH: rastport->BitMap == board->bitmap? %s\n",
+                  (mri->mri_RastPort->BitMap == mri->mri_DrawingBoard->bitmap) ? "YES" : "NO"));
+        }
     } else if (mri->mri_BufferBM) {
-        // Traditional double buffering fallback
+        /* Traditional double buffering fallback */
         mri->mri_RastPort = &mri->mri_BufferRP;
-        //        mri->mri_RenderPort = CreateRenderPort(mri->mri_Colormap, mri->mri_RastPort);
-
-        D(bug("Using traditional BitMap for double buffering\n"));
+        D(bug("ShowRenderInfo: Using traditional BitMap for double buffering\n"));
     } else {
-        // Direct rendering to window
+        /* Direct rendering to window (no double buffering) */
         mri->mri_RastPort = mri->mri_Window->RPort;
-        mri->mri_RenderPort = CreateRenderPort(mri->mri_Colormap, mri->mri_RastPort);
-        InitRenderPortPenCache(mri);
+        /* Create RenderPort for zunerenderer - needed for gradient rendering etc. */
+        if (!mri->mri_RenderPort) {
+            mri->mri_RenderPort = CreateRenderPortForWindow(mri->mri_Window, mri->mri_Colormap);
+            if (mri->mri_RenderPort) {
+                InitRenderPortPenCache(mri);
+            }
+        }
+        D(bug("ShowRenderInfo: Direct rendering to window RastPort\n"));
     }
 }
 
@@ -1002,6 +1022,22 @@ static void UndisplayWindow(Object *obj, struct MUI_WindowData *data) {
 static void ClearDoubleBuffer(struct MUI_RenderInfo *mri);
 void FlushDoubleBuffer(struct MUI_RenderInfo *mri);
 
+static void WindowSyncFboToBitmap(struct MUI_RenderInfo *mri) {
+    if (!mri || !mri->mri_RenderPort || !mri->mri_DrawingBoard)
+        return;
+    SyncDrawingBoard(mri->mri_DrawingBoard);
+}
+
+static void WindowSyncBitmapToFbo(struct MUI_RenderInfo *mri) {
+    if (!mri || !mri->mri_RenderPort || !mri->mri_DrawingBoard ||
+        !mri->mri_DrawingBoard->rastport)
+        return;
+    ZuneSetTarget(mri->mri_RenderPort, mri->mri_DrawingBoard);
+    ZuneCopyFromRastPort(mri->mri_RenderPort, mri->mri_DrawingBoard->rastport,
+                         0, 0, 0, 0, mri->mri_DrawingBoard->width,
+                         mri->mri_DrawingBoard->height);
+}
+
 static VOID RefreshWindow(Object *oWin, struct MUI_WindowData *data) {
     struct MUI_RenderInfo *mri = &data->wd_RenderInfo;
     BOOL using_double_buffer = (mri->mri_DrawingBoard || mri->mri_BufferBM);
@@ -1016,6 +1052,7 @@ static VOID RefreshWindow(Object *oWin, struct MUI_WindowData *data) {
             if (using_double_buffer) {
                 D(bug("RefreshWindow: Clearing double buffer\n"));
                 ClearDoubleBuffer(mri);
+                WindowSyncFboToBitmap(mri);
             }
 
             MUI_EndRefresh(&data->wd_RenderInfo, 0);
@@ -1028,6 +1065,10 @@ static VOID RefreshWindow(Object *oWin, struct MUI_WindowData *data) {
         DoMethod(data->wd_RootObject, MUIM_Layout);
         DoShowMethod(data->wd_RootObject);
 
+        /* Begin batch mode to collect all draws into a single blit */
+        if (using_double_buffer)
+            WindowBeginBufferedBatch(mri);
+
         if (muiGlobalInfo(oWin)->mgi_Prefs->window_redraw == WINDOW_REDRAW_WITH_CLEAR) {
             LONG left, top, width, height;
 
@@ -1037,42 +1078,45 @@ static VOID RefreshWindow(Object *oWin, struct MUI_WindowData *data) {
             height = data->wd_RenderInfo.mri_Window->Height - data->wd_RenderInfo.mri_Window->BorderBottom - top;
 
             if (data->wd_Flags & MUIWF_ERASEAREA) {
-                // D(bug("%d:zune_imspec_draw(%p) "
-                //     "l=%d t=%d w=%d h=%d xo=%d yo=%d\n",
-                //     __LINE__, data->wd_Background, left, top, width,
-                //     height, left, top));
                 zune_imspec_draw(data->wd_Background, &data->wd_RenderInfo, left, top, width, height, left, top, 0);
+                /* Mark buffer dirty after background draw */
+                if (using_double_buffer) {
+                    mri->mri_BufferDirty = TRUE;
+                    WindowAccumulateDirtyRect(mri, left, top, width, height);
+                }
             }
             MUI_Redraw(data->wd_RootObject, MADF_DRAWALL);
-
-            // Copy buffer to screen if double buffering
-            if (using_double_buffer && mri->mri_BufferDirty) {
-                D(bug("RefreshWindow: Flushing double buffer after MADF_DRAWALL\n"));
-                FlushDoubleBuffer(mri);
-            }
         } else {
-            MUI_Redraw(data->wd_RootObject, MADF_DRAWOBJECT);
-            if (using_double_buffer && mri->mri_BufferDirty) {
-                D(bug("RefreshWindow: Flushing double buffer after MADF_DRAWOBJECT\n"));
-                FlushDoubleBuffer(mri);
-            }
-        }
+        MUI_Redraw(data->wd_RootObject, MADF_DRAWOBJECT);
+    }
+
         // but should only draw focus without using MUIM_GoActive !
         ActivateObject(data);
+
+        if (using_double_buffer) {
+            WindowSyncBitmapToFbo(mri);
+        }
+
+        /* End batch mode - this will flush the accumulated dirty region */
+        if (using_double_buffer)
+            WindowEndBufferedBatch(mri);
     } else {
         if (MUI_BeginRefresh(&data->wd_RenderInfo, 0)) {
             if (using_double_buffer) {
                 D(bug("RefreshWindow: Clearing double buffer (normal refresh)\n"));
                 ClearDoubleBuffer(mri);
+                WindowSyncFboToBitmap(mri);
+                WindowBeginBufferedBatch(mri);
             }
 
             MUI_Redraw(data->wd_RootObject, MADF_DRAWALL);
             // but should only draw focus without using MUIM_GoActive !
             ActivateObject(data);
 
-            if (using_double_buffer && mri->mri_BufferDirty) {
+            if (using_double_buffer) {
+                WindowSyncBitmapToFbo(mri);
                 D(bug("RefreshWindow: Flushing double buffer (normal refresh)\n"));
-                FlushDoubleBuffer(mri);
+                WindowEndBufferedBatch(mri);
             }
 
             MUI_EndRefresh(&data->wd_RenderInfo, 0);
@@ -3199,6 +3243,15 @@ static void InstallBackbuffer(struct IClass *cl, Object *obj) {
     if (!data->wd_DoubleBuffer || !muiGlobalInfo(obj)->mgi_Prefs->renderer_doublebuffer) {
         D(bug("Double buffering disabled for this window\n"));
         mri->mri_BufferDirty = FALSE;
+
+        /* Still create RenderPort for zunerenderer even without double buffering */
+        if (!mri->mri_RenderPort) {
+            mri->mri_RenderPort = CreateRenderPortForWindow(win, mri->mri_Colormap);
+            if (mri->mri_RenderPort) {
+                InitRenderPortPenCache(mri);
+                D(bug("Created RenderPort for direct rendering (no double buffer)\n"));
+            }
+        }
         return;
     }
 
@@ -3208,60 +3261,72 @@ static void InstallBackbuffer(struct IClass *cl, Object *obj) {
     buffer_width = win->BorderLeft + win->BorderRight + win->GZZWidth;
     buffer_height = win->BorderTop + win->BorderBottom + win->GZZHeight;
 
-    // First try to create modern DrawingBoard for double buffering
-    mri->mri_DrawingBoard = CreateDrawingBoard(buffer_width, buffer_height, GetBitMapAttr(win->RPort->BitMap, BMA_DEPTH),
-                                               ZUNE_DRAWINGBOARD_CACHED | ZUNE_DRAWINGBOARD_ALPHA);
+    /*
+     * NEW ARCHITECTURE: Use CreateRenderPortForWindow + CreateDrawingBoardForRenderPort
+     *
+     * This creates:
+     * - mri_RenderPort: Main RenderPort for the window (used for zunerenderer drawing)
+     * - mri_DrawingBoard: Off-screen buffer with BitMap (for legacy drawing) and
+     *   optionally FBO (for OpenGL accelerated drawing)
+     *
+     * Blitting to window is done via ZuneBlitToWindow() using mri_RenderPort's
+     * window reference - no separate WindowRenderPort needed.
+     */
 
-    // if (mri->mri_DrawingBoard) {
-    //     // Create RenderPort targeting the DrawingBoard
-    //     mri->mri_RenderPort = CreateRenderPortWithDrawingBoard(
-    //         mri->mri_Colormap,
-    //         mri->mri_DrawingBoard
-    //     );
-    // }
-
-    // Have to set this to NULL so drawingboard is not used. Problem is that it does
-    // not work with indexed colors like SetAPen making legacy code unusable.
-    mri->mri_DrawingBoard = NULL;
-
-    if (mri->mri_DrawingBoard && mri->mri_RenderPort) {
-        // Modern path: Initialize buffer RastPort for DrawingBoard
-        InitRastPort(&mri->mri_BufferRP);
-        mri->mri_BufferRP.BitMap = mri->mri_DrawingBoard->bitmap;
-
-        // Also ensure DrawingBoard's rastport is properly initialized
-        if (!mri->mri_DrawingBoard->rastport) {
-            mri->mri_DrawingBoard->rastport = &mri->mri_BufferRP;
+    /* Create main RenderPort for this window */
+    if (!mri->mri_RenderPort) {
+        mri->mri_RenderPort = CreateRenderPortForWindow(win, mri->mri_Colormap);
+        if (!mri->mri_RenderPort) {
+            D(bug("Failed to create RenderPort for window\n"));
+            goto fallback;
         }
+        D(bug("Created RenderPort for window %p, backend=%ld\n", win, mri->mri_RenderPort->backend_type));
+    }
 
-        if (mri->mri_WindowRenderPort) {
-            DestroyRenderPort(mri->mri_WindowRenderPort);
-        }
-        mri->mri_WindowRenderPort = CreateRenderPort(mri->mri_Colormap, win->RPort);
+    /* Create DrawingBoard for double buffering via RenderPort */
+    mri->mri_DrawingBoard = CreateDrawingBoardForRenderPort(mri->mri_RenderPort, buffer_width, buffer_height);
+
+    if (mri->mri_DrawingBoard && mri->mri_DrawingBoard->bitmap && mri->mri_DrawingBoard->rastport) {
+        /*
+         * DrawingBoard already has its own allocated RastPort from
+         * CreateDrawingBoardForRenderPort(). We just use it directly.
+         */
+        D(bug("InstallBackbuffer: Setup complete\n"));
+        D(bug("  mri_DrawingBoard->rastport: %p\n", mri->mri_DrawingBoard->rastport));
+        D(bug("  mri_DrawingBoard->rastport->BitMap: %p\n", mri->mri_DrawingBoard->rastport->BitMap));
+        D(bug("  mri_DrawingBoard->bitmap: %p\n", mri->mri_DrawingBoard->bitmap));
+
+        /* Set the RenderPort to target the DrawingBoard for zunerenderer operations */
+        ZuneSetTarget(mri->mri_RenderPort, mri->mri_DrawingBoard);
         InitRenderPortPenCache(mri);
 
-        D(bug("Modern double buffer installed with DrawingBoard: %dx%dx%d\n", buffer_width, buffer_height,
-              GetBitMapAttr(win->RPort->BitMap, BMA_DEPTH)));
-    } else {
-        // Fallback: Create traditional BitMap
-        mri->mri_BufferBM =
-            AllocBitMap(buffer_width, buffer_height, GetBitMapAttr(win->RPort->BitMap, BMA_DEPTH), BMF_DISPLAYABLE | BMF_CLEAR, win->RPort->BitMap);
+        D(bug("Modern double buffer installed: DrawingBoard %dx%d, bitmap=%p\n",
+              buffer_width, buffer_height, mri->mri_DrawingBoard->bitmap));
+        return;
+    }
 
-        if (mri->mri_BufferBM) {
-            InitRastPort(&mri->mri_BufferRP);
-            mri->mri_BufferRP.BitMap = mri->mri_BufferBM;
-            if (mri->mri_RenderPort) {
-                DestroyRenderPort(mri->mri_RenderPort);
-                mri->mri_RenderPort = NULL;
-            }
-            mri->mri_RenderPort = CreateRenderPort(mri->mri_Colormap, &mri->mri_BufferRP);
-            InitRenderPortPenCache(mri);
-            D(bug("Traditional double buffer installed: %dx%dx%d\n", buffer_width, buffer_height, GetBitMapAttr(win->RPort->BitMap, BMA_DEPTH)));
+fallback:
+    /* Fallback: Create traditional BitMap (if DrawingBoard creation failed) */
+    D(bug("Using fallback traditional BitMap double buffer\n"));
+
+    if (mri->mri_DrawingBoard) {
+        DestroyDrawingBoard(mri->mri_DrawingBoard);
+        mri->mri_DrawingBoard = NULL;
+    }
+
+    mri->mri_BufferBM =
+        AllocBitMap(buffer_width, buffer_height, GetBitMapAttr(win->RPort->BitMap, BMA_DEPTH), BMF_DISPLAYABLE | BMF_CLEAR, win->RPort->BitMap);
+
+    if (mri->mri_BufferBM) {
+        InitRastPort(&mri->mri_BufferRP);
+        mri->mri_BufferRP.BitMap = mri->mri_BufferBM;
+        if (mri->mri_RenderPort) {
+            DestroyRenderPort(mri->mri_RenderPort);
+            mri->mri_RenderPort = NULL;
         }
-        if (mri->mri_WindowRenderPort) {
-            DestroyRenderPort(mri->mri_WindowRenderPort);
-            mri->mri_WindowRenderPort = NULL;
-        }
+        mri->mri_RenderPort = CreateRenderPortForWindow(win, mri->mri_Colormap);
+        InitRenderPortPenCache(mri);
+        D(bug("Traditional double buffer installed: %dx%dx%d\n", buffer_width, buffer_height, GetBitMapAttr(win->RPort->BitMap, BMA_DEPTH)));
     }
 }
 
@@ -3329,9 +3394,16 @@ void FlushDoubleBufferRegion(struct MUI_RenderInfo *mri, LONG left, LONG top, LO
     if (!mri || !mri->mri_Window || width <= 0 || height <= 0)
         return;
 
+    /* If in batch mode, just accumulate dirty rect and defer the actual blit */
+    if (mri->mri_BufferBatchDepth > 0) {
+        mri->mri_BufferDirty = TRUE;
+        WindowAccumulateDirtyRect(mri, left, top, width, height);
+        return;
+    }
+
     struct Window *win = mri->mri_Window;
 
-    if (mri->mri_DrawingBoard && mri->mri_RenderPort && mri->mri_WindowRenderPort) {
+    if (mri->mri_DrawingBoard && mri->mri_RenderPort) {
         LONG src_x, src_y;
         LONG copy_left = left;
         LONG copy_top = top;
@@ -3342,13 +3414,9 @@ void FlushDoubleBufferRegion(struct MUI_RenderInfo *mri, LONG left, LONG top, LO
                                       &copy_height, &src_x, &src_y))
             return;
 
-        struct ZuneRect src_rect = {(WORD)src_x, (WORD)src_y, (UWORD)copy_width, (UWORD)copy_height};
-        struct ZuneRect dst_rect = {(WORD)copy_left, (WORD)copy_top, (UWORD)copy_width, (UWORD)copy_height};
+        D(bug("FlushDoubleBufferRegion: board (%ld,%ld,%ld,%ld) -> window (%ld,%ld)\n", src_x, src_y, copy_width, copy_height, copy_left, copy_top));
 
-        D(bug("FlushDoubleBufferRegion: board (%d,%d,%u,%u) -> window (%d,%d)\n", src_rect.x, src_rect.y, src_rect.width, src_rect.height, dst_rect.x,
-              dst_rect.y));
-
-        BlitDrawingBoardToRenderPort(mri->mri_DrawingBoard, mri->mri_WindowRenderPort, &src_rect, &dst_rect);
+        ZuneBlitToWindow(mri->mri_RenderPort, src_x, src_y, copy_left, copy_top, copy_width, copy_height);
     } else if (mri->mri_BufferBM) {
         LONG src_x, src_y;
         LONG copy_left = left;
@@ -3431,11 +3499,47 @@ void WindowBeginBufferedBatch(struct MUI_RenderInfo *mri) {
     if (!(mri->mri_DrawingBoard || mri->mri_BufferBM))
         return;
     mri->mri_BufferBatchDepth++;
-    
-    /* Reset dirty rectangle at start of outermost batch */
+
+    /* Reset dirty rectangle list at start of outermost batch */
     if (mri->mri_BufferBatchDepth == 1) {
-        mri->mri_DirtyRectValid = FALSE;
+        mri->mri_DirtyRectCount = 0;
     }
+}
+
+/* Helper: Check if two rectangles overlap or are adjacent (can be merged) */
+static BOOL RectsCanMerge(struct Rectangle *a, LONG left, LONG top, LONG right, LONG bottom) {
+    /* Check if rectangles overlap or are adjacent (within 1 pixel) */
+    if (right < a->MinX - 1 || left > a->MaxX + 1)
+        return FALSE;
+    if (bottom < a->MinY - 1 || top > a->MaxY + 1)
+        return FALSE;
+    return TRUE;
+}
+
+/* Helper: Merge a rectangle into an existing one */
+static void MergeIntoRect(struct Rectangle *a, LONG left, LONG top, LONG right, LONG bottom) {
+    if (left < a->MinX) a->MinX = left;
+    if (top < a->MinY) a->MinY = top;
+    if (right > a->MaxX) a->MaxX = right;
+    if (bottom > a->MaxY) a->MaxY = bottom;
+}
+
+/* Helper: Collapse all dirty rects into a single bounding box (fallback) */
+static void CollapseDirtyRectsToBoundingBox(struct MUI_RenderInfo *mri) {
+    if (mri->mri_DirtyRectCount <= 1)
+        return;
+    
+    struct Rectangle bounds = mri->mri_DirtyRects[0].rect;
+    for (UWORD i = 1; i < mri->mri_DirtyRectCount; i++) {
+        struct Rectangle *r = &mri->mri_DirtyRects[i].rect;
+        if (r->MinX < bounds.MinX) bounds.MinX = r->MinX;
+        if (r->MinY < bounds.MinY) bounds.MinY = r->MinY;
+        if (r->MaxX > bounds.MaxX) bounds.MaxX = r->MaxX;
+        if (r->MaxY > bounds.MaxY) bounds.MaxY = r->MaxY;
+    }
+    
+    mri->mri_DirtyRects[0].rect = bounds;
+    mri->mri_DirtyRectCount = 1;
 }
 
 void WindowAccumulateDirtyRect(struct MUI_RenderInfo *mri, LONG left, LONG top, LONG width, LONG height) {
@@ -3443,24 +3547,33 @@ void WindowAccumulateDirtyRect(struct MUI_RenderInfo *mri, LONG left, LONG top, 
         return;
     if (width <= 0 || height <= 0)
         return;
-    
+
     LONG right = left + width - 1;
     LONG bottom = top + height - 1;
-    
-    if (!mri->mri_DirtyRectValid) {
-        /* First dirty rectangle - initialize */
-        mri->mri_DirtyRect.MinX = left;
-        mri->mri_DirtyRect.MinY = top;
-        mri->mri_DirtyRect.MaxX = right;
-        mri->mri_DirtyRect.MaxY = bottom;
-        mri->mri_DirtyRectValid = TRUE;
-    } else {
-        /* Expand bounding box to include this rectangle */
-        if (left < mri->mri_DirtyRect.MinX) mri->mri_DirtyRect.MinX = left;
-        if (top < mri->mri_DirtyRect.MinY) mri->mri_DirtyRect.MinY = top;
-        if (right > mri->mri_DirtyRect.MaxX) mri->mri_DirtyRect.MaxX = right;
-        if (bottom > mri->mri_DirtyRect.MaxY) mri->mri_DirtyRect.MaxY = bottom;
+
+    /* Try to merge with an existing rectangle */
+    for (UWORD i = 0; i < mri->mri_DirtyRectCount; i++) {
+        struct Rectangle *r = &mri->mri_DirtyRects[i].rect;
+        if (RectsCanMerge(r, left, top, right, bottom)) {
+            MergeIntoRect(r, left, top, right, bottom);
+            return;
+        }
     }
+
+    /* No merge possible - add as new rect if we have space */
+    if (mri->mri_DirtyRectCount < MRI_MAX_DIRTY_RECTS) {
+        struct Rectangle *r = &mri->mri_DirtyRects[mri->mri_DirtyRectCount].rect;
+        r->MinX = left;
+        r->MinY = top;
+        r->MaxX = right;
+        r->MaxY = bottom;
+        mri->mri_DirtyRectCount++;
+        return;
+    }
+
+    /* List is full - collapse to bounding box and merge the new rect */
+    CollapseDirtyRectsToBoundingBox(mri);
+    MergeIntoRect(&mri->mri_DirtyRects[0].rect, left, top, right, bottom);
 }
 
 void WindowEndBufferedBatch(struct MUI_RenderInfo *mri) {
@@ -3483,17 +3596,20 @@ void WindowEndBufferedBatch(struct MUI_RenderInfo *mri) {
     }
 
     if (mri->mri_BufferBatchDepth == 0 && mri->mri_BufferDirty) {
-        if (use_dirty_region && mri->mri_DirtyRectValid) {
-            /* Flush only the accumulated dirty region */
-            LONG width = mri->mri_DirtyRect.MaxX - mri->mri_DirtyRect.MinX + 1;
-            LONG height = mri->mri_DirtyRect.MaxY - mri->mri_DirtyRect.MinY + 1;
-            D(bug("WindowEndBufferedBatch: Flushing dirty region (%ld,%ld %ldx%ld)\n",
-                  mri->mri_DirtyRect.MinX, mri->mri_DirtyRect.MinY, width, height));
-            FlushDoubleBufferRegion(mri, mri->mri_DirtyRect.MinX, mri->mri_DirtyRect.MinY, width, height);
-            mri->mri_DirtyRectValid = FALSE;
+        if (use_dirty_region && mri->mri_DirtyRectCount > 0) {
+            /* Flush each dirty rectangle individually */
+            D(bug("WindowEndBufferedBatch: Flushing %d dirty regions\n", mri->mri_DirtyRectCount));
+            for (UWORD i = 0; i < mri->mri_DirtyRectCount; i++) {
+                struct Rectangle *r = &mri->mri_DirtyRects[i].rect;
+                LONG width = r->MaxX - r->MinX + 1;
+                LONG height = r->MaxY - r->MinY + 1;
+                D(bug("  [%d] (%ld,%ld %ldx%ld)\n", i, r->MinX, r->MinY, width, height));
+                FlushDoubleBufferRegion(mri, r->MinX, r->MinY, width, height);
+            }
+            mri->mri_DirtyRectCount = 0;
         } else {
-            /* No specific dirty rect tracked or dirty region disabled, fall back to full flush */
-            D(bug("WindowEndBufferedBatch: Flushing full double buffer (no dirty rect)\n"));
+            /* No specific dirty rects tracked or dirty region disabled, fall back to full flush */
+            D(bug("WindowEndBufferedBatch: Flushing full double buffer (no dirty rects)\n"));
             FlushDoubleBuffer(mri);
         }
         mri->mri_BufferDirty = FALSE;
@@ -3508,11 +3624,6 @@ static void DeinstallBackbuffer(struct IClass *cl, Object *obj) {
     if (mri->mri_RenderPort) {
         DestroyRenderPort(mri->mri_RenderPort);
         mri->mri_RenderPort = NULL;
-    }
-
-    if (mri->mri_WindowRenderPort) {
-        DestroyRenderPort(mri->mri_WindowRenderPort);
-        mri->mri_WindowRenderPort = NULL;
     }
 
     // Then cleanup DrawingBoard
@@ -3537,7 +3648,7 @@ static void DeinstallBackbuffer(struct IClass *cl, Object *obj) {
 static void WindowShow(struct IClass *cl, Object *obj) {
     struct MUI_WindowData *data = INST_DATA(cl, obj);
     struct Window *win = data->wd_RenderInfo.mri_Window;
-    BOOL using_double_buffer = data->wd_RenderInfo.mri_BufferBM != NULL;
+    BOOL using_double_buffer = (data->wd_RenderInfo.mri_DrawingBoard != NULL) || (data->wd_RenderInfo.mri_BufferBM != NULL);
     /*      D(bug("WindowShow %s %d\n", __FILE__, __LINE__)); */
 
     _left(data->wd_RootObject) = win->BorderLeft;
@@ -3551,16 +3662,18 @@ static void WindowShow(struct IClass *cl, Object *obj) {
     /*      D(bug("zune_imspec_show %s %d\n", __FILE__, __LINE__)); */
     zune_imspec_show(data->wd_Background, obj);
 
+    /*
+     * Note: We only clear the double buffer here but do NOT flush it.
+     * DoShowMethod() doesn't draw anything - it only initializes objects.
+     * The actual drawing and flushing happens in WindowOpen() after this.
+     * Flushing an empty/cleared buffer here would overwrite the screen with
+     * a blank image, causing a visible delay until the real content is drawn.
+     */
     if (using_double_buffer) {
         ClearDoubleBuffer(&data->wd_RenderInfo);
-        WindowBeginBufferedBatch(&data->wd_RenderInfo);
     }
 
     DoShowMethod(data->wd_RootObject);
-
-    if (using_double_buffer) {
-        WindowEndBufferedBatch(&data->wd_RenderInfo);
-    }
 }
 
 static ULONG WindowOpen(struct IClass *cl, Object *obj) {
@@ -3601,9 +3714,11 @@ static ULONG WindowOpen(struct IClass *cl, Object *obj) {
 
     data->wd_Flags |= MUIWF_OPENED;
 
+    D(bug("WindowOpen: Before WindowShow\n"));
     WindowShow(cl, obj);
+    D(bug("WindowOpen: After WindowShow\n"));
 
-    BOOL using_double_buffer = data->wd_RenderInfo.mri_BufferBM != NULL;
+    BOOL using_double_buffer = (data->wd_RenderInfo.mri_DrawingBoard != NULL) || (data->wd_RenderInfo.mri_BufferBM != NULL);
 
     if (using_double_buffer) {
         WindowBeginBufferedBatch(&data->wd_RenderInfo);
@@ -3617,22 +3732,29 @@ static ULONG WindowOpen(struct IClass *cl, Object *obj) {
         width = data->wd_RenderInfo.mri_Window->Width - data->wd_RenderInfo.mri_Window->BorderRight - left;
         height = data->wd_RenderInfo.mri_Window->Height - data->wd_RenderInfo.mri_Window->BorderBottom - top;
 
-        /*          D(bug("zune_imspec_draw %s %d\n", __FILE__, __LINE__)); */
-        //        D(bug("%d:zune_imspec_draw(%p) l=%d t=%d w=%d h=%d xo=%d yo=%d\n",
-        //              __LINE__, data->wd_Background, left, top, width,
-        //              height, left, top));
-
+        D(bug("WindowOpen: Before zune_imspec_draw\n"));
         zune_imspec_draw(data->wd_Background, &data->wd_RenderInfo, left, top, width, height, left, top, 0);
+        D(bug("WindowOpen: After zune_imspec_draw\n"));
+
+        /* Mark buffer dirty after background draw - zune_imspec_draw doesn't set this */
+        if (using_double_buffer) {
+            data->wd_RenderInfo.mri_BufferDirty = TRUE;
+            WindowAccumulateDirtyRect(&data->wd_RenderInfo, left, top, width, height);
+        }
     }
 
     if (data->wd_RenderInfo.mri_Screen && muiGlobalInfo(obj)->mgi_Prefs->publicscreen_pop_to_front) {
         ScreenToFront(data->wd_RenderInfo.mri_Screen);
     }
 
+    D(bug("WindowOpen: Before MUI_Redraw\n"));
     MUI_Redraw(data->wd_RootObject, MADF_DRAWOBJECT);
+    D(bug("WindowOpen: After MUI_Redraw\n"));
 
     if (using_double_buffer) {
+        D(bug("WindowOpen: Before WindowEndBufferedBatch\n"));
         WindowEndBufferedBatch(&data->wd_RenderInfo);
+        D(bug("WindowOpen: After WindowEndBufferedBatch\n"));
     }
 
     D(bug("MUIC_Window:windowOpen() ActiveObject=%p\n", data->wd_ActiveObject));
@@ -3684,13 +3806,16 @@ static ULONG WindowClose(struct IClass *cl, Object *obj) {
  */
 IPTR Window__MUIM_RecalcDisplay(struct IClass *cl, Object *obj, struct MUIP_Window_RecalcDisplay *msg) {
     struct MUI_WindowData *data = INST_DATA(cl, obj);
+    struct MUI_RenderInfo *mri = &data->wd_RenderInfo;
     LONG left, top, width, height;
     BOOL resized, reshow = FALSE;
+    BOOL using_double_buffer;
     Object *current_obj;
 
     if (!(data->wd_Flags & MUIWF_OPENED))
         return 0;
 
+    using_double_buffer = (mri->mri_DrawingBoard || mri->mri_BufferBM);
     current_obj = msg->originator;
 
     // typically originator is a group which has been added/removed a child
@@ -3754,6 +3879,10 @@ IPTR Window__MUIM_RecalcDisplay(struct IClass *cl, Object *obj, struct MUIP_Wind
     if (reshow)
         DoShowMethod(current_obj);
 
+    /* Begin batch mode to collect all draws into a single blit */
+    if (using_double_buffer)
+        WindowBeginBufferedBatch(mri);
+
     if (muiGlobalInfo(obj)->mgi_Prefs->window_redraw == WINDOW_REDRAW_WITHOUT_CLEAR) {
         if (reshow)
             MUI_Redraw(current_obj, MADF_DRAWOBJECT);
@@ -3764,10 +3893,18 @@ IPTR Window__MUIM_RecalcDisplay(struct IClass *cl, Object *obj, struct MUIP_Wind
         height = data->wd_RenderInfo.mri_Window->Height - data->wd_RenderInfo.mri_Window->BorderBottom - top;
 
         zune_imspec_draw(data->wd_Background, &data->wd_RenderInfo, left, top, width, height, left, top, 0);
+        if (using_double_buffer) {
+            mri->mri_BufferDirty = TRUE;
+            WindowAccumulateDirtyRect(mri, left, top, width, height);
+        }
         MUI_Redraw(data->wd_RootObject, MADF_DRAWALL);
     }
 
     ActivateObject(data);
+
+    /* End batch mode - this will flush the accumulated dirty region */
+    if (using_double_buffer)
+        WindowEndBufferedBatch(mri);
 
     return TRUE;
 }
@@ -4058,6 +4195,11 @@ IPTR Window__MUIM_DrawBackground(struct IClass *cl, Object *obj, struct MUIP_Win
     //          __LINE__, data->wd_Background, msg->left, msg->top, msg->width,
     //          msg->height, msg->xoffset, msg->yoffset));
     zune_imspec_draw(data->wd_Background, &data->wd_RenderInfo, msg->left, msg->top, msg->width, msg->height, msg->xoffset, msg->yoffset, 0);
+
+    /* Mark buffer dirty after background draw */
+    if (data->wd_RenderInfo.mri_DrawingBoard || data->wd_RenderInfo.mri_BufferBM) {
+        data->wd_RenderInfo.mri_BufferDirty = TRUE;
+    }
     return 0;
 }
 

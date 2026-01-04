@@ -30,6 +30,7 @@
 #include <string.h>
 
 #include "backends/backend_interface.h"
+#include "backends/opengl/opengl_backend.h"
 #include "clib/arossupport_protos.h"
 #include "clib/graphics_protos.h"
 #include "include/zunerenderer.h"
@@ -50,6 +51,7 @@ void FastBlitInternal(struct DrawingBoard *src, struct DrawingBoard *dst,
                       WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
                       UWORD width, UWORD height);
 BOOL ValidateDrawingBoard(struct DrawingBoard *board);
+static BOOL IsOpenGLDrawingBoard(struct DrawingBoard *board);
 
 /*****************************************************************************/
 /* DrawingBoard Internal Functions */
@@ -76,14 +78,15 @@ ULONG GetPixelInternal(struct RenderPort *rp, WORD x, WORD y) {
 }
 
 BOOL AllocateDrawingBoardBitmap(struct DrawingBoard *board,
-                                ZuneBackendType backend_type) {
+                                ZuneBackendType backend_type,
+                                struct BitMap *friend_bitmap) {
   if (!board)
     return FALSE;
 
   ENTER_FUNCTION("AllocateDrawingBoardBitmap");
 
-  D(bug("ZuneRenderer: Allocating bitmap %dx%dx%d, flags=0x%08x\n",
-        board->width, board->height, board->depth, board->flags));
+  D(bug("ZuneRenderer: Allocating bitmap %dx%dx%d, flags=0x%08x, friend=%p\n",
+        board->width, board->height, board->depth, board->flags, friend_bitmap));
 
   /* Detect CyberGraphics availability */
   board->hardware_surface = FALSE;
@@ -96,7 +99,7 @@ BOOL AllocateDrawingBoardBitmap(struct DrawingBoard *board,
     if (board->flags & ZUNE_DRAWINGBOARD_HARDWARE) {
       D(bug("ZuneRenderer: Attempting hardware surface allocation\n"));
       board->bitmap = AllocBitMap(board->width, board->height, board->depth,
-                                  BMF_DISPLAYABLE | BMF_CLEAR, NULL);
+                                  BMF_DISPLAYABLE | BMF_CLEAR, friend_bitmap);
       if (board->bitmap) {
         /* Check if it's really a CyberGraphics bitmap */
         if (GetCyberMapAttr(board->bitmap, CYBRMATTR_ISCYBERGFX)) {
@@ -118,7 +121,7 @@ BOOL AllocateDrawingBoardBitmap(struct DrawingBoard *board,
     if (!board->bitmap) {
       D(bug("ZuneRenderer: Allocating software surface\n"));
       board->bitmap = AllocBitMap(board->width, board->height, board->depth,
-                                  BMF_CLEAR, NULL);
+                                  BMF_CLEAR, friend_bitmap);
       board->hardware_surface = FALSE;
     }
 
@@ -131,7 +134,7 @@ BOOL AllocateDrawingBoardBitmap(struct DrawingBoard *board,
     /* Standard graphics.library path */
     D(bug("ZuneRenderer: Using graphics.library backend\n"));
     board->bitmap =
-        AllocBitMap(board->width, board->height, board->depth, BMF_CLEAR, NULL);
+        AllocBitMap(board->width, board->height, board->depth, BMF_CLEAR, friend_bitmap);
     board->hardware_surface = FALSE;
     board->pixel_format = 0; /* Not applicable for graphics.library */
   }
@@ -223,6 +226,17 @@ void CleanupDrawingBoard(struct DrawingBoard *board) {
   /* Mark as invalid */
   board->valid = FALSE;
 
+  /*
+   * Cleanup backend-specific data (e.g., OpenGL FBO)
+   * This must be done before freeing the bitmap.
+   */
+  if (board->backend_data) {
+    if (IsOpenGLDrawingBoard(board)) {
+      OpenGLCleanupDrawingBoard(board);
+    }
+    board->backend_data = NULL;
+  }
+
   /* Free bitmap and associated resources */
   /* Note: FreeDrawingBoardBitmap() already frees the rastport */
   FreeDrawingBoardBitmap(board);
@@ -257,6 +271,10 @@ APTR LockDrawingBoardPixelsInternal(struct RenderPort *rp, ULONG *pitch) {
 }
 
 void UnlockDrawingBoardPixelsInternal(struct RenderPort *rp) {
+  if (!rp) {
+    D(bug("ZuneRenderer: UnlockDrawingBoardPixels called with NULL RenderPort\n"));
+    return;
+  }
   if (!ValidateDrawingBoard(rp->target_board)) {
     D(bug("ZuneRenderer: Invalid DrawingBoard\n"));
     return;
@@ -333,37 +351,37 @@ void RemoveDrawingBoardFromList(struct IntZuneRendererBase *base,
 /*****************************************************************************
 
     NAME */
-AROS_LH4(struct DrawingBoard *, CreateDrawingBoard,
+AROS_LH3(struct DrawingBoard *, CreateDrawingBoardForRenderPort,
 
          /*  SYNOPSIS */
-         AROS_LHA(UWORD, width, D0), AROS_LHA(UWORD, height, D1),
-         AROS_LHA(UBYTE, depth, D2), AROS_LHA(ULONG, flags, D3),
+         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(UWORD, width, D0),
+         AROS_LHA(UWORD, height, D1),
 
          /*  LOCATION */
-         struct Library *, ZuneRendererBase, 10, zunerenderer)
+         struct Library *, ZuneRendererBase, 6, zunerenderer)
 
 /*  FUNCTION
-    Creates a new off-screen rendering surface (DrawingBoard) with the
-    specified dimensions and properties. The DrawingBoard can be used
-    for off-screen rendering, double-buffering, and direct pixel access.
+    Creates a new DrawingBoard bound to a RenderPort.
+
+    This is the preferred way to create DrawingBoards in the new architecture.
+    The DrawingBoard is created with:
+    - A BitMap (always, for legacy SetAPen/RectFill compatibility)
+    - An FBO (if OpenGL backend, for accelerated rendering)
+
+    The RenderPort's window reference is used for OpenGL context.
 
 INPUTS
-    width - Surface width in pixels (must be > 0)
-    height - Surface height in pixels (must be > 0)
-    depth - Color depth in bits per pixel (16, 24, or 32)
-    flags - Creation flags (ZUNE_DRAWINGBOARD_*)
+    rp - Parent RenderPort (must not be NULL, must have window)
+    width - Surface width in pixels
+    height - Surface height in pixels
 
 RESULT
-    Pointer to new DrawingBoard structure, or NULL if creation failed.
+    Pointer to new DrawingBoard, or NULL if creation failed.
 
 NOTES
-    The created DrawingBoard must be freed with DestroyDrawingBoard().
-    Hardware surfaces are allocated when possible if HARDWARE flag is set.
-    Direct pixel access is available through LockDrawingBoardPixels().
-
-SEE ALSO
-    DestroyDrawingBoard(), LockDrawingBoardPixels(),
-CreateRenderPortWithDrawingBoard()
+    The DrawingBoard must be freed with DestroyDrawingBoard().
+    The RenderPort must remain valid for the lifetime of the DrawingBoard.
 
 *****************************************************************************/
 {
@@ -371,27 +389,38 @@ CreateRenderPortWithDrawingBoard()
 
   struct IntZuneRendererBase *base = ZRB(ZuneRendererBase);
   struct DrawingBoard *board;
+  UBYTE depth;
 
-  ENTER_FUNCTION("CreateDrawingBoard");
+  ENTER_FUNCTION("CreateDrawingBoardForRenderPort");
 
-  D(bug("ZuneRenderer: CreateDrawingBoard(%d, %d, %d, 0x%08x)\n", width, height,
-        depth, flags));
+  D(bug("ZuneRenderer: CreateDrawingBoardForRenderPort(rp=%p, %dx%d)\n",
+        rp, width, height));
 
   /* Validate parameters */
-  if (width == 0 || height == 0) {
-    D(bug("ZuneRenderer: Invalid dimensions\n"));
+  if (!rp || !rp->valid) {
+    D(bug("ZuneRenderer: Invalid RenderPort\n"));
+    EXIT_FUNCTION("CreateDrawingBoardForRenderPort");
     return NULL;
   }
 
-  if (depth != 16 && depth != 24 && depth != 32) {
-    D(bug("ZuneRenderer: Unsupported color depth: %d\n", depth));
+  if (width == 0 || height == 0) {
+    D(bug("ZuneRenderer: Invalid dimensions\n"));
+    EXIT_FUNCTION("CreateDrawingBoardForRenderPort");
     return NULL;
+  }
+
+  /* Determine depth from window bitmap */
+  if (rp->window && rp->window->RPort && rp->window->RPort->BitMap) {
+    depth = GetBitMapAttr(rp->window->RPort->BitMap, BMA_DEPTH);
+  } else {
+    depth = 32;  /* Default to 32-bit */
   }
 
   /* Allocate DrawingBoard structure */
   board = AllocVec(sizeof(struct DrawingBoard), MEMF_CLEAR | MEMF_PUBLIC);
   if (!board) {
-    D(bug("ZuneRenderer: Failed to allocate DrawingBoard structure\n"));
+    D(bug("ZuneRenderer: Failed to allocate DrawingBoard\n"));
+    EXIT_FUNCTION("CreateDrawingBoardForRenderPort");
     return NULL;
   }
 
@@ -399,32 +428,132 @@ CreateRenderPortWithDrawingBoard()
   board->width = width;
   board->height = height;
   board->depth = depth;
-  board->flags = flags;
+  board->flags = ZUNE_DRAWINGBOARD_CACHED;
+
+  /* Store parent window for OpenGL FBO support */
+  if (rp->window) {
+    board->parent_window = rp->window;
+  }
 
   /* Initialize DrawingBoard */
   InitDrawingBoard(board);
 
-  /* Add to tracking list */
-  AddDrawingBoardToList(base, board);
+  /*
+   * ALWAYS allocate BitMap for legacy compatibility.
+   * This ensures SetAPen, RectFill, etc. work on the DrawingBoard.
+   *
+   * We pass the window's BitMap as friend_bitmap so the new BitMap
+   * inherits its colormap. This is critical for legacy pen-based
+   * drawing (SetAPen/RectFill) to work correctly on the off-screen buffer.
+   */
+  struct BitMap *friend_bitmap = NULL;
+  if (rp->window && rp->window->RPort && rp->window->RPort->BitMap) {
+    friend_bitmap = rp->window->RPort->BitMap;
+  }
 
-  /* Allocate bitmap for the drawing board using best available backend */
-  ZuneBackend *backend = ZuneFindBestBackend(NULL);
-  ZuneBackendType backend_type =
-      backend ? backend->ops->type : BACKEND_SOFTWARE;
-
-  if (!AllocateDrawingBoardBitmap(board, backend_type)) {
-    D(bug("ZuneRenderer: Failed to allocate drawing board bitmap\n"));
-    RemoveDrawingBoardFromList(base, board);
+  if (!AllocateDrawingBoardBitmap(board, rp->backend_type, friend_bitmap)) {
+    D(bug("ZuneRenderer: Failed to allocate DrawingBoard bitmap\n"));
     FreeVec(board);
-    EXIT_FUNCTION("CreateDrawingBoard");
+    EXIT_FUNCTION("CreateDrawingBoardForRenderPort");
     return NULL;
   }
 
-  D(bug("ZuneRenderer: DrawingBoard created successfully (%s)\n",
-        board->hardware_surface ? "hardware" : "software"));
+  D(bug("ZuneRenderer: DrawingBoard bitmap allocated: %p\n", board->bitmap));
 
-  EXIT_FUNCTION("CreateDrawingBoard");
+  /*
+   * For OpenGL backend: FBO will be created lazily when the DrawingBoard
+   * is first used as a render target. The FBO is stored in backend_data.
+   *
+   * This happens in OpenGL_SwitchToDrawingBoard() when ZuneSetTarget() is called.
+   */
+
+  /* Add to tracking list */
+  AddDrawingBoardToList(base, board);
+
+  D(bug("ZuneRenderer: DrawingBoard created for RenderPort, bitmap=%p\n",
+        board->bitmap));
+
+  EXIT_FUNCTION("CreateDrawingBoardForRenderPort");
   return board;
+
+  AROS_LIBFUNC_EXIT
+}
+
+/*****************************************************************************
+
+    NAME */
+AROS_LH1(BOOL, SyncDrawingBoard,
+
+         /*  SYNOPSIS */
+         AROS_LHA(struct DrawingBoard *, board, A0),
+
+         /*  LOCATION */
+         struct Library *, ZuneRendererBase, 102, zunerenderer)
+
+/*  FUNCTION
+    Synchronizes the backend's render buffer to the DrawingBoard's bitmap.
+
+    For OpenGL backend: Copies FBO contents to the DrawingBoard's bitmap
+    using glReadPixels. This is required before using CyberGfx or
+    graphics.library functions directly on the DrawingBoard's bitmap
+    after OpenGL rendering.
+
+    For CyberGfx backend: No-op since the bitmap IS the render target.
+
+INPUTS
+    board - DrawingBoard to sync (must not be NULL)
+
+RESULT
+    TRUE if sync was successful or not needed, FALSE on error.
+
+NOTES
+    Call this function after ZuneRenderer drawing and before direct
+    CyberGfx/graphics.library operations on the same DrawingBoard.
+
+    Example mixed-mode rendering:
+    1. ZuneSetTarget(rp, board)
+    2. ZuneFillRectangle(...) // OpenGL draws to FBO
+    3. SyncDrawingBoard(board) // Copy FBO to bitmap
+    4. FillPixelArray(board->rastport, ...) // CyberGfx sees OpenGL content
+
+SEE ALSO
+    CreateDrawingBoardForRenderPort(), ZuneSetTarget()
+
+*****************************************************************************/
+{
+  AROS_LIBFUNC_INIT
+
+  ENTER_FUNCTION("SyncDrawingBoard");
+
+  D(bug("ZuneRenderer: SyncDrawingBoard(board=%p)\n", board));
+
+  if (!board || !board->valid) {
+    D(bug("ZuneRenderer: Invalid DrawingBoard\n"));
+    EXIT_FUNCTION("SyncDrawingBoard");
+    return FALSE;
+  }
+
+  /*
+   * Check if this is an OpenGL DrawingBoard (has FBO in backend_data).
+   * If so, sync the FBO contents to the bitmap.
+   *
+   * For CyberGfx backend, backend_data is NULL and bitmap IS the render
+   * target, so no sync is needed - just return TRUE.
+   */
+  if (board->backend_data && board->rastport) {
+    D(bug("ZuneRenderer: OpenGL DrawingBoard - syncing FBO to bitmap\n"));
+    BOOL result = OpenGL_SyncFBOToBitmap(board);
+    EXIT_FUNCTION("SyncDrawingBoard");
+    return result;
+  }
+
+  /*
+   * CyberGfx/Software backend: bitmap IS the render target, no sync needed.
+   * This is a no-op that always succeeds.
+   */
+  D(bug("ZuneRenderer: Non-OpenGL DrawingBoard - no sync needed\n"));
+  EXIT_FUNCTION("SyncDrawingBoard");
+  return TRUE;
 
   AROS_LIBFUNC_EXIT
 }
@@ -527,11 +656,14 @@ SEE ALSO
     return;
   }
 
-  struct DrawingBoard *board = rp->target_board;
-  struct ZuneBrush *fill_brush = ZUNE_BRUSH_SOLID(color);
-
-  ZUNE_BACKEND_CALL(rp, DrawRectangle, 0, 0, board->width, board->height, 1.0,
-                    0.0, fill_brush, NULL, TRUE, FALSE);
+  /*
+   * Use ClearRenderPort which is more efficient than DrawRectangle:
+   * - OpenGL: Uses glClear() which is hardware-optimized
+   * - CyberGfx: Uses optimized fill operations
+   */
+  struct InternalColor internal_color =
+      ZuneColorToInternal(rp, color, rp->pixel_format);
+  ZUNE_BACKEND_CALL(rp, ClearRenderPort, &internal_color);
 
   D(bug("ZuneRenderer: DrawingBoard cleared\n"));
 
@@ -732,9 +864,11 @@ BOOL ValidateDrawingBoard(struct DrawingBoard *board) {
     return FALSE;
   }
 
-  if (!board->bitmap) {
-    return FALSE;
-  }
+  /*
+   * Note: board->bitmap may be NULL for OpenGL backend!
+   * OpenGL uses its own framebuffer and doesn't need a bitmap.
+   * We only check dimensions here - bitmap is optional.
+   */
 
   if (board->width == 0 || board->height == 0) {
     return FALSE;
@@ -812,6 +946,15 @@ void DumpDrawingBoard(struct DrawingBoard *board) {
 /* Surface Blitting Operations */
 /*****************************************************************************/
 
+/*
+ * Check if a DrawingBoard is using OpenGL backend.
+ * In the new architecture, DrawingBoard always has a bitmap for legacy
+ * compatibility, but OpenGL DrawingBoards also have an FBO in backend_data.
+ */
+static BOOL IsOpenGLDrawingBoard(struct DrawingBoard *board) {
+  return (board && board->backend_data != NULL);
+}
+
 void BlitDrawingBoardToScreenInternal(struct DrawingBoard *src,
                                       struct RastPort *dst, WORD src_x,
                                       WORD src_y, WORD dst_x, WORD dst_y,
@@ -826,16 +969,65 @@ void BlitDrawingBoardToScreenInternal(struct DrawingBoard *src,
   if (src_y + height > src->height)
     height = src->height - src_y;
 
+  /*
+   * OpenGL DrawingBoard: Blit GL framebuffer to RastPort
+   *
+   * We have two methods:
+   * 1. Direct method (glASetRast + glASwapBuffers): Fast, uses Mesa's
+   *    BltPipeResourceRastPort for GPU-direct transfer. Works best for
+   *    full DrawingBoard blits.
+   * 2. Readback method (glReadPixels + WritePixelArray): Slower due to
+   *    GPU->CPU->GPU roundtrip, but works for any blit scenario.
+   *
+   * Try the direct method first, which is much faster.
+   */
+  if (IsOpenGLDrawingBoard(src)) {
+    /*
+     * FBO-based blitting for OpenGL DrawingBoards
+     *
+     * If the DrawingBoard has an FBO (backend_data != NULL), we use
+     * glReadPixels to read from the FBO and WritePixelArray to write
+     * to the destination RastPort. This avoids the glASetRast crash.
+     *
+     * If no FBO (legacy mode), fall back to glASetRast+glASwapBuffers.
+     */
+    if (src->backend_data) {
+      D(bug("ZuneRenderer: OpenGL DrawingBoard - using FBO readback blit\n"));
+      OpenGL_BlitFBOToRastPort(src, dst, src_x, src_y, dst_x, dst_y, width, height);
+    } else {
+      D(bug("ZuneRenderer: OpenGL DrawingBoard - using legacy glASetRast blit\n"));
+      OpenGL_BlitToRastPortDirect(dst, dst_x, dst_y, width, height);
+    }
+    return;
+  }
+
+  /* Standard bitmap path */
   struct BitMap *bitmap =
       src->rastport ? src->rastport->BitMap : src->bitmap;
+
+  D(bug("ZuneRenderer: Standard bitmap blit - src->rastport=%p, src->bitmap=%p\n",
+        src->rastport, src->bitmap));
+  D(bug("ZuneRenderer: Using bitmap=%p for blit to dst rastport=%p\n", bitmap, dst));
+
   if (!bitmap) {
     D(bug("ZuneRenderer: No bitmap available for blit\n"));
     return;
   }
 
+  D(bug("ZuneRenderer: BltBitMapRastPort(bitmap=%p, %d,%d, dst=%p, %d,%d, %dx%d)\n",
+        bitmap, src_x, src_y, dst, dst_x, dst_y, width, height));
+
   /* Use BltBitMapRastPort for standard blitting */
   BltBitMapRastPort(bitmap, src_x, src_y, dst, dst_x, dst_y, width, height,
                     0xC0); /* Simple copy */
+
+  /* Ensure blit completes before returning */
+  WaitBlit();
+
+  /* Force display sync on hosted AROS */
+  WaitTOF();
+
+  D(bug("ZuneRenderer: BltBitMapRastPort completed (after WaitBlit+WaitTOF)\n"));
 }
 
 void BlitDrawingBoardInternal(struct DrawingBoard *src,
@@ -845,6 +1037,16 @@ void BlitDrawingBoardInternal(struct DrawingBoard *src,
 
   D(bug("ZuneRenderer: Blitting between DrawingBoards (%d,%d)->(%d,%d) %dx%d\n",
         src_x, src_y, dst_x, dst_y, width, height));
+
+  /*
+   * OpenGL to OpenGL: Not directly supported - would need texture copy
+   * OpenGL to Bitmap: Would need glReadPixels (not implemented yet)
+   * Bitmap to OpenGL: Would need texture upload (not implemented yet)
+   */
+  if (IsOpenGLDrawingBoard(src) || IsOpenGLDrawingBoard(dst)) {
+    D(bug("ZuneRenderer: OpenGL DrawingBoard blit between boards not yet supported\n"));
+    return;
+  }
 
   /* Use fast blit if both surfaces are locked */
   if (src->pixels_locked && dst->pixels_locked) {
@@ -1119,17 +1321,185 @@ SEE ALSO
   const UWORD width = src_rect->width;
   const UWORD height = src_rect->height;
 
+  D(bug("BlitDrawingBoardToRenderPort: dst->target_board=%p, dst->target_rp=%p\n",
+        dst->target_board, dst->target_rp));
+
   if (dst->target_board) {
     /* Blit to off-screen DrawingBoard */
+    D(bug("BlitDrawingBoardToRenderPort: Blitting to off-screen DrawingBoard\n"));
     BlitDrawingBoardInternal(src, dst->target_board, src_x, src_y, dst_x, dst_y,
                              width, height);
   } else {
     /* Blit to screen RastPort */
+    D(bug("BlitDrawingBoardToRenderPort: Blitting to screen RastPort %p\n", dst->target_rp));
     BlitDrawingBoardToScreenInternal(src, dst->target_rp, src_x, src_y, dst_x,
                                      dst_y, width, height);
   }
 
   EXIT_FUNCTION("BlitDrawingBoardToRenderPort");
+
+  AROS_LIBFUNC_EXIT
+}
+
+/*****************************************************************************
+
+    NAME */
+AROS_LH8(void, ZuneCopyFromRastPort,
+
+         /*  SYNOPSIS */
+         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RastPort *, src_rp, A1),
+         AROS_LHA(WORD, src_x, D0),
+         AROS_LHA(WORD, src_y, D1),
+         AROS_LHA(WORD, dst_x, D2),
+         AROS_LHA(WORD, dst_y, D3),
+         AROS_LHA(UWORD, width, D4),
+         AROS_LHA(UWORD, height, D5),
+
+         /*  LOCATION */
+         struct Library *, ZuneRendererBase, 98, zunerenderer)
+
+/*  FUNCTION
+    Copies pixels from a RastPort into a DrawingBoard's buffer.
+    This is used to read background content for proper alpha blending
+    when drawing antialiased graphics over existing content.
+
+INPUTS
+    rp - Destination RenderPort (must target a DrawingBoard)
+    src_rp - Source RastPort to read pixels from
+    src_x, src_y - Source coordinates in the RastPort
+    dst_x, dst_y - Destination coordinates in the DrawingBoard
+    width, height - Size of area to copy
+
+RESULT
+    None
+
+NOTES
+    The RenderPort must target a DrawingBoard. For CyberGfx backend,
+    this copies directly to the DrawingBoard's pixel buffer. For OpenGL
+    backend, this uploads the pixels as a texture and draws to the
+    framebuffer.
+
+SEE ALSO
+    CreateDrawingBoard(), CreateRenderPortWithDrawingBoard()
+
+*****************************************************************************/
+{
+  AROS_LIBFUNC_INIT
+
+  ZuneBackend *backend;
+
+  ENTER_FUNCTION("ZuneCopyFromRastPort");
+
+  D(bug("ZuneRenderer: ZuneCopyFromRastPort(rp=%p, src_rp=%p, src=%d,%d dst=%d,%d %dx%d)\n",
+        rp, src_rp, src_x, src_y, dst_x, dst_y, width, height));
+
+  if (!rp || !src_rp) {
+    D(bug("ZuneRenderer: Invalid parameters for ZuneCopyFromRastPort\n"));
+    EXIT_FUNCTION("ZuneCopyFromRastPort");
+    return;
+  }
+
+  if (!rp->target_board) {
+    D(bug("ZuneRenderer: RenderPort does not target a DrawingBoard\n"));
+    EXIT_FUNCTION("ZuneCopyFromRastPort");
+    return;
+  }
+
+  if (width == 0 || height == 0) {
+    EXIT_FUNCTION("ZuneCopyFromRastPort");
+    return;
+  }
+
+  /* Get the backend and call its CopyFromRastPort function */
+  backend = ZuneGetRenderPortBackend(rp);
+  if (backend && backend->ops && backend->ops->CopyFromRastPort) {
+    backend->ops->CopyFromRastPort(rp, src_rp, src_x, src_y, dst_x, dst_y, width, height);
+  } else {
+    D(bug("ZuneRenderer: Backend does not support CopyFromRastPort\n"));
+  }
+
+  EXIT_FUNCTION("ZuneCopyFromRastPort");
+
+  AROS_LIBFUNC_EXIT
+}
+
+/*****************************************************************************
+
+    NAME */
+AROS_LH7(void, ZuneBlitToWindow,
+
+         /*  SYNOPSIS */
+         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(WORD, src_x, D0),
+         AROS_LHA(WORD, src_y, D1),
+         AROS_LHA(WORD, dst_x, D2),
+         AROS_LHA(WORD, dst_y, D3),
+         AROS_LHA(UWORD, width, D4),
+         AROS_LHA(UWORD, height, D5),
+
+         /*  LOCATION */
+         struct Library *, ZuneRendererBase, 100, zunerenderer)
+
+/*  FUNCTION
+    Blits content from the RenderPort's DrawingBoard directly to its
+    associated window. This eliminates the need for a separate
+    WindowRenderPort for blitting operations.
+
+INPUTS
+    rp - RenderPort with a DrawingBoard target and window reference
+    src_x, src_y - Source coordinates in the DrawingBoard
+    dst_x, dst_y - Destination coordinates in the window
+    width, height - Size of area to blit
+
+RESULT
+    None
+
+NOTES
+    The RenderPort must have both a valid window reference and a
+    DrawingBoard target. Uses BltBitMapRastPort for the actual blit.
+
+SEE ALSO
+    CreateDrawingBoardForRenderPort(), ZuneSetTarget()
+
+*****************************************************************************/
+{
+  AROS_LIBFUNC_INIT
+
+  ENTER_FUNCTION("ZuneBlitToWindow");
+
+  D(bug("ZuneRenderer: ZuneBlitToWindow(rp=%p, src=%d,%d dst=%d,%d %dx%d)\n",
+        rp, src_x, src_y, dst_x, dst_y, width, height));
+
+  if (!rp) {
+    D(bug("ZuneRenderer: Invalid RenderPort for ZuneBlitToWindow\n"));
+    EXIT_FUNCTION("ZuneBlitToWindow");
+    return;
+  }
+
+  if (!rp->window) {
+    D(bug("ZuneRenderer: RenderPort has no window reference\n"));
+    EXIT_FUNCTION("ZuneBlitToWindow");
+    return;
+  }
+
+  if (!rp->target_board || !rp->target_board->bitmap) {
+    D(bug("ZuneRenderer: RenderPort has no DrawingBoard or bitmap\n"));
+    EXIT_FUNCTION("ZuneBlitToWindow");
+    return;
+  }
+
+  if (width == 0 || height == 0) {
+    EXIT_FUNCTION("ZuneBlitToWindow");
+    return;
+  }
+
+  /* Blit from DrawingBoard bitmap to window's RastPort */
+  BltBitMapRastPort(rp->target_board->bitmap, src_x, src_y,
+                    rp->window->RPort, dst_x, dst_y,
+                    width, height, 0xC0);
+
+  EXIT_FUNCTION("ZuneBlitToWindow");
 
   AROS_LIBFUNC_EXIT
 }

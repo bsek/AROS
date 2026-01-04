@@ -14,6 +14,9 @@
 #include <exec/types.h>
 #include "../backend_interface.h"
 
+/* Forward declarations */
+struct DrawingBoard;
+
 /*****************************************************************************/
 /* OpenGL Backend Constants                                                  */
 /*****************************************************************************/
@@ -33,35 +36,113 @@ extern ZuneBackendOps opengl_backend_ops;
 /*****************************************************************************/
 
 /*
- * OpenGL context state for a window/RenderPort
- * Each RenderPort that uses OpenGL gets its own GL context
+ * Target type for the current GL context binding
  */
-typedef struct OpenGLContextData {
-    APTR        gl_context;         /* GLAContext from gl.library */
-    BOOL        context_active;     /* Is this context current? */
-    UWORD       viewport_width;     /* Current viewport width */
-    UWORD       viewport_height;    /* Current viewport height */
-} OpenGLContextData;
+typedef enum {
+    OPENGL_TARGET_NONE = 0,
+    OPENGL_TARGET_WINDOW,
+    OPENGL_TARGET_DRAWINGBOARD
+} OpenGLTargetType;
+
+/*****************************************************************************/
+/* Per-Window GL Context                                                     */
+/*****************************************************************************/
+
+/*
+ * OpenGLWindowContext - GL context data for a specific window
+ *
+ * Each window that uses OpenGL rendering gets its own GL context.
+ * This allows multiple windows to render independently without
+ * the overhead of glASetRast() calls between them.
+ */
+typedef struct OpenGLWindowContext {
+    struct Window *window;          /* The window this context belongs to */
+    APTR        gl_context;         /* GLAContext for this window */
+    BOOL        context_valid;      /* Context is valid and usable */
+    BOOL        shaders_initialized; /* Shaders compiled for this context */
+    UWORD       width;              /* Current framebuffer width */
+    UWORD       height;             /* Current framebuffer height */
+    
+    /* Linked list for tracking all window contexts */
+    struct OpenGLWindowContext *next;
+} OpenGLWindowContext;
+
+/*****************************************************************************/
+/* FBO Data for DrawingBoards                                                */
+/*****************************************************************************/
+
+/*
+ * OpenGLFBOData - FBO (Framebuffer Object) data for a DrawingBoard
+ *
+ * Each DrawingBoard gets its own FBO for off-screen rendering.
+ * The FBO is attached to the parent window's GL context.
+ * Switching between DrawingBoards is done via glBindFramebuffer (fast).
+ */
+typedef struct OpenGLFBOData {
+    ULONG       fbo_id;             /* OpenGL framebuffer object ID */
+    ULONG       texture_id;         /* Color attachment texture ID */
+    ULONG       depth_rb_id;        /* Depth renderbuffer ID (optional) */
+    UWORD       width;              /* FBO width */
+    UWORD       height;             /* FBO height */
+    BOOL        valid;              /* FBO is valid and complete */
+    
+    /* Parent context - the window context this FBO belongs to */
+    OpenGLWindowContext *parent_context;
+} OpenGLFBOData;
+
+/*****************************************************************************/
+/* Global OpenGL Backend State                                               */
+/*****************************************************************************/
 
 /*
  * Global OpenGL backend state
+ * Stored in ZuneBackendContext->private_data
+ *
+ * ARCHITECTURE:
+ * - Each Window gets its own GL context (via glACreateContext with GLA_Window)
+ * - Each DrawingBoard gets its own FBO within the active window's context
+ * - Switching between windows requires glAMakeCurrent()
+ * - Switching between DrawingBoards only requires glBindFramebuffer() (fast)
+ *
+ * This avoids the glASetRast() crashes when switching between targets
+ * with different dimensions.
  */
 typedef struct OpenGLPrivateData {
     struct Library *GLBase;         /* gl.library base */
     BOOL        initialized;        /* Backend initialized successfully */
     BOOL        gl_available;       /* GL library available and working */
     
+    /* Global GL context (for single-context fallback mode) */
+    APTR        gl_context;         /* GLAContext - the single global context */
+    BOOL        context_created;    /* Global context has been created */
+    
+    /* Window context management (for multi-context FBO mode) */
+    OpenGLWindowContext *window_contexts;   /* Linked list of window contexts */
+    OpenGLWindowContext *current_context;   /* Currently active window context */
+    
+    /* Current target tracking */
+    OpenGLTargetType current_target_type;   /* Type of current target */
+    struct Window *current_window;          /* Currently bound window (if WINDOW) */
+    struct DrawingBoard *current_board;     /* Currently bound DrawingBoard (if DRAWINGBOARD) */
+    UWORD       current_width;              /* Current framebuffer width */
+    UWORD       current_height;             /* Current framebuffer height */
+    BOOL        needs_sync;                 /* Need to sync from RastPort before drawing */
+    
     /* GL capabilities detected at init */
     ULONG       gl_version_major;   /* OpenGL major version */
     ULONG       gl_version_minor;   /* OpenGL minor version */
     ULONG       max_texture_size;   /* Maximum texture dimension */
     BOOL        has_npot_textures;  /* Non-power-of-two texture support */
-    BOOL        has_framebuffers;   /* Framebuffer object support */
+    BOOL        has_framebuffers;   /* Framebuffer object support (FBO) */
     BOOL        has_shaders;        /* Shader support (GLSL) */
     
     /* Statistics */
     ULONG       contexts_created;   /* Number of GL contexts created */
+    ULONG       fbos_created;       /* Number of FBOs created */
     ULONG       draw_calls;         /* Total draw calls (for debugging) */
+    ULONG       context_switches;   /* Number of context switches */
+    ULONG       fbo_switches;       /* Number of FBO switches */
+    ULONG       setrast_calls;      /* Number of glASetRast calls */
     
 } OpenGLPrivateData;
 
@@ -69,18 +150,27 @@ typedef struct OpenGLPrivateData {
 /* OpenGL Backend Functions                                                  */
 /*****************************************************************************/
 
-/* Library management */
+/* Library management - called during backend init */
 BOOL OpenGL_CheckLibrary(OpenGLPrivateData *priv);
 BOOL OpenGL_CheckCapabilities(OpenGLPrivateData *priv);
 
-/* Context management */
-APTR OpenGL_CreateContext(struct Window *window);
-void OpenGL_DestroyContext(APTR context);
-BOOL OpenGL_MakeCurrent(APTR context);
-void OpenGL_SwapBuffers(APTR context);
-
 /* Debug/Info */
 void OpenGL_DumpDebugInfo(OpenGLPrivateData *priv);
-const char *OpenGL_GetErrorString(ULONG error);
+
+/* Public helper functions - callable from other modules */
+void OpenGL_SwapBuffers(void);
+void OpenGL_BlitToRastPort(struct RastPort *dst_rp, WORD dst_x, WORD dst_y,
+                           UWORD width, UWORD height);
+void OpenGL_BlitToRastPortDirect(struct RastPort *dst_rp, WORD dst_x, WORD dst_y,
+                                 UWORD width, UWORD height);
+void OpenGL_BlitFBOToRastPort(struct DrawingBoard *board, struct RastPort *dst_rp,
+                              WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
+                              UWORD width, UWORD height);
+
+/* FBO to Bitmap synchronization - copies FBO content to DrawingBoard's bitmap */
+BOOL OpenGL_SyncFBOToBitmap(struct DrawingBoard *board);
+
+/* DrawingBoard cleanup - frees FBO and backend resources */
+void OpenGLCleanupDrawingBoard(struct DrawingBoard *board);
 
 #endif /* OPENGL_BACKEND_H */

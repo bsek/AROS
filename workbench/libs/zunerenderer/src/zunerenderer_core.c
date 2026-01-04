@@ -11,7 +11,7 @@
 
 #include "exec/lists.h"
 #include <aros/libcall.h>
-#define DEBUG 1
+#define DEBUG 0
 #include <aros/debug.h>
 #include <cybergraphx/cybergraphics.h>
 #include <exec/libraries.h>
@@ -243,141 +243,218 @@ void RemoveRenderPortFromList(struct IntZuneRendererBase *base,
 /* Public API Implementation */
 /*****************************************************************************/
 
+
+
 /*****************************************************************************
 
     NAME */
-AROS_LH2(struct RenderPort *, CreateRenderPort,
+struct RenderPort *CreateRenderPortForWindowInternal(
+    struct IntZuneRendererBase *base,
+    struct Window *window,
+    struct ColorMap *colormap)
+
+/*  FUNCTION
+    Creates a new RenderPort bound to a Window.
+
+    This is the primary way to create a RenderPort in the new architecture.
+    The RenderPort is bound to the window and automatically selects the best
+    backend (OpenGL if available, otherwise CyberGraphics).
+
+    The window reference is required for OpenGL to create a GL context.
+
+INPUTS
+    base - Library base
+    window - Target window (must not be NULL)
+    colormap - ColorMap for color conversions (must not be NULL)
+
+RESULT
+    Pointer to new RenderPort structure, or NULL if creation failed.
+
+*****************************************************************************/
+{
+  struct RenderPort *rp;
+  ZuneBackend *backend;
+
+  ENTER_FUNCTION("CreateRenderPortForWindowInternal");
+
+  D(bug("ZuneRenderer: CreateRenderPortForWindow(window=%p, colormap=%p)\n",
+        window, colormap));
+
+  if (!window || !colormap) {
+    D(bug("ZuneRenderer: Invalid parameters (window=%p, colormap=%p)\n",
+          window, colormap));
+    EXIT_FUNCTION("CreateRenderPortForWindowInternal");
+    return NULL;
+  }
+
+  /* Allocate RenderPort structure */
+  rp = AllocVec(sizeof(struct RenderPort), MEMF_CLEAR | MEMF_PUBLIC);
+  if (!rp) {
+    D(bug("ZuneRenderer: Failed to allocate RenderPort\n"));
+    EXIT_FUNCTION("CreateRenderPortForWindowInternal");
+    return NULL;
+  }
+
+  InitializeRenderPort(rp);
+
+  /* Set window binding - this is key for OpenGL context creation */
+  rp->window = window;
+  rp->target_rp = window->RPort;
+  rp->colormap = colormap;
+  rp->target_board = NULL;  /* Initially rendering to window */
+
+  /* Allocate per-RenderPort caches */
+  rp->color_cache = AllocVec(sizeof(struct ColorCache), MEMF_CLEAR | MEMF_PUBLIC);
+  if (rp->color_cache) {
+    InitColorCache(rp->color_cache);
+  }
+  rp->pen_color_cache = AllocVec(sizeof(struct PenColorCache), MEMF_CLEAR | MEMF_PUBLIC);
+  if (rp->pen_color_cache) {
+    InitPenColorCache(rp->pen_color_cache);
+  }
+
+  /* Cache HIDD bitmap object */
+  if (window->RPort && window->RPort->BitMap) {
+    rp->hidd_bitmap_obj = HIDD_BM_OBJ(window->RPort->BitMap);
+  }
+
+  backend = ZuneFindBestBackend(rp);
+  if (backend && ZuneBindRenderPortToBackend(rp, backend)) {
+    D(bug("ZuneRenderer: RenderPort bound to %s backend\n", backend->ops->name));
+
+    /* Determine pixel format */
+    if (backend->ops->GetPixelFormat && window->RPort->BitMap) {
+      rp->pixel_format = backend->ops->GetPixelFormat(window->RPort->BitMap);
+    } else {
+      rp->pixel_format = PIXFMT_ARGB32;
+    }
+  } else {
+    D(bug("ZuneRenderer: No backend available, using software fallback\n"));
+    rp->backend_type = BACKEND_SOFTWARE;
+    rp->backend_context = NULL;
+    rp->backend_vtable = NULL;
+    rp->pixel_format = PIXFMT_ARGB32;
+  }
+
+  /* Add to tracking list */
+  AddRenderPortToList(base, rp);
+
+  D(bug("ZuneRenderer: RenderPort created for window %p, backend=%d\n",
+        window, rp->backend_type));
+
+  EXIT_FUNCTION("CreateRenderPortForWindowInternal");
+  return rp;
+}
+
+/*****************************************************************************
+
+    NAME */
+AROS_LH2(struct RenderPort *, CreateRenderPortForWindow,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct ColorMap *, colormap, A0),
-         AROS_LHA(struct RastPort *, rastport, A1),
+         AROS_LHA(struct Window *, window, A0),
+         AROS_LHA(struct ColorMap *, colormap, A1),
 
          /*  LOCATION */
          struct Library *, ZuneRendererBase, 5, zunerenderer)
 
 /*  FUNCTION
-    Creates a new RenderPort for rendering to the specified screen/rastport.
-    The RenderPort automatically selects the best available backend.
-
-INPUTS
-    screen - Target screen (must not be NULL)
-    rastport - Target rastport (must not be NULL)
-
-RESULT
-    Pointer to new RenderPort structure, or NULL if creation failed.
-
-NOTES
-    The created RenderPort must be freed with DestroyRenderPort().
-    Batching is initially disabled and can be enabled with BeginBatch().
-
-SEE ALSO
-    CreateRenderPortWithDrawingBoard(), DestroyRenderPort()
+    Creates a new RenderPort bound to a Window.
+    See CreateRenderPortForWindowInternal for details.
 
 *****************************************************************************/
 {
   AROS_LIBFUNC_INIT
+  ENTER_FUNCTION("CreateRenderPortForWindow");
 
   struct IntZuneRendererBase *base = ZRB(ZuneRendererBase);
-  struct RenderPort *rp;
+  return CreateRenderPortForWindowInternal(base, window, colormap);
 
-  ENTER_FUNCTION("CreateRenderPort");
-
-  D(bug("ZuneRenderer: CreateRenderPort(colormap=%p, rastport=%p)\n", colormap,
-        rastport));
-
-  rp = CreateRenderPortInternal(base, colormap, rastport);
-
-  EXIT_FUNCTION("CreateRenderPort");
-
-  return rp;
-
+  EXIT_FUNCTION("CreateRenderPortForWindow");
   AROS_LIBFUNC_EXIT
 }
 
 /*****************************************************************************
 
     NAME */
-AROS_LH2(struct RenderPort *, CreateRenderPortWithDrawingBoard,
+AROS_LH2(BOOL, ZuneSetTarget,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct ColorMap *, colormap, A0),
+         AROS_LHA(struct RenderPort *, rp, A0),
          AROS_LHA(struct DrawingBoard *, board, A1),
 
          /*  LOCATION */
-         struct Library *, ZuneRendererBase, 6, zunerenderer)
+         struct Library *, ZuneRendererBase, 10, zunerenderer)
 
 /*  FUNCTION
-    Creates a new RenderPort for rendering to the specified DrawingBoard.
-    This enables off-screen rendering to the DrawingBoard surface.
+    Switch the render target of a RenderPort.
+
+    board = NULL: Render to the window's RastPort
+    board != NULL: Render to the DrawingBoard
+
+    For OpenGL backend: Uses glBindFramebuffer() for fast FBO switching
+    For CyberGfx backend: Updates internal target pointer
 
 INPUTS
-    colormap - ColorMap used for color conversions (must not be NULL)
-    board - Target DrawingBoard (must not be NULL)
+    rp - RenderPort to modify
+    board - Target DrawingBoard, or NULL for window
 
 RESULT
-    Pointer to new RenderPort structure, or NULL if creation failed.
-
-NOTES
-    The created RenderPort must be freed with DestroyRenderPort().
-    The DrawingBoard must remain valid for the lifetime of the RenderPort.
-
-SEE ALSO
-    CreateRenderPort(), DestroyRenderPort(), CreateDrawingBoard()
+    TRUE if target was switched successfully, FALSE otherwise.
 
 *****************************************************************************/
 {
   AROS_LIBFUNC_INIT
 
-  struct IntZuneRendererBase *base = ZRB(ZuneRendererBase);
-  struct RenderPort *rp;
+  ENTER_FUNCTION("ZuneSetTarget");
 
-  ENTER_FUNCTION("CreateRenderPortWithDrawingBoard");
-
-  D(bug("ZuneRenderer: CreateRenderPortWithDrawingBoard(board=%p)\n", board));
-
-  /* Validate parameters */
-  if (!board || !ValidateDrawingBoard(board)) {
-    D(bug("ZuneRenderer: Invalid DrawingBoard parameter\n"));
-    return NULL;
+  if (!rp || !rp->valid) {
+    D(bug("ZuneRenderer: ZuneSetTarget - invalid RenderPort\n"));
+    EXIT_FUNCTION("ZuneSetTarget");
+    return FALSE;
   }
 
-  if (!board->rastport) {
-    D(bug("ZuneRenderer: DrawingBoard is missing RastPort\n"));
-    return NULL;
+  if (board && !board->valid) {
+    D(bug("ZuneRenderer: ZuneSetTarget - invalid DrawingBoard\n"));
+    EXIT_FUNCTION("ZuneSetTarget");
+    return FALSE;
   }
 
-  rp = CreateRenderPortInternal(base, colormap, board->rastport);
-  if (!rp) {
-    D(bug("Failed to create renderport\n"));
-    return NULL;
-  }
+  D(bug("ZuneRenderer: ZuneSetTarget(rp=%p, board=%p)\n", rp, board));
 
+  /* Update target */
   rp->target_board = board;
-  board->colormap = colormap;
 
-  /* Verify the drawing board is properly initialized */
-  if (!board->bitmap) {
-    D(bug("ZuneRenderer: No bitmap available for drawing board\n"));
-    DestroyRenderPortInternal(base, rp);
-    return NULL;
+  if (board) {
+    /* Switching to DrawingBoard */
+    rp->target_rp = board->rastport;
+    if (board->bitmap) {
+      rp->hidd_bitmap_obj = HIDD_BM_OBJ(board->bitmap);
+    }
+    D(bug("ZuneRenderer: Target set to DrawingBoard %p (%dx%d)\n",
+          board, board->width, board->height));
+  } else {
+    /* Switching to window */
+    if (rp->window) {
+      rp->target_rp = rp->window->RPort;
+      if (rp->window->RPort && rp->window->RPort->BitMap) {
+        rp->hidd_bitmap_obj = HIDD_BM_OBJ(rp->window->RPort->BitMap);
+      }
+      D(bug("ZuneRenderer: Target set to window %p RastPort\n", rp->window));
+    } else {
+      D(bug("ZuneRenderer: Warning - no window, keeping current target_rp\n"));
+    }
   }
 
-  /* Cache HIDD bitmap object for efficient direct operations on DrawingBoard */
-  rp->hidd_bitmap_obj = HIDD_BM_OBJ(board->bitmap);
+  /*
+   * Note: For OpenGL backend, glBindFramebuffer is called lazily by
+   * OpenGL_SwitchToTarget() when the next draw operation occurs.
+   * This avoids unnecessary FBO switches when multiple ZuneSetTarget
+   * calls happen without drawing in between.
+   */
 
-  if (!board->rastport) {
-    D(bug("ZuneRenderer: Invalid rastport in drawing board\n"));
-    DestroyRenderPortInternal(base, rp);
-    return NULL;
-  }
-
-  /* The RastPort and BitMap should already be initialized by
-   * AllocateDrawingBoardBitmap() */
-  D(bug("ZuneRenderer: DrawingBoard RastPort %p with BitMap %p\n",
-        board->rastport, board->rastport->BitMap));
-
-  EXIT_FUNCTION("CreateRenderPortWithDrawingBoard");
-  return rp;
+  EXIT_FUNCTION("ZuneSetTarget");
+  return TRUE;
 
   AROS_LIBFUNC_EXIT
 }

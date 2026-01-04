@@ -376,7 +376,7 @@ BOOL zune_frame_try_renderer(Object *obj, struct MUI_AreaData *data, const struc
      * Only use draw buffer when window double buffering is enabled, because
      * ReadPixelArray needs valid background content to blend with. When window
      * double buffering is off, the parent background hasn't been drawn yet. */
-    BOOL window_has_buffer = mri->mri_BufferBM != NULL;
+    BOOL window_has_buffer = (mri->mri_BufferBM != NULL) || (mri->mri_DrawingBoard != NULL);
     BOOL use_drawbuffer = use_aa &&
                           window_has_buffer &&
                           bgw >= FRAME_DRAWBUFFER_MIN_WIDTH &&
@@ -387,12 +387,13 @@ BOOL zune_frame_try_renderer(Object *obj, struct MUI_AreaData *data, const struc
         struct RenderPort *buffer_port = NULL;
 
         if (WindowObtainObjectDrawBuffer(mri, obj, (UWORD)bgw, (UWORD)bgh, &board, &buffer_port)) {
-            /* Lock for direct pixel access */
-            LockDrawingBoardPixels(buffer_port, NULL);
-
-            /* Copy background from screen to buffer for proper AA blending */
-            ReadPixelArray(board->pixels, 0, 0, board->pitch,
-                          rp, bgleft, bgtop, bgw, bgh, RECTFMT_ARGB);
+            /*
+             * Copy background from window to DrawingBoard for proper AA blending.
+             * This uses ZuneCopyFromRastPort which works with both CyberGfx and
+             * OpenGL backends - CyberGfx copies directly to pixel buffer, OpenGL
+             * uploads as texture and draws to framebuffer.
+             */
+            ZuneCopyFromRastPort(buffer_port, rp, bgleft, bgtop, 0, 0, bgw, bgh);
 
             /* Draw to buffer with coordinates relative to buffer origin */
             struct ZuneRect buffer_rect = {
@@ -402,13 +403,18 @@ BOOL zune_frame_try_renderer(Object *obj, struct MUI_AreaData *data, const struc
                 .height = bgh - inset * 2,
             };
 
+            ULONG pitch;
+            APTR lock = LockDrawingBoardPixels(buffer_port, &pitch);
+
             if (border_width == 0) {
                 ZuneFillRectangleRoundedAA(buffer_port, &buffer_rect, radius, fill_brush);
             } else {
                 ZuneFillRectangleRoundedStyledAA(buffer_port, &buffer_rect, radius, border_width, fill_brush, border_color);
             }
 
-            UnlockDrawingBoardPixels(buffer_port);
+            if (lock) {
+                UnlockDrawingBoardPixels(buffer_port);
+            }
 
             /* Blit result back to screen */
             BlitDrawingBoardToRenderPortRects(board, port, 0, 0, bgleft, bgtop, bgw, bgh);
@@ -537,12 +543,11 @@ void zune_frame_draw_deferred_outline(Object *obj, struct MUI_AreaData *data,
         struct RenderPort *buffer_port = NULL;
 
         if (WindowObtainObjectDrawBuffer(mri, obj, (UWORD)bgw, (UWORD)bgh, &board, &buffer_port)) {
-            /* Lock for direct pixel access */
-            LockDrawingBoardPixels(buffer_port, NULL);
-
-            /* Copy background from screen to buffer for proper AA blending */
-            ReadPixelArray(board->pixels, 0, 0, board->pitch,
-                          rp, bgleft, bgtop, bgw, bgh, RECTFMT_ARGB);
+            /* Copy background from screen to buffer for proper AA blending.
+             * This uses ZuneCopyFromRastPort which works with both CyberGfx and
+             * OpenGL backends (OpenGL doesn't support direct pixel access).
+             */
+            ZuneCopyFromRastPort(buffer_port, rp, bgleft, bgtop, 0, 0, bgw, bgh);
 
             /* Draw to buffer with coordinates relative to buffer origin */
             struct ZuneRect buffer_rect = {
@@ -553,8 +558,6 @@ void zune_frame_draw_deferred_outline(Object *obj, struct MUI_AreaData *data,
             };
 
             ZuneDrawRectangleRoundedOutlineStyledAA(buffer_port, &buffer_rect, radius, border_width, border_color);
-
-            UnlockDrawingBoardPixels(buffer_port);
 
             /* Blit result back to screen */
             BlitDrawingBoardToRenderPortRects(board, port, 0, 0, bgleft, bgtop, bgw, bgh);

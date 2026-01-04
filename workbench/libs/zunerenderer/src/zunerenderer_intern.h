@@ -212,7 +212,8 @@ BOOL ZuneBrushToInternalColor(struct RenderPort *rp,
                               struct InternalColor *out_color);
 /* Drawingboard managment */
 BOOL AllocateDrawingBoardBitmap(struct DrawingBoard *board,
-                                ZuneBackendType backend_type);
+                                ZuneBackendType backend_type,
+                                struct BitMap *friend_bitmap);
 APTR LockDrawingBoardPixelsInternal(struct RenderPort *rp, ULONG *pitch);
 void UnlockDrawingBoardPixelsInternal(struct RenderPort *rp);
 

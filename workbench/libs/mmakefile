@@ -55,7 +55,8 @@ include $(SRCDIR)/config/aros.cfg
 #MM     workbench-libs-version \
 #MM     workbench-libs-workbench \
 #MM     workbench-libs-z \
-#MM     workbench-libs-zstd
+#MM     workbench-libs-zstd \
+#MM     workbench-libs-zunerenderer
 
 ##MM- workbench-libs-complete : \
 ##MM     workbench-libs-fd
@@ -111,6 +112,7 @@ include $(SRCDIR)/config/aros.cfg
 #MM     workbench-libs-workbench-includes \
 #MM     workbench-libs-z-includes \
 #MM     workbench-libs-zstd-includes
+#MM     workbench-libs-zunerenderer-includes
 
 ##MM- includes-generate : \
 ##MM     workbench-libs-fd-includes

@@ -3,6 +3,9 @@
 
 #include <stdlib.h>
 
+#define DEBUG 0
+#include <aros/debug.h>
+
 /*****************************************************************************
  * CybergfxDrawRectangleToRasterPort
  *
@@ -48,61 +51,84 @@ void CybergfxDrawRectangleToRasterPort(struct RenderPort *renderport,
         "h=%d, border_width=%d, filled=%s, type=%d\n",
         x, y, width, height, border_width, filled ? "TRUE" : "FALSE",
         fill_brush ? fill_brush->type : -1));
+  D(bug("CybergfxDrawRectangleToRasterPort: rp=%p, rp->BitMap=%p\n",
+        rp, rp ? rp->BitMap : NULL));
 
   /* Handle filled rectangles */
   if (filled && fill_brush && width > 0 && height > 0) {
-    /* Fast path for solid color brushes */
+    /* Fast path for solid color brushes - use FillPixelArray with ARGB color
+     * This works correctly for both window RastPorts and off-screen DrawingBoards
+     * since it uses the pre-converted ARGB value instead of pen index */
     if (fill_brush->type == ZUNE_BRUSH_TYPE_SOLID || fill_brush->type == ZUNE_BRUSH_TYPE_PEN) {
-      FillPixelArray(rp, x, y, width, height, fill_brush->internal.color->original_pixel);
+      ULONG argb = fill_brush->internal.color->original_pixel;
+      D(bug("CybergfxDrawRectangleToRasterPort: Using FillPixelArray with ARGB=0x%08lx\n", argb));
+      FillPixelArray(rp, x, y, width, height, argb);
     } else {
       /* Pattern/gradient brushes require per-pixel sampling */
+      /* Use multi-scanline batching to reduce WritePixelArray syscall overhead */
+      #define SCANLINE_BATCH 32
       int row_width = (int)width;
-      ULONG *row_buffer =
-          row_width > 0 ? malloc((size_t)row_width * sizeof(ULONG)) : NULL;
-      if (!row_buffer) {
+      int total_height = (int)height;
+      
+      /* Allocate buffer for multiple scanlines */
+      ULONG *batch_buffer =
+          (row_width > 0 && total_height > 0) 
+              ? malloc((size_t)row_width * SCANLINE_BATCH * sizeof(ULONG)) 
+              : NULL;
+      if (!batch_buffer) {
         return;
       }
 
-      /* Process each row of the rectangle */
-      for (int row = 0; row < (int)height; ++row) {
-        WORD py = y + row;
-        int px = 0;
+      /* Process rows in batches */
+      for (int batch_start = 0; batch_start < total_height; batch_start += SCANLINE_BATCH) {
+        int batch_height = (batch_start + SCANLINE_BATCH <= total_height) 
+                              ? SCANLINE_BATCH 
+                              : (total_height - batch_start);
+        
+        /* Fill the batch buffer with multiple scanlines */
+        for (int row_in_batch = 0; row_in_batch < batch_height; ++row_in_batch) {
+          int row = batch_start + row_in_batch;
+          WORD py = y + row;
+          ULONG *row_buffer = batch_buffer + (row_in_batch * row_width);
+          int px = 0;
 
-        /* Process 4 pixels at a time using SIMD batch sampling */
-        for (; px <= row_width - 4; px += 4) {
-          int px_coords[4];
-          for (int i = 0; i < 4; ++i) {
-            px_coords[i] = x + px + i;
+          /* Process 4 pixels at a time using SIMD batch sampling */
+          for (; px <= row_width - 4; px += 4) {
+            int px_coords[4];
+            for (int i = 0; i < 4; ++i) {
+              px_coords[i] = x + px + i;
+            }
+
+            UBYTE fc_r[4], fc_g[4], fc_b[4], fc_a[4];
+            SampleBrushBatch4(fill_brush, x, y, width, height, px_coords, py,
+                              fc_r, fc_g, fc_b, fc_a);
+
+            /* Write opaque pixels directly using vectorized packing (no alpha
+             * blending) */
+            UBYTE alpha[4] = {0xFF, 0xFF, 0xFF, 0xFF};
+            cybergfx_make_argb32_batch4(alpha, fc_r, fc_g, fc_b, &row_buffer[px]);
           }
 
-          UBYTE fc_r[4], fc_g[4], fc_b[4], fc_a[4];
-          SampleBrushBatch4(fill_brush, x, y, width, height, px_coords, py,
-                            fc_r, fc_g, fc_b, fc_a);
+          /* Process remaining pixels one at a time */
+          for (; px < row_width; ++px) {
+            int actual_x = x + px;
+            UBYTE fc_r, fc_g, fc_b, fc_a;
+            SampleBrush(fill_brush, x, y, width, height, actual_x, py, &fc_r,
+                        &fc_g, &fc_b, &fc_a);
 
-          /* Write opaque pixels directly using vectorized packing (no alpha
-           * blending) */
-          UBYTE alpha[4] = {0xFF, 0xFF, 0xFF, 0xFF};
-          cybergfx_make_argb32_batch4(alpha, fc_r, fc_g, fc_b, &row_buffer[px]);
+            /* Write opaque pixel directly (no alpha blending) */
+            /* Use logical format for WritePixelArray with CYBERGFX_PIXELFORMAT_ARGB32 */
+            row_buffer[px] = pack_argb32_logical(0xFF, fc_r, fc_g, fc_b);
+          }
         }
 
-        /* Process remaining pixels one at a time */
-        for (; px < row_width; ++px) {
-          int actual_x = x + px;
-          UBYTE fc_r, fc_g, fc_b, fc_a;
-          SampleBrush(fill_brush, x, y, width, height, actual_x, py, &fc_r,
-                      &fc_g, &fc_b, &fc_a);
-
-          /* Write opaque pixel directly (no alpha blending) */
-          /* Use logical format for WritePixelArray with CYBERGFX_PIXELFORMAT_ARGB32 */
-          row_buffer[px] = pack_argb32_logical(0xFF, fc_r, fc_g, fc_b);
-        }
-
-        /* Write the entire row to the raster port */
-        WritePixelArray(row_buffer, 0, 0, (ULONG)row_width * 4, rp, x, py,
-                        row_width, 1, CYBERGFX_PIXELFORMAT_ARGB32);
+        /* Write the entire batch to the raster port in one syscall */
+        WritePixelArray(batch_buffer, 0, 0, (ULONG)row_width * 4, rp, x, y + batch_start,
+                        row_width, batch_height, CYBERGFX_PIXELFORMAT_ARGB32);
       }
 
-      free(row_buffer);
+      free(batch_buffer);
+      #undef SCANLINE_BATCH
     }
   }
 

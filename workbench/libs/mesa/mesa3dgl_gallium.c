@@ -2,6 +2,7 @@
     Copyright (C) 2009-2020, The AROS Development Team. All rights reserved.
 */
 
+#define DEBUG 0
 #include <aros/debug.h>
 
 #include <proto/utility.h>
@@ -26,40 +27,46 @@
 static BOOL MESA3DGLSelectColorFormat(enum pipe_format * colorFormat,
     struct pipe_screen * screen, GLint bpp)
 {
-    D(bug("[MESA3DGL] %s()\n", __func__));
+    D(bug("[MESA3DGL] %s() bpp=%d\n", __func__, bpp));
 
     *colorFormat = PIPE_FORMAT_NONE;
 
     if (bpp == 16)
     {
         /* Try PIPE_FORMAT_B5G6R5_UNORM */
-        if (screen->is_format_supported(screen,
+        BOOL supported = screen->is_format_supported(screen,
             PIPE_FORMAT_B5G6R5_UNORM,
             PIPE_TEXTURE_2D,
             0,
             0,
-            PIPE_BIND_RENDER_TARGET))
+            PIPE_BIND_RENDER_TARGET);
+        D(bug("[MESA3DGL] %s: PIPE_FORMAT_B5G6R5_UNORM supported=%d\n", __func__, supported));
+        if (supported)
         {
             *colorFormat = PIPE_FORMAT_B5G6R5_UNORM;
             return TRUE;
         }
     }
-    
+
     if (bpp == 32)
     {
         /* Try PIPE_FORMAT_B8G8R8A8_UNORM */
-        if (screen->is_format_supported(screen,
+        BOOL supported = screen->is_format_supported(screen,
             PIPE_FORMAT_B8G8R8A8_UNORM,
             PIPE_TEXTURE_2D,
             0,
             0,
-            PIPE_BIND_RENDER_TARGET))
+            PIPE_BIND_RENDER_TARGET);
+        D(bug("[MESA3DGL] %s: PIPE_FORMAT_B8G8R8A8_UNORM supported=%d\n", __func__, supported));
+        if (supported)
         {
             *colorFormat = PIPE_FORMAT_B8G8R8A8_UNORM;
+            D(bug("[MESA3DGL] %s: Selected color format %d\n", __func__, *colorFormat));
             return TRUE;
         }
     }
-    
+
+    D(bug("[MESA3DGL] %s: No color format found for bpp=%d\n", __func__, bpp));
     return FALSE;
 }
 
@@ -70,10 +77,10 @@ static BOOL MESA3DGLSelectDepthStencilFormat(enum pipe_format * depthStencilForm
 
     /* Defeaul values */
     *depthStencilFormat = PIPE_FORMAT_NONE;
-    
+
     if (noDepth)
         return TRUE;
-    
+
     /* Try PIPE_FORMAT_S8_UINT_Z24_UNORM */
     if(!noStencil && (screen->is_format_supported(screen,
             PIPE_FORMAT_S8_UINT_Z24_UNORM,
@@ -85,7 +92,7 @@ static BOOL MESA3DGLSelectDepthStencilFormat(enum pipe_format * depthStencilForm
         *depthStencilFormat  = PIPE_FORMAT_S8_UINT_Z24_UNORM;
         return TRUE;
     }
-    
+
     /* Try PIPE_FORMAT_X8Z24_UNORM */
     if(noStencil && (screen->is_format_supported(screen,
             PIPE_FORMAT_X8Z24_UNORM,
@@ -109,7 +116,7 @@ static BOOL MESA3DGLSelectDepthStencilFormat(enum pipe_format * depthStencilForm
         *depthStencilFormat  = PIPE_FORMAT_Z24X8_UNORM;
         return TRUE;
     }
-    
+
     /* Try PIPE_FORMAT_Z16_UNORM */
     if(screen->is_format_supported(screen,
             PIPE_FORMAT_Z16_UNORM,
@@ -121,16 +128,16 @@ static BOOL MESA3DGLSelectDepthStencilFormat(enum pipe_format * depthStencilForm
         *depthStencilFormat = PIPE_FORMAT_Z16_UNORM;
         return TRUE;
     }
-    
+
     return FALSE;
 }
 
 BOOL MESA3DGLFillVisual(struct st_visual * stvis, struct pipe_screen * screen, int bpp, struct TagItem *tagList)
 {
     BOOL noDepth, noStencil, noAccum;
-    
+
     D(bug("[MESA3DGL] %s()\n", __func__));
-    
+
     noStencil   = GetTagData(GLA_NoStencil, GL_FALSE, tagList);
     noAccum     = GetTagData(GLA_NoAccum, GL_FALSE, tagList);
     noDepth     = GetTagData(GLA_NoDepth, GL_FALSE, tagList);
@@ -168,7 +175,7 @@ BOOL MESA3DGLFillVisual(struct st_visual * stvis, struct pipe_screen * screen, i
     /* Buffers */ /* MESA3DGL uses front buffer as back buffer */
     if (!noDepth || !noStencil)
     stvis->buffer_mask |= ST_ATTACHMENT_DEPTH_STENCIL_MASK;
-    
+
     return TRUE;
 }
 
@@ -206,7 +213,7 @@ static VOID MESA3DGLFrameBufferCreateResource(struct mesa3dgl_framebuffer * amfb
     default:
         return; /* Failure */
     }
-    
+
     /* Create resource */
     amfb->textures[statt] = amfb->screen->resource_create(amfb->screen, &templ);
 }
@@ -233,7 +240,7 @@ static bool MESA3DGLFrameBufferValidate(struct st_context_iface *stctx,
         for (i = 0; i < ST_ATTACHMENT_COUNT; i++)
             pipe_resource_reference(&amfb->textures[i], NULL);
     }
-    
+
     /* Create new resources */
     for (i = 0; i < count; i++)
     {
@@ -255,7 +262,7 @@ static bool MESA3DGLFrameBufferValidate(struct st_context_iface *stctx,
         out[i] = NULL;
         pipe_resource_reference(&out[i], amfb->textures[statts[i]]);
     }
-    
+
     return TRUE;
 }
 
@@ -332,7 +339,7 @@ static int MESA3DGLStManagerGetParam(struct st_manager *smapi,
 
 struct st_manager * MESA3DGLNewStManager(struct pipe_screen * pscreen)
 {
-    D(bug("[MESA3DGL] %s()\n", __func__));
+    D(bug("[MESA3DGL] %s() pscreen=%p\n", __func__, pscreen));
 
     struct st_manager * stmanager =
         (struct st_manager *)AllocVec(sizeof(struct st_manager), MEMF_PUBLIC | MEMF_CLEAR);
@@ -341,8 +348,13 @@ struct st_manager * MESA3DGLNewStManager(struct pipe_screen * pscreen)
     {
         stmanager->screen = pscreen;
         stmanager->get_param = MESA3DGLStManagerGetParam;
+        D(bug("[MESA3DGL] %s: stmanager=%p screen=%p get_param=%p\n", __func__, stmanager, stmanager->screen, stmanager->get_param));
     }
-    
+    else
+    {
+        bug("[MESA3DGL] %s: ERROR - failed to allocate st_manager!\n", __func__);
+    }
+
     return stmanager;
 }
 

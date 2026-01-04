@@ -3045,12 +3045,39 @@ D(bug("[IconList]: %s()\n", __func__));
                 TAG_DONE);
         }
 
+        /*
+         * Detect if Zune's window-level double buffering is active.
+         * We detect this by checking if _rp(obj) differs from the window's
+         * actual RastPort - if they differ, Zune is using an offscreen buffer.
+         */
+        BOOL zune_buffering_active = FALSE;
+        if (_window(obj) && _rp(obj) && _window(obj)->RPort)
+        {
+            if (_rp(obj) != _window(obj)->RPort)
+                zune_buffering_active = TRUE;
+        }
+
         /* Get Internal Objects to use if not set .. */
         if (data->icld_DisplayRastPort == NULL)
         {
             if (_rp(obj) != NULL)
             {
-                data->icld_DisplayRastPort = CloneRastPort(_rp(obj));
+                /*
+                 * When Zune buffering is active, use _rp(obj) directly instead
+                 * of cloning it. This ensures all drawing goes through Zune's
+                 * buffer which will be properly flushed to the window.
+                 * Cloning creates a separate rastport that Zune doesn't track.
+                 */
+                if (zune_buffering_active)
+                {
+                    data->icld_DisplayRastPort = _rp(obj);
+                    data->icld_DisplayFlags |= ICONLIST_DISP_BORROWED_RP;
+                }
+                else
+                {
+                    data->icld_DisplayRastPort = CloneRastPort(_rp(obj));
+                    data->icld_DisplayFlags &= ~ICONLIST_DISP_BORROWED_RP;
+                }
             }
 #if defined(DEBUG_ILC_ICONRENDERING)
             else
@@ -3060,7 +3087,7 @@ D(bug("[IconList]: %s()\n", __func__));
 #endif
         }
 
-        if (data->icld_DisplayFlags & ICONLIST_DISP_BUFFERED)
+        if ((data->icld_DisplayFlags & ICONLIST_DISP_BUFFERED) && !zune_buffering_active)
         {
             struct BitMap *bitmap_New = NULL;
             struct Layer_Info *li = NULL;
@@ -3224,10 +3251,21 @@ D(bug("[IconList]: %s()\n", __func__));
 
         data->icld_BufferRastPort = NULL;
 
+        /*
+         * Only free the display rastport if we own it (cloned it).
+         * When Zune buffering is active, we use _rp(obj) directly
+         * and must not free it.
+         */
         if (data->icld_DisplayRastPort)
-            FreeRastPort(data->icld_DisplayRastPort);
+        {
+            if (!(data->icld_DisplayFlags & ICONLIST_DISP_BORROWED_RP))
+            {
+                FreeRastPort(data->icld_DisplayRastPort);
+            }
+        }
 
         data->icld_DisplayRastPort = NULL;
+        data->icld_DisplayFlags &= ~ICONLIST_DISP_BORROWED_RP;
     }
     return rc;
 }
@@ -3622,6 +3660,22 @@ IPTR IconList__MUIM_Draw(struct IClass *CLASS, Object *obj, struct MUIP_Draw *me
         {
             struct Rectangle rect;
 
+            /*
+             * When Zune window-level double buffering is active (ICONLIST_DISP_BORROWED_RP),
+             * partial updates don't work correctly because MUI_Redraw flushes the entire
+             * object bounds, not just the clipped region. Areas not drawn will be empty.
+             * Force a full redraw instead to ensure the buffer is complete.
+             */
+            if (data->icld_DisplayFlags & ICONLIST_DISP_BORROWED_RP)
+            {
+                data->icld_UpdateMode = 0;
+#if defined(DEBUG_ILC_ICONRENDERING)
+                D(bug("[IconList] %s#%d: UPDATE_SINGLEENTRY: Zune buffering active, doing full redraw\n", __func__, draw_id));
+#endif
+                MUI_Redraw(obj, MADF_DRAWOBJECT);
+                goto draw_done;
+            }
+
             if ((data->icld_DisplayFlags & ICONLIST_DISP_MODELIST) == ICONLIST_DISP_MODELIST)
             {
                 LONG count = 0, index = -1;
@@ -3790,9 +3844,25 @@ IPTR IconList__MUIM_Draw(struct IClass *CLASS, Object *obj, struct MUIP_Draw *me
             D(bug("[IconList] %s#%d: UPDATE_SCROLL.\n", __func__, draw_id));
 #endif
 
+            /*
+             * When Zune window-level double buffering is active, the ScrollRasterBF
+             * optimization doesn't work correctly - it scrolls pixels in Zune's
+             * offscreen buffer but only the newly exposed region gets flushed.
+             * Skip the scroll optimization and do a full redraw instead.
+             */
+            if (_window(obj) && _rp(obj) && _window(obj)->RPort != _rp(obj))
+            {
+                data->icld_UpdateMode = 0;
+#if defined(DEBUG_ILC_ICONRENDERING)
+                D(bug("[IconList] %s#%d: UPDATE_SCROLL: Zune buffering active, doing full redraw\n", __func__, draw_id));
+#endif
+                MUI_Redraw(obj, MADF_DRAWOBJECT);
+                goto draw_done;
+            }
+
             if (!data->icld__Option_IconListFixedBackground)
             {
-                scroll_caused_damage = (_rp(obj)->Layer->Flags & LAYERREFRESH) ? FALSE : TRUE;
+                scroll_caused_damage = (_rp(obj)->Layer && !(_rp(obj)->Layer->Flags & LAYERREFRESH)) ? TRUE : FALSE;
         
                 data->icld_UpdateMode = 0;
 
@@ -3908,7 +3978,7 @@ IPTR IconList__MUIM_Draw(struct IClass *CLASS, Object *obj, struct MUIP_Draw *me
                                             _mheight(obj) - 1);
                 }
 
-                scroll_caused_damage = scroll_caused_damage && (_rp(obj)->Layer->Flags & LAYERREFRESH) ? TRUE : FALSE;
+                scroll_caused_damage = scroll_caused_damage && (_rp(obj)->Layer && (_rp(obj)->Layer->Flags & LAYERREFRESH)) ? TRUE : FALSE;
 
                 clip = MUI_AddClipRegion(muiRenderInfo(obj), region);
             }

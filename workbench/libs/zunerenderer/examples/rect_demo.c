@@ -112,122 +112,51 @@ int main(void) {
 
   printf("Demo initialized successfully\n");
 
-  /* Test locked rectangle drawing */
-  printf("\n1. Testing locked DrawingBoard rectangle drawing...\n");
+  /* Test unlocked rectangle drawing - works with both CyberGfx and OpenGL backends */
+  printf("\n1. Testing unlocked DrawingBoard rectangle drawing...\n");
   ClearRenderPort(demo_rp, ZUNE_DARKGRAY);
-  DemoLockedRectangles();
+  DemoUnlockedRectangles();
   /* Show results */
-  ShowResults("Locked rectangles");
+  ShowResults("Unlocked rectangles");
   getchar();
 
-  /* Clear the board and test anti-aliased drawing */
-  // printf(
-  //     "\n4. Testing unlocked DrawingBoard anti-aliased rectangle drawing...\n");
-  // ClearRenderPort(demo_rp, ZUNE_DARKGRAY);
-  // DemoUnlockedAARectangles();
+  /* Test unlocked anti-aliased rectangle drawing */
+  printf("\n2. Testing unlocked DrawingBoard anti-aliased rectangle drawing...\n");
+  printf("  Calling ClearRenderPort(demo_rp, ZUNE_DARKGRAY)...\n");
+  ClearRenderPort(demo_rp, ZUNE_DARKGRAY);
+  printf("  ClearRenderPort done, calling DemoUnlockedAARectangles...\n");
+  DemoUnlockedAARectangles();
+  printf("  DemoUnlockedAARectangles done, calling ShowResults...\n");
+  ShowResults("Unlocked AA rectangles");
+  getchar();
 
-  // /* Show results */
-  // ShowResults("Unlocked AA rectangles");
-  // getchar();
+  /* Test unlocked circle drawing */
+  printf("\n3. Testing unlocked DrawingBoard circle drawing...\n");
+  ClearRenderPort(demo_rp, ZUNE_DARKGRAY);
+  DemoUnlockedCircles();
+  ShowResults("Unlocked circles");
+  getchar();
 
-  // /* Clear the board and test unlocked drawing */
-  // printf("\n2. Testing unlocked DrawingBoard rectangle drawing...\n");
-  // ClearRenderPort(demo_rp, ZUNE_DARKGRAY);
-  // DemoUnlockedRectangles();
+  /* Test unlocked anti-aliased circle drawing */
+  printf("\n4. Testing unlocked DrawingBoard anti-aliased circle drawing...\n");
+  ClearRenderPort(demo_rp, ZUNE_DARKGRAY);
+  DemoUnlockedAACircles();
+  ShowResults("Unlocked AA circles");
+  getchar();
 
-  // /* Show results */
-  // ShowResults("Unlocked rectangles");
-  // getchar();
+  /* Test unlocked line drawing */
+  printf("\n5. Testing unlocked DrawingBoard line drawing...\n");
+  ClearRenderPort(demo_rp, ZUNE_DARKGRAY);
+  DemoUnlockedLines();
+  ShowResults("Unlocked lines");
+  getchar();
 
-  // /* Clear the board and test anti-aliased drawing */
-  // printf(
-  //     "\n3. Testing locked DrawingBoard anti-aliased rectangle drawing...\n");
-  // ClearRenderPort(demo_rp, ZUNE_DARKGRAY);
-  // DemoLockedAARectangles();
-
-  // /* Show results */
-  // ShowResults("Locked AA rectangles");
-  // getchar();
-
-  // printf("\n5. Testing locked DrawingBoard circle drawing...\n");
-  // ClearRenderPort(demo_rp, ZUNE_DARKGRAY);
-  // DemoLockedCircles();
-
-  // /* Show results */
-  // ShowResults("Locked circles");
-  // getchar();
-
-  // /* Clear the board and test unlocked circle drawing */
-  // printf("\n6. Testing unlocked DrawingBoard circle drawing...\n");
-  // ClearRenderPort(demo_rp, ZUNE_DARKGRAY);
-  // DemoUnlockedCircles();
-
-  // /* Show results */
-  // ShowResults("Unlocked circles");
-  // getchar();
-
-  // printf("\n7. Testing unlocked DrawingBoard anti-aliased circle drawing...\n");
-  // ClearRenderPort(demo_rp, ZUNE_DARKGRAY);
-  // DemoUnlockedAACircles();
-
-  // /* Show results */
-  // ShowResults("Unlocked AA circles");
-  // getchar();
-
-  // printf("\n8. Testing locked DrawingBoard anti-aliased circle drawing...\n");
-  // ClearRenderPort(demo_rp, ZUNE_DARKGRAY);
-  // DemoLockedAACircles();
-
-  // /* Show results */
-  // ShowResults("Locked AA circles");
-  // getchar();
-
-  // printf("\n9. Testing locked DrawingBoard line drawing...\n");
-  // ClearRenderPort(demo_rp, ZUNE_DARKGRAY);
-  // DemoLockedLines();
-
-  // /* Show results */
-  // ShowResults("Locked lines");
-  // getchar();
-
-  // printf("\n10. Testing unlocked DrawingBoard line drawing...\n");
-  // ClearRenderPort(demo_rp, ZUNE_DARKGRAY);
-  // DemoUnlockedLines();
-
-  // /* Show results */
-  // ShowResults("Unlocked lines");
-  // getchar();
-
-  // printf("\n11. Testing locked DrawingBoard anti-aliased line drawing...\n");
-  // ClearRenderPort(demo_rp, ZUNE_DARKGRAY);
-  // DemoLockedAALines();
-
-  // /* Show results */
-  // ShowResults("Locked AA lines");
-  // getchar();
-
-  // printf("\n12. Testing unlocked DrawingBoard anti-aliased line drawing...\n");
-  // ClearRenderPort(demo_rp, ZUNE_DARKGRAY);
-  // DemoUnlockedAALines();
-
-  // /* Show results */
-  // ShowResults("Unlocked AA lines");
-  // getchar();
-
-  // printf("\n13. Testing texture rendering...\n");
-  // ClearRenderPort(demo_rp, ZUNE_DARKGRAY);
-  // DemoTextures();
-
-  // /* Show results */
-  // ShowResults("Textures");
-  // getchar();
-
-  // printf("\n14. Testing tiled texture rendering...\n");
-  // ClearRenderPort(demo_rp, ZUNE_DARKGRAY);
-  // DemoTexturesTiled();
-
-  // /* Show results */
-  // ShowResults("Tiled textures");
+  /* Test unlocked anti-aliased line drawing */
+  printf("\n6. Testing unlocked DrawingBoard anti-aliased line drawing...\n");
+  ClearRenderPort(demo_rp, ZUNE_DARKGRAY);
+  DemoUnlockedAALines();
+  ShowResults("Unlocked AA lines");
+  getchar();
 
   printf("\nDemo completed successfully. Press ENTER to exit.\n");
   getchar();
@@ -282,32 +211,26 @@ BOOL InitDemo(void) {
     return FALSE;
   }
 
-  /* Create DrawingBoard */
-  demo_board = CreateDrawingBoard(DEMO_WIDTH, DEMO_HEIGHT, DEMO_DEPTH,
-                                  ZUNE_DRAWINGBOARD_HARDWARE);
-  if (!demo_board) {
-    printf("ERROR: Cannot create DrawingBoard\n");
-    return FALSE;
-  }
-
-  /* Create RenderPort targeting the DrawingBoard */
-  demo_rp =
-      CreateRenderPortWithDrawingBoard(screen->ViewPort.ColorMap, demo_board);
-  // demo_rp = CreateRenderPort(screen->ViewPort.ColorMap, window->RPort);
-  if (!demo_rp) {
-    printf("ERROR: Cannot create Demo RenderPort\n");
-    return FALSE;
-  }
-
-  window_rp = CreateRenderPort(screen->ViewPort.ColorMap, window->RPort);
+  /* Create RenderPort bound to window first (new API) */
+  window_rp = CreateRenderPortForWindow(window, screen->ViewPort.ColorMap);
   if (!window_rp) {
     printf("ERROR: Cannot create Window RenderPort\n");
     return FALSE;
   }
 
+  /* Create DrawingBoard under the RenderPort */
+  demo_board = CreateDrawingBoardForRenderPort(window_rp, DEMO_WIDTH, DEMO_HEIGHT);
+  if (!demo_board) {
+    printf("ERROR: Cannot create DrawingBoard\n");
+    return FALSE;
+  }
 
+  /* demo_rp is now the same as window_rp, use ZuneSetTarget to switch */
+  demo_rp = window_rp;
 
-  ClearRenderPort(window_rp, ZUNE_DARKGRAY);
+  /* Switch to DrawingBoard for offscreen rendering */
+  ZuneSetTarget(demo_rp, demo_board);
+
   /* Clear the DrawingBoard */
   ClearDrawingBoard(demo_rp, ZUNE_DARKGRAY);
 
@@ -1250,11 +1173,13 @@ void DemoTextures(void) {
   /* Test 2: Create texture from DrawingBoard */
   printf("  Creating texture from DrawingBoard...\n");
 
+  /* Use the existing window_rp to create a temp DrawingBoard */
   struct DrawingBoard *temp_board =
-      CreateDrawingBoard(128, 128, 32, ZUNE_DRAWINGBOARD_TEMP);
+      CreateDrawingBoardForRenderPort(window_rp, 128, 128);
   if (temp_board) {
-    struct RenderPort *temp_rp = CreateRenderPortWithDrawingBoard(
-        demo_rp->colormap, temp_board);
+    /* Use window_rp with ZuneSetTarget to render to temp_board */
+    struct RenderPort *temp_rp = window_rp;
+    ZuneSetTarget(temp_rp, temp_board);
 
     if (temp_rp) {
       /* Draw some content on the temporary board */
@@ -1271,6 +1196,9 @@ void DemoTextures(void) {
       if (board_texture) {
         printf("  DrawingBoard texture created successfully\n");
 
+        /* Switch back to demo_board for drawing */
+        ZuneSetTarget(window_rp, demo_board);
+
         /* Draw the board texture at different positions */
         {
           struct ZunePoint pos1 = {300, 200};
@@ -1283,11 +1211,12 @@ void DemoTextures(void) {
         printf("  DrawingBoard texture drawing completed\n");
       } else {
         printf("  ERROR: Failed to create texture from DrawingBoard\n");
+        /* Switch back to demo_board even on failure */
+        ZuneSetTarget(window_rp, demo_board);
       }
-
-      DestroyRenderPort(temp_rp);
     }
 
+    /* Don't destroy window_rp - it's our main RenderPort! Just destroy temp_board */
     DestroyDrawingBoard(temp_board);
   }
 
@@ -1512,12 +1441,21 @@ void DemoTexturesTiled(void) {
 }
 
 void ShowResults(const char *label) {
-  ULONG screen_sample =
-      window && window->RPort ? ReadPixel(window->RPort, 60, 60) : 0;
+  printf("  ShowResults('%s'): Blitting to window\n", label);
 
-  /* Blit the DrawingBoard to the window */
+  /* 
+   * Must set target to NULL (window) before blitting, because
+   * BlitDrawingBoardToRenderPort checks dst->target_board to decide
+   * whether to blit to a DrawingBoard or to the window's RastPort.
+   */
+  ZuneSetTarget(window_rp, NULL);
+
+  /* Blit DrawingBoard to window */
   BlitDrawingBoardToRenderPortRects(demo_board, window_rp, 0, 0, 0, 0,
                                     DEMO_WIDTH, DEMO_HEIGHT);
+
+  /* Switch back to DrawingBoard for next drawing operations */
+  ZuneSetTarget(window_rp, demo_board);
 }
 
 void PerformanceTest(void) {
