@@ -280,7 +280,7 @@ struct MUI_DirtyRect {
     BOOL valid;                /* TRUE if this slot is in use */
 };
 
-BOOL WindowObtainObjectDrawBuffer(struct MUI_RenderInfo *mri, Object *obj, UWORD width, UWORD height, struct DrawingBoard **board_out,
+BOOL WindowObtainObjectDrawBuffer(struct MUI_RenderInfo *mri, Object *obj, UWORD width, UWORD height, ULONG flags, struct DrawingBoard **board_out,
                                   struct RenderPort **port_out);
 void WindowReleaseObjectDrawBuffer(struct MUI_RenderInfo *mri, Object *obj);
 

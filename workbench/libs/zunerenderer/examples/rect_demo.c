@@ -219,7 +219,7 @@ BOOL InitDemo(void) {
   }
 
   /* Create DrawingBoard under the RenderPort */
-  demo_board = CreateDrawingBoardForRenderPort(window_rp, DEMO_WIDTH, DEMO_HEIGHT);
+  demo_board = CreateDrawingBoardForRenderPort(window_rp, DEMO_WIDTH, DEMO_HEIGHT, 0);
   if (!demo_board) {
     printf("ERROR: Cannot create DrawingBoard\n");
     return FALSE;
@@ -1175,7 +1175,7 @@ void DemoTextures(void) {
 
   /* Use the existing window_rp to create a temp DrawingBoard */
   struct DrawingBoard *temp_board =
-      CreateDrawingBoardForRenderPort(window_rp, 128, 128);
+      CreateDrawingBoardForRenderPort(window_rp, 128, 128, 0);
   if (temp_board) {
     /* Use window_rp with ZuneSetTarget to render to temp_board */
     struct RenderPort *temp_rp = window_rp;

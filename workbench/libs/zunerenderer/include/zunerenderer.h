@@ -88,6 +88,8 @@
 #define ZUNE_DRAWINGBOARD_CACHED (1 << 2) /* Cache in video memory */
 #define ZUNE_DRAWINGBOARD_TEMP                                                 \
   (1 << 3) /* Temporary surface, optimize for short usage */
+#define ZUNE_DRAWINGBOARD_LINEARMEM                                            \
+  (1 << 4) /* Force linear memory for direct pixel access (no friend bitmap) */
 
 /*****************************************************************************/
 /* Texture Flags */
@@ -474,7 +476,7 @@ struct ZuneTexture {
    * we create a larger pre-tiled version (e.g., 256x256) on first use.
    * This avoids repeatedly tiling small textures across large areas.
    * Similar to the legacy BackFillInfo system in datatypescache.c.
-   * 
+   *
    * We store both a native BitMap (for hardware BltBitMap) and ARGB32 pixels
    * (for software fallback). The BitMap path is preferred when available. */
   struct BitMap *tiled_cache_bitmap;  /* Native pre-tiled bitmap for BltBitMap */
@@ -507,7 +509,7 @@ struct RenderPort *CreateRenderPortForWindow(struct Window *window,
  * If OpenGL is active, an FBO is also created for accelerated rendering.
  */
 struct DrawingBoard *CreateDrawingBoardForRenderPort(struct RenderPort *rp,
-                                                     UWORD width, UWORD height);
+                                                     UWORD width, UWORD height, ULONG flags);
 
 void DestroyRenderPort(struct RenderPort *rp);
 void ClearRenderPort(struct RenderPort *rp, ULONG color);
@@ -679,8 +681,8 @@ struct ZuneTexture *CreateTextureFromData(APTR data, UWORD width, UWORD height,
 struct ZuneTexture *CreateTextureFromDrawingBoard(struct RenderPort *rp,
                                                   ULONG flags);
 struct ZuneTexture *CreateTextureFromDatatype(APTR dt_object, ULONG flags);
-struct ZuneTexture *CreateTextureFromFile(CONST_STRPTR filename, 
-                                          struct Screen *screen, 
+struct ZuneTexture *CreateTextureFromFile(CONST_STRPTR filename,
+                                          struct Screen *screen,
                                           ULONG flags);
 void DestroyTexture(struct ZuneTexture *texture);
 

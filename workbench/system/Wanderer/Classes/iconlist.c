@@ -4040,6 +4040,21 @@ IPTR IconList__MUIM_Draw(struct IClass *CLASS, Object *obj, struct MUIP_Draw *me
             D(bug("[IconList] %s#%d: UPDATE_RESIZE.\n", __func__, draw_id));
 #endif
 
+            /*
+             * When Zune window-level double buffering is active, partial updates
+             * don't work correctly - the buffer needs to be fully redrawn.
+             * Skip the resize optimization and do a full redraw instead.
+             */
+            if (_window(obj) && _rp(obj) && _window(obj)->RPort != _rp(obj))
+            {
+                data->icld_UpdateMode = 0;
+#if defined(DEBUG_ILC_ICONRENDERING)
+                D(bug("[IconList] %s#%d: UPDATE_RESIZE: Zune buffering active, doing full redraw\n", __func__, draw_id));
+#endif
+                MUI_Redraw(obj, MADF_DRAWOBJECT);
+                goto draw_done;
+            }
+
             if ((data->icld_BufferRastPort) && (data->icld_BufferRastPort != data->icld_DisplayRastPort))
             {
                 //Free up the buffers Layer, rastport and bitmap so we can replace them ..

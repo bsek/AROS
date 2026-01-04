@@ -272,7 +272,7 @@ static void ClearDrawBufferEntries(struct MUI_WindowData *data) {
     NewList((struct List *)&data->wd_DrawBuffers);
 }
 
-BOOL WindowObtainObjectDrawBuffer(struct MUI_RenderInfo *mri, Object *obj, UWORD width, UWORD height, struct DrawingBoard **board_out,
+BOOL WindowObtainObjectDrawBuffer(struct MUI_RenderInfo *mri, Object *obj, UWORD width, UWORD height, ULONG flags, struct DrawingBoard **board_out,
                                   struct RenderPort **port_out) {
     struct MUI_WindowData *data;
     struct DrawBufferEntry *entry;
@@ -310,7 +310,7 @@ BOOL WindowObtainObjectDrawBuffer(struct MUI_RenderInfo *mri, Object *obj, UWORD
             return FALSE;
         }
 
-        entry->board = CreateDrawingBoardForRenderPort(entry->port, width, height);
+        entry->board = CreateDrawingBoardForRenderPort(entry->port, width, height, flags);
         if (!entry->board) {
             DestroyRenderPort(entry->port);
             entry->port = NULL;
@@ -3283,8 +3283,9 @@ static void InstallBackbuffer(struct IClass *cl, Object *obj) {
         D(bug("Created RenderPort for window %p, backend=%ld\n", win, mri->mri_RenderPort->backend_type));
     }
 
-    /* Create DrawingBoard for double buffering via RenderPort */
-    mri->mri_DrawingBoard = CreateDrawingBoardForRenderPort(mri->mri_RenderPort, buffer_width, buffer_height);
+    /* Create DrawingBoard for double buffering via RenderPort.
+     * Pass 0 for flags to use friend_bitmap for colormap inheritance (pen drawing). */
+    mri->mri_DrawingBoard = CreateDrawingBoardForRenderPort(mri->mri_RenderPort, buffer_width, buffer_height, 0);
 
     if (mri->mri_DrawingBoard && mri->mri_DrawingBoard->bitmap && mri->mri_DrawingBoard->rastport) {
         /*
