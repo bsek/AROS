@@ -119,7 +119,7 @@ BOOL AllocateDrawingBoardBitmap(struct DrawingBoard *board,
 
     /* Software surface fallback */
     if (!board->bitmap) {
-      D(bug("ZuneRenderer: Allocating software surface\n"));
+      D(bug("ZuneRenderer: Allocating software surface with friend_bitmap\n"));
       board->bitmap = AllocBitMap(board->width, board->height, board->depth,
                                   BMF_CLEAR, friend_bitmap);
       board->hardware_surface = FALSE;
