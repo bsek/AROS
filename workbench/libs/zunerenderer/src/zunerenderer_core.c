@@ -10,6 +10,7 @@
 */
 
 #include "exec/lists.h"
+#include "include/zunerenderer.h"
 #include <aros/libcall.h>
 #define DEBUG 0
 #include <aros/debug.h>
@@ -251,7 +252,8 @@ void RemoveRenderPortFromList(struct IntZuneRendererBase *base,
 struct RenderPort *CreateRenderPortForWindowInternal(
     struct IntZuneRendererBase *base,
     struct Window *window,
-    struct ColorMap *colormap)
+    struct ColorMap *colormap,
+    UWORD backend_type)
 
 /*  FUNCTION
     Creates a new RenderPort bound to a Window.
@@ -266,6 +268,7 @@ INPUTS
     base - Library base
     window - Target window (must not be NULL)
     colormap - ColorMap for color conversions (must not be NULL)
+    backend_type - Backend to be used
 
 RESULT
     Pointer to new RenderPort structure, or NULL if creation failed.
@@ -318,7 +321,12 @@ RESULT
     rp->hidd_bitmap_obj = HIDD_BM_OBJ(window->RPort->BitMap);
   }
 
-  backend = ZuneFindBestBackend(rp);
+  if (backend_type != BACKEND_BEST_AVAILABLE) {
+    backend = ZuneFindBackendByType(backend_type);
+  } else {
+    backend = ZuneFindBestBackend(rp);
+  }
+
   if (backend && ZuneBindRenderPortToBackend(rp, backend)) {
     D(bug("ZuneRenderer: RenderPort bound to %s backend\n", backend->ops->name));
 
@@ -349,11 +357,12 @@ RESULT
 /*****************************************************************************
 
     NAME */
-AROS_LH2(struct RenderPort *, CreateRenderPortForWindow,
+AROS_LH3(struct RenderPort *, CreateRenderPortForWindow,
 
          /*  SYNOPSIS */
          AROS_LHA(struct Window *, window, A0),
          AROS_LHA(struct ColorMap *, colormap, A1),
+         AROS_LHA(UWORD, backend_type, D0),
 
          /*  LOCATION */
          struct Library *, ZuneRendererBase, 5, zunerenderer)
@@ -368,7 +377,7 @@ AROS_LH2(struct RenderPort *, CreateRenderPortForWindow,
   ENTER_FUNCTION("CreateRenderPortForWindow");
 
   struct IntZuneRendererBase *base = ZRB(ZuneRendererBase);
-  return CreateRenderPortForWindowInternal(base, window, colormap);
+  return CreateRenderPortForWindowInternal(base, window, colormap, backend_type);
 
   EXIT_FUNCTION("CreateRenderPortForWindow");
   AROS_LIBFUNC_EXIT

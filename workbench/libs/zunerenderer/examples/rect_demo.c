@@ -212,7 +212,7 @@ BOOL InitDemo(void) {
   }
 
   /* Create RenderPort bound to window first (new API) */
-  window_rp = CreateRenderPortForWindow(window, screen->ViewPort.ColorMap);
+  window_rp = CreateRenderPortForWindow(window, screen->ViewPort.ColorMap, BACKEND_BEST_AVAILABLE);
   if (!window_rp) {
     printf("ERROR: Cannot create Window RenderPort\n");
     return FALSE;
@@ -1443,7 +1443,7 @@ void DemoTexturesTiled(void) {
 void ShowResults(const char *label) {
   printf("  ShowResults('%s'): Blitting to window\n", label);
 
-  /* 
+  /*
    * Must set target to NULL (window) before blitting, because
    * BlitDrawingBoardToRenderPort checks dst->target_board to decide
    * whether to blit to a DrawingBoard or to the window's RastPort.

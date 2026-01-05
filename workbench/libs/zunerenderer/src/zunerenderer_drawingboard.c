@@ -1523,6 +1523,17 @@ SEE ALSO
     return;
   }
 
+  /*
+   * Flush the backend before blitting to ensure all rendering is complete.
+   * This ensures any batched operations are finished before we blit.
+   */
+  {
+    ZuneBackend *backend = ZuneGetRenderPortBackend(rp);
+    if (backend && backend->ops && backend->ops->FlushBatch) {
+      backend->ops->FlushBatch(rp);
+    }
+  }
+
   /* Blit from DrawingBoard bitmap to window's RastPort */
   BltBitMapRastPort(rp->target_board->bitmap, src_x, src_y,
                     rp->window->RPort, dst_x, dst_y,

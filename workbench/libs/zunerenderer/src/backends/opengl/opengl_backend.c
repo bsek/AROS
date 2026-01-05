@@ -190,7 +190,7 @@ static GLint g_uniform_border_width = -1;
 static GLint g_uniform_has_border = -1;
 static GLint g_uniform_has_fill = -1;
 
-#define DEBUG 0
+#define DEBUG 1
 #include <aros/debug.h>
 
 #include "../backend_interface.h"
@@ -277,7 +277,6 @@ void OpenGLCleanupDrawingBoard(struct DrawingBoard *board);
 static BOOL OpenGL_EnsureGlobalContext(struct Window *window);
 static BOOL OpenGL_SwitchToWindow(struct RenderPort *rp);
 static BOOL OpenGL_SwitchToDrawingBoard(struct RenderPort *rp);
-static BOOL OpenGL_SwitchToDrawingBoard_Legacy(struct RenderPort *rp);
 static BOOL OpenGL_SwitchToTarget(struct RenderPort *rp);
 static void OpenGL_SetupOrthoProjection(UWORD width, UWORD height);
 static void OpenGL_SetColor(struct InternalColor *color);
@@ -423,6 +422,17 @@ static void OpenGLCopyFromRastPort(struct RenderPort *rp, struct RastPort *src_r
     /* Validate dimensions */
     if (width == 0 || height == 0) {
         return;
+    }
+
+    /* Check maximum texture size to avoid Mesa errors */
+    {
+        GLint max_texture_size = 0;
+        glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_size);
+        if (max_texture_size > 0 && ((GLint)width > max_texture_size || (GLint)height > max_texture_size)) {
+            D(bug("[ZuneRenderer:OpenGL] OpenGLCopyFromRastPort: Size %dx%d exceeds max texture size %d\n",
+                  width, height, max_texture_size));
+            return;
+        }
     }
 
     /* Allocate buffer for pixel data (RGBA format, 4 bytes per pixel) */
@@ -1083,8 +1093,15 @@ static OpenGLFBOData *OpenGL_CreateFBO(UWORD width, UWORD height)
     GLuint fbo_id, texture_id;
     GLenum status;
     GLenum gl_error;
+    GLint max_texture_size = 0;
 
     D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: Creating FBO %dx%d\n", width, height));
+
+    /* Validate dimensions - must be non-zero */
+    if (width == 0 || height == 0) {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: Invalid dimensions (zero)\n"));
+        return NULL;
+    }
 
     if (!g_fbo_available || !glGenFramebuffers_ptr) {
         D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: FBO not available\n"));
@@ -1109,6 +1126,15 @@ static OpenGLFBOData *OpenGL_CreateFBO(UWORD width, UWORD height)
         if (!gl_version) {
             D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: ERROR - glGetString(GL_VERSION) returned NULL!\n"));
             D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: This means the GL context is not properly current.\n"));
+            return NULL;
+        }
+
+        /* Check maximum texture size and validate dimensions */
+        glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_size);
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: GL_MAX_TEXTURE_SIZE = %d\n", max_texture_size));
+        if (max_texture_size > 0 && ((GLint)width > max_texture_size || (GLint)height > max_texture_size)) {
+            D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: Requested size %dx%d exceeds max texture size %d\n",
+                  width, height, max_texture_size));
             return NULL;
         }
 
@@ -1169,30 +1195,37 @@ static OpenGLFBOData *OpenGL_CreateFBO(UWORD width, UWORD height)
     }
 
     /*
-     * Use GL_RGBA8 as internal format for better compatibility.
-     * Some drivers don't accept GL_RGBA as internal format for FBO attachments.
-     * GL_RGBA8 explicitly specifies 8 bits per component.
+     * Create texture for FBO color attachment.
+     * 
+     * AROS Mesa/SoftPipe has issues with certain format combinations and
+     * crashes in _mesa_error -> fprintf when it encounters unsupported formats.
+     * We use the most basic GL 1.1 compatible format specification.
      */
-    #ifndef GL_RGBA8
-    #define GL_RGBA8 0x8058
-    #endif
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: Calling glTexImage2D %dx%d\n", width, height));
+    
+    /* Set texture parameters BEFORE uploading data - some drivers require this */
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+    
+    gl_error = glGetError();
+    if (gl_error != GL_NO_ERROR) {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: glTexParameteri GL error 0x%04x\n", gl_error));
+    }
+    
+    /* Use GL_RGBA with GL_UNSIGNED_BYTE - most compatible combination */
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
     gl_error = glGetError();
     if (gl_error != GL_NO_ERROR) {
         D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: glTexImage2D GL error 0x%04x\n", gl_error));
-        /* Try fallback with GL_RGBA */
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: Trying GL_RGBA as internal format\n"));
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-        gl_error = glGetError();
-        if (gl_error != GL_NO_ERROR) {
-            D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: glTexImage2D fallback also failed, GL error 0x%04x\n", gl_error));
-        }
+        /* If GL_RGBA fails, the FBO creation will fail - clean up */
+        glDeleteTextures(1, &texture_id);
+        glBindFramebuffer_ptr(GL_FRAMEBUFFER, 0);
+        glDeleteFramebuffers_ptr(1, &fbo_id);
+        FreeVec(fbo);
+        return NULL;
     }
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
     /* Attach texture to FBO */
     glFramebufferTexture2D_ptr(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture_id, 0);
@@ -2177,12 +2210,65 @@ static BOOL OpenGL_EnsureGlobalContext(struct Window *window)
 
     /* Initialize FBO functions now that we have a context */
     if (OpenGL_LoadFBOFunctions()) {
-        if (g_opengl_priv) {
-            g_opengl_priv->has_framebuffers = TRUE;
+        /*
+         * Test FBO creation with a small texture to verify it actually works.
+         * AROS Mesa/SoftPipe can crash in _mesa_error->fprintf when encountering
+         * unsupported formats, so we test with a tiny texture first.
+         * Note: SoftPipe is already disabled above, so this test only runs on other renderers.
+         */
+        GLuint test_fbo = 0, test_tex = 0;
+        GLenum test_status;
+        BOOL fbo_works = FALSE;
+        
+        D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: Testing FBO support with small texture\n"));
+        
+        /* Clear any pending errors */
+        while (glGetError() != GL_NO_ERROR) {}
+        
+        glGenFramebuffers_ptr(1, &test_fbo);
+        glGenTextures(1, &test_tex);
+        
+        if (test_fbo && test_tex) {
+            glBindFramebuffer_ptr(GL_FRAMEBUFFER, test_fbo);
+            glBindTexture(GL_TEXTURE_2D, test_tex);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            
+            /* Try creating a small 16x16 RGBA texture */
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 16, 16, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+            
+            if (glGetError() == GL_NO_ERROR) {
+                glFramebufferTexture2D_ptr(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, test_tex, 0);
+                test_status = glCheckFramebufferStatus_ptr(GL_FRAMEBUFFER);
+                
+                if (test_status == GL_FRAMEBUFFER_COMPLETE) {
+                    fbo_works = TRUE;
+                    D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: FBO test PASSED\n"));
+                } else {
+                    D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: FBO test FAILED - status 0x%04x\n", test_status));
+                }
+            } else {
+                D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: FBO test FAILED - glTexImage2D error\n"));
+            }
+            
+            /* Cleanup test resources */
+            glBindFramebuffer_ptr(GL_FRAMEBUFFER, 0);
+            glDeleteTextures(1, &test_tex);
+            glDeleteFramebuffers_ptr(1, &test_fbo);
         }
-        D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: FBO functions loaded\n"));
+        
+        if (fbo_works && g_opengl_priv) {
+            g_opengl_priv->has_framebuffers = TRUE;
+            D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: FBO support enabled\n"));
+        } else {
+            g_fbo_available = FALSE;
+            if (g_opengl_priv) {
+                g_opengl_priv->has_framebuffers = FALSE;
+            }
+            D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: FBO support DISABLED (test failed)\n"));
+        }
     } else {
-        D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: FBO not available (will use legacy mode)\n"));
+        D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: FBO not available (DrawingBoard will use CyberGfx fallback)\n"));
     }
 
     /* Initialize VBO for efficient quad rendering */
@@ -2379,9 +2465,18 @@ static BOOL OpenGL_SwitchToDrawingBoard(struct RenderPort *rp)
 
     /* Check if FBO support is available */
     if (!g_fbo_available) {
-        D(bug("[ZuneRenderer:OpenGL] SwitchToDrawingBoard: FBO not available, using fallback\n"));
-        /* Fall back to old glASetRast method if FBOs aren't available */
-        return OpenGL_SwitchToDrawingBoard_Legacy(rp);
+        /*
+         * FBO not available (e.g., SoftPipe renderer).
+         * 
+         * The legacy glASetRast method doesn't work reliably for off-screen
+         * DrawingBoards because Mesa/SoftPipe can only render to window
+         * RastPorts, not arbitrary bitmaps.
+         *
+         * Return FALSE to trigger fallback to CyberGfx/software rendering
+         * for DrawingBoard operations. This ensures rendering actually works.
+         */
+        D(bug("[ZuneRenderer:OpenGL] SwitchToDrawingBoard: FBO not available, falling back to CyberGfx\n"));
+        return FALSE;
     }
 
     /* Get or create FBO for this DrawingBoard */
@@ -2434,78 +2529,6 @@ static BOOL OpenGL_SwitchToDrawingBoard(struct RenderPort *rp)
         D(bug("[ZuneRenderer:OpenGL] SwitchToDrawingBoard: Switch complete (fbo_switches=%ld)\n",
               g_opengl_priv->fbo_switches));
     }
-
-    return TRUE;
-}
-
-/*
- * OpenGL_SwitchToDrawingBoard_Legacy - Old method using glASetRast
- *
- * This is kept as a fallback for systems without FBO support.
- * It uses glASetRast to switch between DrawingBoards, which can cause
- * crashes when switching between targets with different dimensions.
- */
-static BOOL OpenGL_SwitchToDrawingBoard_Legacy(struct RenderPort *rp)
-{
-    struct DrawingBoard *board;
-    struct TagItem setrast_tags[8];
-    int tag_idx = 0;
-
-    if (!rp || !rp->target_board || !g_opengl_priv) {
-        return FALSE;
-    }
-
-    board = rp->target_board;
-
-    D(bug("[ZuneRenderer:OpenGL] SwitchToDrawingBoard_Legacy: Using glASetRast for board %p (%dx%d)\n",
-          board, board->width, board->height));
-
-    /* Build tags for glASetRast using RastPort-only mode */
-    setrast_tags[tag_idx].ti_Tag = GLA_RastPort;
-    setrast_tags[tag_idx].ti_Data = (IPTR)board->rastport;
-    tag_idx++;
-
-    setrast_tags[tag_idx].ti_Tag = GLA_Width;
-    setrast_tags[tag_idx].ti_Data = board->width;
-    tag_idx++;
-
-    setrast_tags[tag_idx].ti_Tag = GLA_Height;
-    setrast_tags[tag_idx].ti_Data = board->height;
-    tag_idx++;
-
-    setrast_tags[tag_idx].ti_Tag = GLA_Left;
-    setrast_tags[tag_idx].ti_Data = 0;
-    tag_idx++;
-
-    setrast_tags[tag_idx].ti_Tag = GLA_Top;
-    setrast_tags[tag_idx].ti_Data = 0;
-    tag_idx++;
-
-    setrast_tags[tag_idx].ti_Tag = TAG_DONE;
-    setrast_tags[tag_idx].ti_Data = 0;
-
-    /* Switch render target */
-    glASetRast((GLAContext)g_opengl_priv->gl_context, setrast_tags);
-
-    /* Update state */
-    g_opengl_priv->current_target_type = OPENGL_TARGET_DRAWINGBOARD;
-    g_opengl_priv->current_board = board;
-    g_opengl_priv->current_window = NULL;
-    g_opengl_priv->current_width = board->width;
-    g_opengl_priv->current_height = board->height;
-    g_opengl_priv->setrast_calls++;
-
-    /* Make context current (may be needed after SetRast) */
-    glAMakeCurrent((GLAContext)g_opengl_priv->gl_context);
-
-    /* Re-setup orthographic projection for new dimensions */
-    OpenGL_SetupOrthoProjection(board->width, board->height);
-
-    /* DrawingBoards don't need sync - they start fresh */
-    g_opengl_priv->needs_sync = FALSE;
-
-    D(bug("[ZuneRenderer:OpenGL] SwitchToDrawingBoard_Legacy: Switch complete (setrast_calls=%ld)\n",
-          g_opengl_priv->setrast_calls));
 
     return TRUE;
 }
@@ -2620,6 +2643,22 @@ static void OpenGL_SyncFromRastPort(struct RenderPort *rp)
 
     D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncFromRastPort: Syncing %dx%d pixels\n", width, height));
 
+    /* Validate dimensions */
+    if (width == 0 || height == 0) {
+        return;
+    }
+
+    /* Check maximum texture size to avoid Mesa errors */
+    {
+        GLint max_texture_size = 0;
+        glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_size);
+        if (max_texture_size > 0 && ((GLint)width > max_texture_size || (GLint)height > max_texture_size)) {
+            D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncFromRastPort: Size %dx%d exceeds max texture size %d\n",
+                  width, height, max_texture_size));
+            return;
+        }
+    }
+
     /* Allocate buffer for pixel data (RGBA format, 4 bytes per pixel) */
     pixelbuffer = AllocVec(width * height * 4, MEMF_ANY);
     if (!pixelbuffer) {
@@ -2721,11 +2760,14 @@ static void OpenGL_FlushIfNotBatching(struct RenderPort *rp)
         glFlush();
 
         /*
-         * Only call glASwapBuffers when rendering to window, not to FBO.
-         * FBO rendering just needs glFlush() to complete operations.
-         * glASwapBuffers is for presenting the window framebuffer to screen.
+         * Call glASwapBuffers to present rendered content to screen.
+         * This is only needed for window rendering - DrawingBoards use FBOs
+         * which don't need swap buffers (content is read via glReadPixels).
+         *
+         * Note: When FBOs are not available, DrawingBoard rendering falls back
+         * to CyberGfx, so we never have OPENGL_TARGET_DRAWINGBOARD without FBO.
          */
-        if (g_opengl_priv->current_target_type != OPENGL_TARGET_DRAWINGBOARD) {
+        if (g_opengl_priv->current_target_type == OPENGL_TARGET_WINDOW) {
             glASwapBuffers((GLAContext)g_opengl_priv->gl_context);
             /* After swapping, we need to sync again next time */
             g_opengl_priv->needs_sync = TRUE;
@@ -3570,7 +3612,7 @@ static void OpenGLBlitToScreen(struct RenderPort *source,
      * 2. Read pixels using glReadPixels
      * 3. Write pixels to the destination RastPort
      *
-     * If no FBO (legacy mode), just swap buffers.
+     * If no FBO, just swap buffers (window rendering path).
      */
     if (board && board->backend_data && g_fbo_available) {
         UBYTE *pixelbuffer;
@@ -3641,10 +3683,10 @@ static void OpenGLBlitToScreen(struct RenderPort *source,
         D(bug("[ZuneRenderer:OpenGL] OpenGLBlitToScreen: FBO blit complete\n"));
     } else {
         /*
-         * Legacy mode: rendering went directly to window's GL buffer.
+         * No FBO: rendering went directly to window's GL buffer.
          * Just swap buffers to make it visible.
          */
-        D(bug("[ZuneRenderer:OpenGL] OpenGLBlitToScreen: Legacy swap buffers\n"));
+        D(bug("[ZuneRenderer:OpenGL] OpenGLBlitToScreen: Swap buffers (no FBO)\n"));
         if (g_opengl_priv && g_opengl_priv->gl_context) {
             glASwapBuffers((GLAContext)g_opengl_priv->gl_context);
         }

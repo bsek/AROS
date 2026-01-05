@@ -44,6 +44,7 @@
 /* Backend Types */
 /*****************************************************************************/
 
+#define BACKEND_BEST_AVAILABLE 0
 #define BACKEND_SOFTWARE 1
 #define BACKEND_CYBERGFX 2
 #define BACKEND_OPENGL 3
@@ -494,13 +495,14 @@ struct ZuneTexture {
  * CreateRenderPortForWindow - Create a RenderPort bound to a Window
  *
  * This is the primary way to create a RenderPort. The RenderPort is bound
- * to the window and automatically selects the best backend (OpenGL if
- * available, otherwise CyberGraphics).
+ * to the window and automatically selects the best backend if backend_type is NULL
+ * (OpenGL if available, otherwise CyberGraphics).
  *
  * The window reference is required for OpenGL to create a GL context.
  */
 struct RenderPort *CreateRenderPortForWindow(struct Window *window,
-                                             struct ColorMap *colormap);
+                                             struct ColorMap *colormap,
+                                             UWORD backend_type);
 
 /*
  * CreateDrawingBoardForRenderPort - Create DrawingBoard bound to a RenderPort
