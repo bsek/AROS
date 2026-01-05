@@ -1,3 +1,46 @@
+diff -ruN mesa-20.0.8/src/mesa/main/errors.c mesa-20.0.8.aros/src/mesa/main/errors.c
+--- mesa-20.0.8/src/mesa/main/errors.c	2020-06-12 01:21:18.000000000 +0000
++++ mesa-20.0.8.aros/src/mesa/main/errors.c	2025-01-05 12:00:00.000000000 +0000
+@@ -29,6 +29,10 @@
+ 
+ #include <stdarg.h>
+ #include <stdio.h>
++#if defined(__AROS__)
++#include <aros/debug.h>
++#endif
++
+ #include "errors.h"
+ #include "enums.h"
+ #include "imports.h"
+@@ -44,6 +48,20 @@
+ output_if_debug(const char *prefixString, const char *outputString,
+                 GLboolean newline)
+ {
++#if defined(__AROS__)
++   /*
++    * On AROS, fprintf(stderr) crashes when called from shared library context
++    * because posixc stdio may not be initialized for the calling task.
++    * Use AROS debug output instead.
++    */
++   if (prefixString)
++      bug("%s: %s", prefixString, outputString);
++   else
++      bug("%s", outputString);
++   if (newline)
++      bug("\n");
++   return;
++#else
+    static int debug = -1;
+ 
+    /* Init the local 'debug' var once.
+@@ -81,6 +99,7 @@
+       }
+ #endif
+    }
++#endif /* __AROS__ */
+ }
+ 
+ 
 diff -ruN mesa-20.0.8/include/c11/threads_posix.h mesa-20.0.8.aros/include/c11/threads_posix.h
 --- mesa-20.0.8/include/c11/threads_posix.h	2020-06-12 01:21:16.000000000 +0000
 +++ mesa-20.0.8.aros/include/c11/threads_posix.h	2021-02-04 23:44:45.550000000 +0000

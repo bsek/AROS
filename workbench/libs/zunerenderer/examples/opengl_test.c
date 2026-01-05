@@ -231,7 +231,7 @@ BOOL InitDemo(void) {
      * Create RenderPort bound to the window.
      * The backend selection happens here (OpenGL if available).
      */
-    render_port = CreateRenderPortForWindow(window, screen->ViewPort.ColorMap);
+    render_port = CreateRenderPortForWindow(window, screen->ViewPort.ColorMap, BACKEND_BEST_AVAILABLE);
     if (!render_port) {
         printf("ERROR: Cannot create RenderPort\n");
         return FALSE;

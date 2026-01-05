@@ -179,7 +179,7 @@ struct BatchState {
 /* Internal Function Prototypes */
 /*****************************************************************************/
 /* Backend types are defined in zunerenderer.h */
-typedef ULONG ZuneBackendType;
+typedef UWORD ZuneBackendType;
 
 /* Batch state management */
 struct BatchState *CreateBatchState(struct RenderPort *rp);

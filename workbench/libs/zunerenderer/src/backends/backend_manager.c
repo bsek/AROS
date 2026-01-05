@@ -400,7 +400,7 @@ BOOL RegisterCyberGfxBackend(void) {
   D(bug("RegisterCyberGfxBackend: Registering CyberGraphics backend\n"));
 
   cybergfx_backend.ops = &cybergfx_backend_ops;
-  cybergfx_backend.priority = 150; /* Medium priority */
+  cybergfx_backend.priority = 50; /* Medium priority */
 
   return ZuneRegisterBackend(&cybergfx_backend);
 }
