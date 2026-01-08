@@ -163,10 +163,11 @@ typedef struct ZuneBackendOps {
   BOOL (*SetupClipping)(struct RenderPort *rp, struct Region *region);
   void (*ClearClipping)(struct RenderPort *rp); // For hardware-based backends
 
-  /* RastPort copy (for reading background into DrawingBoard) */
+  /* RastPort copy (Sync RastPort into DrawingBoard) */
   void (*CopyFromRastPort)(struct RenderPort *rp, struct RastPort *src_rp,
                            WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
                            UWORD width, UWORD height);
+  BOOL (*CopyFromDrawingBoard)(struct RenderPort *rp); /* Sync backend buffer to bitmap */
 
   /* Future extension slots */
   APTR reserved[1];
@@ -236,6 +237,7 @@ void ZuneFallback_UnlockPixels(struct DrawingBoard *board);
 ULONG ZuneFallback_GetPixel(struct DrawingBoard *board, WORD x, WORD y);
 void ZuneFallback_SetPixel(struct DrawingBoard *board, WORD x, WORD y,
                            struct InternalColor *color);
+BOOL ZuneFallback_CopyFromDrawingBoard(struct RenderPort *rp);
 void ZuneFallback_DrawTexture(struct RenderPort *rp,
                               struct ZuneTexture *texture, WORD dest_x,
                               WORD dest_y, UWORD dest_width, UWORD dest_height,

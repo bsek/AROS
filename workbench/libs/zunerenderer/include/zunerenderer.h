@@ -531,7 +531,7 @@ void ClearRenderPort(struct RenderPort *rp, ULONG color);
  */
 BOOL ZuneSetTarget(struct RenderPort *rp, struct DrawingBoard *board);
 
-void DestroyDrawingBoard(struct DrawingBoard *board);
+void DestroyDrawingBoard(struct RenderPort *rp, struct DrawingBoard *board);
 void ClearDrawingBoard(struct RenderPort *rp, ULONG color);
 
 /*
@@ -543,7 +543,7 @@ void ClearDrawingBoard(struct RenderPort *rp, ULONG color);
  *
  * For CyberGfx backend: No-op (bitmap is already the render target).
  */
-BOOL SyncDrawingBoard(struct DrawingBoard *board);
+BOOL SyncDrawingBoard(struct RenderPort *rp);
 
 /*****************************************************************************/
 /* Core Drawing API - Clean and Simple */

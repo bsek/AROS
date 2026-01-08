@@ -298,6 +298,7 @@ static OpenGLWindowContext *OpenGL_CreateWindowContext(struct Window *window);
 static void OpenGL_DestroyWindowContext(OpenGLWindowContext *ctx);
 static OpenGLWindowContext *OpenGL_FindWindowContext(struct Window *window);
 static BOOL OpenGL_MakeContextCurrent(OpenGLWindowContext *ctx);
+static BOOL OpenGL_SyncFBOToBitmap(struct RenderPort *rp);
 
 /*****************************************************************************/
 /* Rounded Rectangle Shader Source                                           */
@@ -552,6 +553,7 @@ ZuneBackendOps opengl_backend_ops = {
 
     .InitDrawingBoard = OpenGLInitDrawingBoard,
     .CleanupDrawingBoard = OpenGLCleanupDrawingBoard,
+    .CopyFromDrawingBoard = OpenGL_SyncFBOToBitmap,
 
     .CopyFromRastPort = OpenGLCopyFromRastPort,
 
@@ -1196,24 +1198,24 @@ static OpenGLFBOData *OpenGL_CreateFBO(UWORD width, UWORD height)
 
     /*
      * Create texture for FBO color attachment.
-     * 
+     *
      * AROS Mesa/SoftPipe has issues with certain format combinations and
      * crashes in _mesa_error -> fprintf when it encounters unsupported formats.
      * We use the most basic GL 1.1 compatible format specification.
      */
     D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: Calling glTexImage2D %dx%d\n", width, height));
-    
+
     /* Set texture parameters BEFORE uploading data - some drivers require this */
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-    
+
     gl_error = glGetError();
     if (gl_error != GL_NO_ERROR) {
         D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: glTexParameteri GL error 0x%04x\n", gl_error));
     }
-    
+
     /* Use GL_RGBA with GL_UNSIGNED_BYTE - most compatible combination */
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
     gl_error = glGetError();
@@ -1596,94 +1598,6 @@ void OpenGL_SwapBuffers(void)
 }
 
 /*
- * OpenGL_BlitToRastPort - Read back GL framebuffer and blit to a RastPort
- *
- * This function reads the OpenGL framebuffer using glReadPixels and writes
- * it to the destination RastPort using WritePixelArray. This is used when
- * blitting an OpenGL DrawingBoard to a window.
- *
- * Parameters:
- *   dst_rp - Destination RastPort (e.g., window's RastPort)
- *   dst_x, dst_y - Destination coordinates in the RastPort
- *   width, height - Size of area to blit
- */
-void OpenGL_BlitToRastPort(struct RastPort *dst_rp, WORD dst_x, WORD dst_y,
-                           UWORD width, UWORD height)
-{
-    UBYTE *pixelbuffer;
-    UBYTE *flipped_buffer;
-    ULONG row, src_row, dst_row;
-    UWORD gl_width, gl_height;
-
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitToRastPort: dst=%p (%d,%d) %dx%d\n",
-          dst_rp, dst_x, dst_y, width, height));
-
-    if (!g_opengl_priv || !g_opengl_priv->gl_context || !dst_rp) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitToRastPort: Invalid parameters\n"));
-        return;
-    }
-
-    if (!CyberGfxBase) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitToRastPort: CyberGfxBase not available\n"));
-        return;
-    }
-
-    /* Get current GL framebuffer dimensions */
-    gl_width = g_opengl_priv->current_width;
-    gl_height = g_opengl_priv->current_height;
-
-    /* Clamp to actual GL framebuffer size */
-    if (width > gl_width) width = gl_width;
-    if (height > gl_height) height = gl_height;
-
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitToRastPort: GL framebuffer %dx%d, blitting %dx%d\n",
-          gl_width, gl_height, width, height));
-
-    /* Allocate buffer for pixel data (RGBA format, 4 bytes per pixel) */
-    pixelbuffer = AllocVec(width * height * 4, MEMF_ANY);
-    if (!pixelbuffer) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitToRastPort: Failed to allocate pixel buffer\n"));
-        return;
-    }
-
-    /* Allocate buffer for Y-flipped data */
-    flipped_buffer = AllocVec(width * height * 4, MEMF_ANY);
-    if (!flipped_buffer) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitToRastPort: Failed to allocate flipped buffer\n"));
-        FreeVec(pixelbuffer);
-        return;
-    }
-
-    /* Ensure GL operations are complete */
-    glFlush();
-    glFinish();
-
-    /* Read pixels from GL framebuffer */
-    glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixelbuffer);
-
-    /*
-     * Flip the image vertically because:
-     * - OpenGL has Y=0 at bottom
-     * - Screen coordinates have Y=0 at top
-     */
-    for (row = 0; row < height; row++) {
-        src_row = row * width * 4;
-        dst_row = (height - 1 - row) * width * 4;
-        CopyMem(pixelbuffer + src_row, flipped_buffer + dst_row, width * 4);
-    }
-
-    /* Write to destination RastPort */
-    WritePixelArray(flipped_buffer, 0, 0, width * 4,
-                    dst_rp, dst_x, dst_y,
-                    width, height, RECTFMT_RGBA);
-
-    FreeVec(flipped_buffer);
-    FreeVec(pixelbuffer);
-
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitToRastPort: Blit complete\n"));
-}
-
-/*
  * OpenGL_BlitToRastPortDirect - Blit GL framebuffer to RastPort using glASetRast
  *
  * This is the efficient way to blit OpenGL content to a RastPort. Instead of
@@ -1909,8 +1823,10 @@ void OpenGL_BlitFBOToRastPort(struct DrawingBoard *board, struct RastPort *dst_r
  * This is essential for mixed-mode rendering where both OpenGL and
  * CyberGfx draw to the same DrawingBoard.
  */
-BOOL OpenGL_SyncFBOToBitmap(struct DrawingBoard *board)
+BOOL OpenGL_SyncFBOToBitmap(struct RenderPort *rp)
 {
+    struct DrawingBoard *board = rp->target_board;
+
     D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncFBOToBitmap: board=%p\n", board));
 
     if (!board || !board->backend_data || !board->rastport) {
@@ -2219,28 +2135,28 @@ static BOOL OpenGL_EnsureGlobalContext(struct Window *window)
         GLuint test_fbo = 0, test_tex = 0;
         GLenum test_status;
         BOOL fbo_works = FALSE;
-        
+
         D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: Testing FBO support with small texture\n"));
-        
+
         /* Clear any pending errors */
         while (glGetError() != GL_NO_ERROR) {}
-        
+
         glGenFramebuffers_ptr(1, &test_fbo);
         glGenTextures(1, &test_tex);
-        
+
         if (test_fbo && test_tex) {
             glBindFramebuffer_ptr(GL_FRAMEBUFFER, test_fbo);
             glBindTexture(GL_TEXTURE_2D, test_tex);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-            
+
             /* Try creating a small 16x16 RGBA texture */
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 16, 16, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-            
+
             if (glGetError() == GL_NO_ERROR) {
                 glFramebufferTexture2D_ptr(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, test_tex, 0);
                 test_status = glCheckFramebufferStatus_ptr(GL_FRAMEBUFFER);
-                
+
                 if (test_status == GL_FRAMEBUFFER_COMPLETE) {
                     fbo_works = TRUE;
                     D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: FBO test PASSED\n"));
@@ -2250,13 +2166,13 @@ static BOOL OpenGL_EnsureGlobalContext(struct Window *window)
             } else {
                 D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: FBO test FAILED - glTexImage2D error\n"));
             }
-            
+
             /* Cleanup test resources */
             glBindFramebuffer_ptr(GL_FRAMEBUFFER, 0);
             glDeleteTextures(1, &test_tex);
             glDeleteFramebuffers_ptr(1, &test_fbo);
         }
-        
+
         if (fbo_works && g_opengl_priv) {
             g_opengl_priv->has_framebuffers = TRUE;
             D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: FBO support enabled\n"));
@@ -2467,7 +2383,7 @@ static BOOL OpenGL_SwitchToDrawingBoard(struct RenderPort *rp)
     if (!g_fbo_available) {
         /*
          * FBO not available (e.g., SoftPipe renderer).
-         * 
+         *
          * The legacy glASetRast method doesn't work reliably for off-screen
          * DrawingBoards because Mesa/SoftPipe can only render to window
          * RastPorts, not arbitrary bitmaps.
