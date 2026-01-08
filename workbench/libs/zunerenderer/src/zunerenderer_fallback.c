@@ -401,3 +401,12 @@ void ZuneFallback_DrawTexture(struct RenderPort *rp,
   (void)src_height;
   (void)tint;
 }
+
+BOOL ZuneFallback_CopyFromDrawingBoard(struct RenderPort *rp) {
+  /*
+   * Software fallback: No synchronization needed.
+   * For software rendering, the bitmap IS the render target.
+   */
+  (void)rp;
+  return TRUE;
+}

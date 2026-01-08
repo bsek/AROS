@@ -77,6 +77,8 @@ static void CybergfxBlitToScreen(struct RenderPort *source, struct RastPort *scr
 static BOOL CybergfxInitDrawingBoard(struct DrawingBoard *board);
 static void CybergfxCleanupDrawingBoard(struct DrawingBoard *board);
 
+static BOOL CybergfxCopyFromDrawingBoard(struct RenderPort *rp);
+
 static void CybergfxCopyFromRastPort(struct RenderPort *rp, struct RastPort *src_rp,
                                      WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
                                      UWORD width, UWORD height);
@@ -123,6 +125,7 @@ ZuneBackendOps cybergfx_backend_ops = {.name = "CyberGraphics",
 
                                        .InitDrawingBoard = CybergfxInitDrawingBoard,
                                        .CleanupDrawingBoard = CybergfxCleanupDrawingBoard,
+                                       .CopyFromDrawingBoard = CybergfxCopyFromDrawingBoard,
 
                                        /* Texture operations */
                                        .InitTexture = CybergfxInitTexture,
@@ -172,6 +175,17 @@ static void CybergfxCleanupDrawingBoard(struct DrawingBoard *board) {
     D(bug("CybergfxCleanupDrawingBoard: Cleaning up DrawingBoard %p\n", board));
 
     /* Nothing specific to cleanup for CyberGraphics */
+}
+
+/*
+ * CybergfxCopyFromDrawingBoard - Sync DrawingBoard buffer to bitmap
+ *
+ * For CyberGraphics backend, the bitmap IS the render target, so no
+ * synchronization is needed. This is a no-op that always returns TRUE.
+ */
+static BOOL CybergfxCopyFromDrawingBoard(struct RenderPort *rp) {
+    (void)rp; /* Unused - no sync needed for CyberGfx */
+    return TRUE;
 }
 
 /*****************************************************************************/
@@ -299,7 +313,7 @@ static BOOL CybergfxIsCompatible(struct RenderPort *rp) {
 
     /*
      * DrawingBoard target: Always compatible if CyberGfxBase is available.
-     * 
+     *
      * This is called BEFORE bitmap allocation (lazy allocation), so we can't
      * check the bitmap yet. CyberGfx can create bitmaps for any DrawingBoard,
      * so we report compatible here. The actual bitmap will be allocated later

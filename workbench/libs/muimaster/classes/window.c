@@ -236,13 +236,13 @@ static void ResetDrawBufferEntry(struct DrawBufferEntry *entry) {
     if (!entry)
         return;
 
+    if (entry->board) {
+        DestroyDrawingBoard(entry->port, entry->board);
+        entry->board = NULL;
+    }
     if (entry->port) {
         DestroyRenderPort(entry->port);
         entry->port = NULL;
-    }
-    if (entry->board) {
-        DestroyDrawingBoard(entry->board);
-        entry->board = NULL;
     }
     entry->width = 0;
     entry->height = 0;
@@ -1015,7 +1015,7 @@ void FlushDoubleBuffer(struct MUI_RenderInfo *mri);
 static void WindowSyncFboToBitmap(struct MUI_RenderInfo *mri) {
     if (!mri || !mri->mri_RenderPort || !mri->mri_DrawingBoard)
         return;
-    SyncDrawingBoard(mri->mri_DrawingBoard);
+    SyncDrawingBoard(mri->mri_RenderPort);
 }
 
 static void WindowSyncBitmapToFbo(struct MUI_RenderInfo *mri) {
@@ -3273,7 +3273,7 @@ static void InstallBackbuffer(struct IClass *cl, Object *obj) {
         /* DrawingBoard creation failed - continue without double buffering */
         D(bug("DrawingBoard creation failed, using direct rendering\n"));
         if (mri->mri_DrawingBoard) {
-            DestroyDrawingBoard(mri->mri_DrawingBoard);
+            DestroyDrawingBoard(mri->mri_RenderPort, mri->mri_DrawingBoard);
             mri->mri_DrawingBoard = NULL;
         }
     }
@@ -3547,7 +3547,7 @@ static void DeinstallBackbuffer(struct IClass *cl, Object *obj) {
 
     /* Cleanup DrawingBoard first (it may reference the RenderPort) */
     if (mri->mri_DrawingBoard) {
-        DestroyDrawingBoard(mri->mri_DrawingBoard);
+        DestroyDrawingBoard(mri->mri_RenderPort, mri->mri_DrawingBoard);
         mri->mri_DrawingBoard = NULL;
     }
 

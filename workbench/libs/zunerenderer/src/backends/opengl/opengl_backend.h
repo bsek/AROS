@@ -62,7 +62,7 @@ typedef struct OpenGLWindowContext {
     BOOL        shaders_initialized; /* Shaders compiled for this context */
     UWORD       width;              /* Current framebuffer width */
     UWORD       height;             /* Current framebuffer height */
-    
+
     /* Linked list for tracking all window contexts */
     struct OpenGLWindowContext *next;
 } OpenGLWindowContext;
@@ -85,7 +85,7 @@ typedef struct OpenGLFBOData {
     UWORD       width;              /* FBO width */
     UWORD       height;             /* FBO height */
     BOOL        valid;              /* FBO is valid and complete */
-    
+
     /* Parent context - the window context this FBO belongs to */
     OpenGLWindowContext *parent_context;
 } OpenGLFBOData;
@@ -111,15 +111,15 @@ typedef struct OpenGLPrivateData {
     struct Library *GLBase;         /* gl.library base */
     BOOL        initialized;        /* Backend initialized successfully */
     BOOL        gl_available;       /* GL library available and working */
-    
+
     /* Global GL context (for single-context fallback mode) */
     APTR        gl_context;         /* GLAContext - the single global context */
     BOOL        context_created;    /* Global context has been created */
-    
+
     /* Window context management (for multi-context FBO mode) */
     OpenGLWindowContext *window_contexts;   /* Linked list of window contexts */
     OpenGLWindowContext *current_context;   /* Currently active window context */
-    
+
     /* Current target tracking */
     OpenGLTargetType current_target_type;   /* Type of current target */
     struct Window *current_window;          /* Currently bound window (if WINDOW) */
@@ -127,7 +127,7 @@ typedef struct OpenGLPrivateData {
     UWORD       current_width;              /* Current framebuffer width */
     UWORD       current_height;             /* Current framebuffer height */
     BOOL        needs_sync;                 /* Need to sync from RastPort before drawing */
-    
+
     /* GL capabilities detected at init */
     ULONG       gl_version_major;   /* OpenGL major version */
     ULONG       gl_version_minor;   /* OpenGL minor version */
@@ -135,7 +135,7 @@ typedef struct OpenGLPrivateData {
     BOOL        has_npot_textures;  /* Non-power-of-two texture support */
     BOOL        has_framebuffers;   /* Framebuffer object support (FBO) */
     BOOL        has_shaders;        /* Shader support (GLSL) */
-    
+
     /* Statistics */
     ULONG       contexts_created;   /* Number of GL contexts created */
     ULONG       fbos_created;       /* Number of FBOs created */
@@ -143,34 +143,7 @@ typedef struct OpenGLPrivateData {
     ULONG       context_switches;   /* Number of context switches */
     ULONG       fbo_switches;       /* Number of FBO switches */
     ULONG       setrast_calls;      /* Number of glASetRast calls */
-    
+
 } OpenGLPrivateData;
-
-/*****************************************************************************/
-/* OpenGL Backend Functions                                                  */
-/*****************************************************************************/
-
-/* Library management - called during backend init */
-BOOL OpenGL_CheckLibrary(OpenGLPrivateData *priv);
-BOOL OpenGL_CheckCapabilities(OpenGLPrivateData *priv);
-
-/* Debug/Info */
-void OpenGL_DumpDebugInfo(OpenGLPrivateData *priv);
-
-/* Public helper functions - callable from other modules */
-void OpenGL_SwapBuffers(void);
-void OpenGL_BlitToRastPort(struct RastPort *dst_rp, WORD dst_x, WORD dst_y,
-                           UWORD width, UWORD height);
-void OpenGL_BlitToRastPortDirect(struct RastPort *dst_rp, WORD dst_x, WORD dst_y,
-                                 UWORD width, UWORD height);
-void OpenGL_BlitFBOToRastPort(struct DrawingBoard *board, struct RastPort *dst_rp,
-                              WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
-                              UWORD width, UWORD height);
-
-/* FBO to Bitmap synchronization - copies FBO content to DrawingBoard's bitmap */
-BOOL OpenGL_SyncFBOToBitmap(struct DrawingBoard *board);
-
-/* DrawingBoard cleanup - frees FBO and backend resources */
-void OpenGLCleanupDrawingBoard(struct DrawingBoard *board);
 
 #endif /* OPENGL_BACKEND_H */
