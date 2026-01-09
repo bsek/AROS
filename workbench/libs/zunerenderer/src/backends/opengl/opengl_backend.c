@@ -1306,6 +1306,7 @@ static OpenGLFBOData *OpenGL_CreateFBO(UWORD width, UWORD height)
     fbo->width = width;
     fbo->height = height;
     fbo->valid = TRUE;
+    fbo->dirty = FALSE;  /* Not dirty until we draw to it */
     fbo->parent_context = NULL;
 
     if (g_opengl_priv) {
@@ -1366,6 +1367,13 @@ static BOOL OpenGL_BindFBO(OpenGLFBOData *fbo)
     glOrtho(0, fbo->width, fbo->height, 0, -1, 1);  /* Y-flipped for screen coords */
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
+
+    /*
+     * Mark FBO as dirty - any subsequent GL draw calls will modify its contents.
+     * This flag is checked before syncing FBO to bitmap to avoid unnecessary
+     * expensive glReadPixels + WritePixelArray operations.
+     */
+    fbo->dirty = TRUE;
 
     if (g_opengl_priv) {
         g_opengl_priv->fbo_switches++;
@@ -1825,19 +1833,61 @@ void OpenGL_BlitFBOToRastPort(struct DrawingBoard *board, struct RastPort *dst_r
  */
 BOOL OpenGL_SyncFBOToBitmap(struct RenderPort *rp)
 {
-    struct DrawingBoard *board = rp->target_board;
+    struct DrawingBoard *board;
+    OpenGLFBOData *fbo;
+
+    /* Validate RenderPort */
+    if (!rp) {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncFBOToBitmap: NULL RenderPort\n"));
+        return FALSE;
+    }
+
+    board = rp->target_board;
 
     D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncFBOToBitmap: board=%p\n", board));
 
-    if (!board || !board->backend_data || !board->rastport) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncFBOToBitmap: Invalid board\n"));
+    /* Validate DrawingBoard */
+    if (!board || !board->valid) {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncFBOToBitmap: Invalid or NULL board\n"));
         return FALSE;
+    }
+
+    if (!board->backend_data) {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncFBOToBitmap: No backend_data (FBO)\n"));
+        return FALSE;
+    }
+
+    if (!board->rastport || !board->rastport->BitMap) {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncFBOToBitmap: No rastport or bitmap\n"));
+        return FALSE;
+    }
+
+    fbo = (OpenGLFBOData *)board->backend_data;
+
+    /* Validate FBO */
+    if (!fbo->valid) {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncFBOToBitmap: FBO not valid\n"));
+        return FALSE;
+    }
+
+    /*
+     * Only sync if the FBO has been modified since last sync.
+     * This avoids expensive glReadPixels + WritePixelArray operations
+     * when the FBO content hasn't changed (e.g., during window resize
+     * when blitting unchanged content).
+     */
+    if (!fbo->dirty) {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncFBOToBitmap: FBO not dirty, skipping sync\n"));
+        return TRUE;
     }
 
     /* Use existing blit function to sync entire FBO to board's rastport */
     OpenGL_BlitFBOToRastPort(board, board->rastport,
                               0, 0, 0, 0,
                               board->width, board->height);
+
+    /* Mark FBO as clean after successful sync */
+    fbo->dirty = FALSE;
 
     return TRUE;
 }
