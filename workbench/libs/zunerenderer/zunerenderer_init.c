@@ -15,6 +15,7 @@
 #include <exec/types.h>
 #include <exec/libraries.h>
 #include <exec/memory.h>
+#include <graphics/gfxbase.h>
 #include <proto/exec.h>
 
 #include "src/zunerenderer_intern.h"
@@ -45,13 +46,13 @@ struct Library *GLBase = NULL;
 static int ZuneRenderer_Init(struct IntZuneRendererBase *base)
 {
     D(bug("ZuneRenderer: Library Init\n"));
-    
+
     /* Initialize the library base */
     if (!InitializeZuneRenderer(base)) {
         D(bug("ZuneRenderer: Library initialization failed\n"));
         return FALSE;
     }
-    
+
     D(bug("ZuneRenderer: Library initialized successfully\n"));
     return TRUE;
 }
@@ -59,10 +60,10 @@ static int ZuneRenderer_Init(struct IntZuneRendererBase *base)
 static int ZuneRenderer_Expunge(struct IntZuneRendererBase *base)
 {
     D(bug("ZuneRenderer: Library Expunge\n"));
-    
+
     /* Clean up library resources */
     CleanupZuneRenderer(base);
-    
+
     D(bug("ZuneRenderer: Library cleanup completed\n"));
     return TRUE;
 }
@@ -70,7 +71,7 @@ static int ZuneRenderer_Expunge(struct IntZuneRendererBase *base)
 static int ZuneRenderer_Open(struct IntZuneRendererBase *base)
 {
     D(bug("ZuneRenderer: Library Open (OpenCnt: %ld)\n", base->libnode.lib_OpenCnt));
-    
+
     /* Nothing special needed for open in this library */
     return TRUE;
 }
@@ -78,7 +79,7 @@ static int ZuneRenderer_Open(struct IntZuneRendererBase *base)
 static int ZuneRenderer_Close(struct IntZuneRendererBase *base)
 {
     D(bug("ZuneRenderer: Library Close (OpenCnt: %ld)\n", base->libnode.lib_OpenCnt));
-    
+
     /* Nothing special needed for close in this library */
     return TRUE;
 }

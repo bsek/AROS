@@ -424,7 +424,7 @@ BOOL zune_frame_try_renderer(Object *obj, struct MUI_AreaData *data, const struc
             }
 
             /* Blit result back to screen */
-            BlitDrawingBoardToRenderPortRects(board, port, 0, 0, bgleft, bgtop, bgw, bgh);
+            BlitDrawingBoardToRenderPortRects(buffer_port, port, 0, 0, bgleft, bgtop, bgw, bgh);
 
             data->mad_Flags2 |= MADF2_ZUNE_RENDERER_BG | MADF2_ZUNE_FRAME_RENDERED;
         } else {
@@ -568,7 +568,7 @@ void zune_frame_draw_deferred_outline(Object *obj, struct MUI_AreaData *data,
             ZuneDrawRectangleRoundedOutlineStyledAA(buffer_port, &buffer_rect, radius, border_width, border_color);
 
             /* Blit result back to screen */
-            BlitDrawingBoardToRenderPortRects(board, port, 0, 0, bgleft, bgtop, bgw, bgh);
+            BlitDrawingBoardToRenderPortRects(buffer_port, port, 0, 0, bgleft, bgtop, bgw, bgh);
         } else {
             /* Fallback to direct rendering if buffer allocation failed */
             use_drawbuffer = FALSE;
