@@ -4,8 +4,8 @@
 include $(SRCDIR)/config/aros.cfg
 
 FILES  := \
-    rect_demo \
     opengl_test
+#    rect_demo
 #    texture_from_file_test \
 #    line_drawing_test \
 #    sdf_antialiasing_test_simple \

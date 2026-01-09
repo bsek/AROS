@@ -305,7 +305,7 @@ BOOL WindowObtainObjectDrawBuffer(struct MUI_RenderInfo *mri, Object *obj, UWORD
          * New API: Create RenderPort first (bound to window), then DrawingBoard.
          * The RenderPort selects the best backend (OpenGL if available).
          */
-        entry->port = CreateRenderPortForWindow(mri->mri_Window, mri->mri_Colormap, BACKEND_CYBERGFX);
+        entry->port = CreateRenderPortForWindow(mri->mri_Window, mri->mri_Colormap, BACKEND_OPENGL);
         if (!entry->port) {
             RemoveDrawBufferEntry(data, entry);
             return FALSE;
@@ -3228,7 +3228,7 @@ static void InstallBackbuffer(struct IClass *cl, Object *obj) {
 
     /* Create main RenderPort for this window - always needed for zunerenderer */
     if (!mri->mri_RenderPort) {
-        mri->mri_RenderPort = CreateRenderPortForWindow(win, mri->mri_Colormap, BACKEND_OPENGL);
+        mri->mri_RenderPort = CreateRenderPortForWindow(win, mri->mri_Colormap, BACKEND_CYBERGFX);
         if (!mri->mri_RenderPort) {
             D(bug("Failed to create RenderPort for window\n"));
             return;

@@ -359,10 +359,10 @@ struct ZuneBrush {
   BlitDrawingBoard((src), (dst),                                               \
                    ZUNE_RECT_PTR((src_x), (src_y), (width), (height)),         \
                    ZUNE_RECT_PTR((dest_x), (dest_y), (width), (height)))
-#define BlitDrawingBoardToRenderPortRects(src, dst, src_x, src_y, dest_x,      \
-                                          dest_y, width, height)               \
+#define BlitDrawingBoardToRenderPortRects(src_rp, dst_rp, src_x, src_y,        \
+                                          dest_x, dest_y, width, height)       \
   BlitDrawingBoardToRenderPort(                                                \
-      (src), (dst), ZUNE_RECT_PTR((src_x), (src_y), (width), (height)),        \
+      (src_rp), (dst_rp), ZUNE_RECT_PTR((src_x), (src_y), (width), (height)),  \
       ZUNE_RECT_PTR((dest_x), (dest_y), (width), (height)))
 #define ZuneCreateCircleRegionAt(cx, cy, radius)                               \
   ZuneCreateCircleRegion(ZUNE_POINT_PTR((cx), (cy)), (radius))
@@ -666,7 +666,7 @@ ULONG GetBatchCount(struct RenderPort *rp);
 
 void BlitDrawingBoard(struct DrawingBoard *source, struct DrawingBoard *target,
                       struct ZuneRect *src_rect, struct ZuneRect *dest_rect);
-void BlitDrawingBoardToRenderPort(struct DrawingBoard *source,
+void BlitDrawingBoardToRenderPort(struct RenderPort *source,
                                   struct RenderPort *target,
                                   struct ZuneRect *src_rect,
                                   struct ZuneRect *dest_rect);

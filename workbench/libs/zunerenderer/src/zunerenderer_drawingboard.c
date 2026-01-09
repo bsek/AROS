@@ -35,7 +35,7 @@
 #include "include/zunerenderer.h"
 #include "zunerenderer_intern.h"
 
-#define DEBUG 0
+#define DEBUG 1
 #include <aros/debug.h>
 
 /*****************************************************************************/
@@ -1159,8 +1159,8 @@ SEE ALSO
 AROS_LH4(void, BlitDrawingBoardToRenderPort,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct DrawingBoard *, src, A0),
-         AROS_LHA(struct RenderPort *, dst, A1),
+         AROS_LHA(struct RenderPort *, src_rp, A0),
+         AROS_LHA(struct RenderPort *, dst_rp, A1),
          AROS_LHA(struct ZuneRect *, src_rect, A2),
          AROS_LHA(struct ZuneRect *, dest_rect, A3),
 
@@ -1168,20 +1168,22 @@ AROS_LH4(void, BlitDrawingBoardToRenderPort,
          struct Library *, ZuneRendererBase, 26, zunerenderer)
 
 /*  FUNCTION
-    Blits a DrawingBoard to a RenderPort.
+    Blits from one RenderPort's target DrawingBoard to another RenderPort.
 
 INPUTS
-    src - Source DrawingBoard
-    dst - Destination RenderPort
-    src_x, src_y - Source coordinates
-    dst_x, dst_y - Destination coordinates
-    width, height - Blit dimensions
+    src_rp - Source RenderPort (must have a target DrawingBoard set)
+    dst_rp - Destination RenderPort
+    src_rect - Source rectangle
+    dest_rect - Destination rectangle
 
 RESULT
     None
 
 NOTES
     This function handles blitting to both screen and off-screen RenderPorts.
+    The source RenderPort's backend is used to sync its DrawingBoard before
+    blitting, ensuring correct behavior when source and destination use
+    different backends (e.g., OpenGL source to CyberGfx destination).
 
 SEE ALSO
     BlitDrawingBoard(), BlitDrawingBoardToScreen()
@@ -1190,10 +1192,23 @@ SEE ALSO
 {
   AROS_LIBFUNC_INIT
 
+  struct DrawingBoard *src;
+
   ENTER_FUNCTION("BlitDrawingBoardToRenderPort");
 
-  if (!ValidateDrawingBoard(src) || !ValidateRenderPort(dst)) {
-    D(bug("ZuneRenderer: Invalid parameters\n"));
+  if (!ValidateRenderPort(src_rp) || !ValidateRenderPort(dst_rp)) {
+    D(bug("ZuneRenderer: Invalid RenderPort parameters\n"));
+    return;
+  }
+
+  src = src_rp->target_board;
+  if (!src) {
+    D(bug("ZuneRenderer: Source RenderPort has no valid target DrawingBoard\n"));
+    return;
+  }
+
+  if (!ValidateDrawingBoard(src)) {
+    D(bug("ZuneRenderer: Source RenderPort has no valid target DrawingBoard\n"));
     return;
   }
 
@@ -1225,22 +1240,32 @@ SEE ALSO
   const UWORD width = src_rect->width;
   const UWORD height = src_rect->height;
 
-  D(bug("BlitDrawingBoardToRenderPort: dst->target_board=%p, dst->target_rp=%p\n",
-        dst->target_board, dst->target_rp));
+  D(bug("BlitDrawingBoardToRenderPort: dst_rp->target_board=%p, dst_rp->target_rp=%p\n",
+        dst_rp->target_board, dst_rp->target_rp));
 
-  if (dst->target_board) {
+  /*
+   * CRITICAL: Sync backend buffer to the DrawingBoard's bitmap BEFORE blitting.
+   * For OpenGL backend, this copies FBO content to the bitmap using glReadPixels.
+   * For CyberGfx backend, this is a no-op since the bitmap IS the render target.
+   * This MUST happen regardless of whether destination is DrawingBoard or RastPort,
+   * because both paths use the source bitmap for the actual blit operation.
+   */
+  if (src->valid) {
+    ZUNE_BACKEND_CALL_NO_ARGS_RET(src_rp, CopyFromDrawingBoard, FALSE);
+  }
+
+  if (dst_rp->target_board) {
     /* Blit to off-screen DrawingBoard */
     D(bug("BlitDrawingBoardToRenderPort: Blitting to off-screen DrawingBoard\n"));
-    BlitDrawingBoardInternal(src, dst->target_board, src_x, src_y, dst_x, dst_y,
+    BlitDrawingBoardInternal(src, dst_rp->target_board, src_x, src_y, dst_x, dst_y,
                              width, height);
   } else {
     /* Blit to screen RastPort */
     struct BitMap *bitmap;
-    struct DrawingBoard *saved_board;
     UWORD blit_width = width;
     UWORD blit_height = height;
 
-    D(bug("BlitDrawingBoardToRenderPort: Blitting to screen RastPort %p\n", dst->target_rp));
+    D(bug("BlitDrawingBoardToRenderPort: Blitting to screen RastPort %p\n", dst_rp->target_rp));
 
     /* Bounds checking */
     if (src_x + blit_width > src->width)
@@ -1248,24 +1273,11 @@ SEE ALSO
     if (src_y + blit_height > src->height)
       blit_height = src->height - src_y;
 
-    /*
-     * Sync backend buffer to the DrawingBoard's bitmap before blitting.
-     * For OpenGL backend, this copies FBO content to the bitmap.
-     * For CyberGfx backend, this is a no-op since the bitmap IS the render target.
-     * Temporarily set dst->target_board to src for the backend call.
-     */
-    if (src->valid) {
-      saved_board = dst->target_board;
-      dst->target_board = src;
-      ZUNE_BACKEND_CALL_NO_ARGS_RET(dst, CopyFromDrawingBoard, FALSE);
-      dst->target_board = saved_board;
-    }
-
     /* Use standard bitmap path for all backends */
     bitmap = src->rastport ? src->rastport->BitMap : src->bitmap;
 
     if (bitmap) {
-      BltBitMapRastPort(bitmap, src_x, src_y, dst->target_rp, dst_x, dst_y,
+      BltBitMapRastPort(bitmap, src_x, src_y, dst_rp->target_rp, dst_x, dst_y,
                         blit_width, blit_height, 0xC0);
     }
   }
@@ -1429,13 +1441,20 @@ SEE ALSO
   }
 
   /*
-   * Flush the backend before blitting to ensure all rendering is complete.
-   * This ensures any batched operations are finished before we blit.
+   * Flush the backend and sync FBO to bitmap before blitting.
+   * For OpenGL backend, this copies FBO content to the bitmap using glReadPixels.
+   * For CyberGfx backend, FlushBatch ensures pending operations complete,
+   * and CopyFromDrawingBoard is a no-op since the bitmap IS the render target.
    */
   {
     ZuneBackend *backend = ZuneGetRenderPortBackend(rp);
-    if (backend && backend->ops && backend->ops->FlushBatch) {
-      backend->ops->FlushBatch(rp);
+    if (backend && backend->ops) {
+      if (backend->ops->FlushBatch) {
+        backend->ops->FlushBatch(rp);
+      }
+      if (backend->ops->CopyFromDrawingBoard) {
+        backend->ops->CopyFromDrawingBoard(rp);
+      }
     }
   }
 

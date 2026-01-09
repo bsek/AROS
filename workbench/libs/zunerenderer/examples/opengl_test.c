@@ -65,6 +65,7 @@ struct Screen *screen = NULL;
 struct Window *window = NULL;
 struct DrawingBoard *board = NULL;
 struct RenderPort *render_port = NULL;
+struct RenderPort *window_rp = NULL;
 
 TestMode current_test = TEST_OPENGL_BG_CYBERGFX_FG;
 
@@ -231,7 +232,7 @@ BOOL InitDemo(void) {
      * Create RenderPort bound to the window.
      * The backend selection happens here (OpenGL if available).
      */
-    render_port = CreateRenderPortForWindow(window, screen->ViewPort.ColorMap, BACKEND_BEST_AVAILABLE);
+    render_port = CreateRenderPortForWindow(window, screen->ViewPort.ColorMap, BACKEND_OPENGL);
     if (!render_port) {
         printf("ERROR: Cannot create RenderPort\n");
         return FALSE;
@@ -256,13 +257,28 @@ BOOL InitDemo(void) {
     printf("DrawingBoard hardware_surface: %s\n", board->hardware_surface ? "Yes" : "No");
     printf("DrawingBoard backend_data (FBO): %p\n", board->backend_data);
 
+    /*
+     * Create a separate RenderPort for window output (blitting destination).
+     * This uses BACKEND_DEFAULT since we just need it for BltBitMapRastPort.
+     */
+    window_rp = CreateRenderPortForWindow(window, screen->ViewPort.ColorMap, BACKEND_CYBERGFX);
+    if (!window_rp) {
+        printf("ERROR: Cannot create window RenderPort\n");
+        return FALSE;
+    }
+
     return TRUE;
 }
 
 void CleanupDemo(void) {
     if (board) {
-        DestroyDrawingBoard(board);
+        DestroyDrawingBoard(render_port, board);
         board = NULL;
+    }
+
+    if (window_rp) {
+        DestroyRenderPort(window_rp);
+        window_rp = NULL;
     }
 
     if (render_port) {
@@ -303,14 +319,19 @@ void CleanupDemo(void) {
 
 /*
  * Blit the DrawingBoard contents to the window.
+ *
+ * render_port (source) has the board as target and the correct backend.
+ * window_rp (destination) targets the window for output.
  */
 void BlitToWindow(void) {
     struct ZuneRect src_rect = {0, 0, board->width, board->height};
     struct ZuneRect dst_rect = {window->BorderLeft, window->BorderTop, board->width, board->height};
 
-    /* Switch to window target for blitting */
-    ZuneSetTarget(render_port, NULL);
-    BlitDrawingBoardToRenderPort(board, render_port, &src_rect, &dst_rect);
+    /* Ensure render_port targets the board */
+    ZuneSetTarget(render_port, board);
+
+    /* Blit from render_port (board) to window_rp (window) */
+    BlitDrawingBoardToRenderPort(render_port, window_rp, &src_rect, &dst_rect);
 }
 
 void RunTest(TestMode mode) {
@@ -568,7 +589,7 @@ void Test_OpenGLBg_CyberGfxFg(void) {
      * SyncDrawingBoard() copies the OpenGL FBO contents to the bitmap.
      */
     printf("  Step 3: Syncing FBO to bitmap (SyncDrawingBoard)...\n");
-    SyncDrawingBoard(board);
+    SyncDrawingBoard(render_port);
 
     /* Step 4: Draw CyberGfx shapes on top */
     printf("  Step 4: CyberGfx draws right-side shapes...\n");
@@ -677,7 +698,7 @@ void Test_Alternating(void) {
             ZuneFillRectangleRoundedAAXYWH(render_port, x + 240, y, 100, 100, 15,
                                            ZUNE_BRUSH_SOLID(ZUNE_BLUE));
             /* Sync FBO to bitmap before CyberGfx draws in next iteration */
-            SyncDrawingBoard(board);
+            SyncDrawingBoard(render_port);
         } else {
             /* Odd rows: CyberGfx direct */
             printf("  Row %d: CyberGfx shapes at y=%d\n", i, y);

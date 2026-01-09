@@ -212,7 +212,7 @@ BOOL InitDemo(void) {
   }
 
   /* Create RenderPort bound to window first (new API) */
-  window_rp = CreateRenderPortForWindow(window, screen->ViewPort.ColorMap, BACKEND_BEST_AVAILABLE);
+  window_rp = CreateRenderPortForWindow(window, screen->ViewPort.ColorMap, BACKEND_CYBERGFX);
   if (!window_rp) {
     printf("ERROR: Cannot create Window RenderPort\n");
     return FALSE;
@@ -1444,14 +1444,14 @@ void ShowResults(const char *label) {
   printf("  ShowResults('%s'): Blitting to window\n", label);
 
   /*
-   * Must set target to NULL (window) before blitting, because
-   * BlitDrawingBoardToRenderPort checks dst->target_board to decide
-   * whether to blit to a DrawingBoard or to the window's RastPort.
+   * Blit from demo_rp (which has demo_board as target) to window_rp.
+   * The source RenderPort's backend is used to sync the DrawingBoard
+   * before blitting, ensuring correct behavior across different backends.
    */
   ZuneSetTarget(window_rp, NULL);
 
   /* Blit DrawingBoard to window */
-  BlitDrawingBoardToRenderPortRects(demo_board, window_rp, 0, 0, 0, 0,
+  BlitDrawingBoardToRenderPortRects(demo_rp, window_rp, 0, 0, 0, 0,
                                     DEMO_WIDTH, DEMO_HEIGHT);
 
   /* Switch back to DrawingBoard for next drawing operations */
