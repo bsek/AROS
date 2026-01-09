@@ -85,6 +85,7 @@ typedef struct OpenGLFBOData {
     UWORD       width;              /* FBO width */
     UWORD       height;             /* FBO height */
     BOOL        valid;              /* FBO is valid and complete */
+    BOOL        dirty;              /* FBO content modified, needs sync to bitmap */
 
     /* Parent context - the window context this FBO belongs to */
     OpenGLWindowContext *parent_context;

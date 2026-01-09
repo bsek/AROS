@@ -1265,6 +1265,13 @@ SEE ALSO
     UWORD blit_width = width;
     UWORD blit_height = height;
 
+    /* Validate destination RastPort */
+    if (!dst_rp->target_rp || !dst_rp->target_rp->BitMap) {
+      D(bug("BlitDrawingBoardToRenderPort: Invalid destination RastPort\n"));
+      EXIT_FUNCTION("BlitDrawingBoardToRenderPort");
+      return;
+    }
+
     D(bug("BlitDrawingBoardToRenderPort: Blitting to screen RastPort %p\n", dst_rp->target_rp));
 
     /* Bounds checking */
@@ -1429,8 +1436,15 @@ SEE ALSO
     return;
   }
 
-  if (!rp->target_board || !rp->target_board->bitmap) {
-    D(bug("ZuneRenderer: RenderPort has no DrawingBoard or bitmap\n"));
+  if (!rp->target_board || !rp->target_board->bitmap || !rp->target_board->valid) {
+    D(bug("ZuneRenderer: RenderPort has no DrawingBoard, bitmap, or board invalid\n"));
+    EXIT_FUNCTION("ZuneBlitToWindow");
+    return;
+  }
+
+  /* Validate window's RastPort before using it */
+  if (!rp->window->RPort || !rp->window->RPort->BitMap) {
+    D(bug("ZuneRenderer: Window has no valid RastPort or BitMap\n"));
     EXIT_FUNCTION("ZuneBlitToWindow");
     return;
   }
