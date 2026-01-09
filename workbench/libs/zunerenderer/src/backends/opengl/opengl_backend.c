@@ -299,6 +299,8 @@ static void OpenGL_DestroyWindowContext(OpenGLWindowContext *ctx);
 static OpenGLWindowContext *OpenGL_FindWindowContext(struct Window *window);
 static BOOL OpenGL_MakeContextCurrent(OpenGLWindowContext *ctx);
 static BOOL OpenGL_SyncFBOToBitmap(struct RenderPort *rp);
+static BOOL OpenGL_SyncRegionFBOToBitmap(struct RenderPort *rp,
+                                         WORD x, WORD y, UWORD width, UWORD height);
 
 /*****************************************************************************/
 /* Rounded Rectangle Shader Source                                           */
@@ -554,10 +556,9 @@ ZuneBackendOps opengl_backend_ops = {
     .InitDrawingBoard = OpenGLInitDrawingBoard,
     .CleanupDrawingBoard = OpenGLCleanupDrawingBoard,
     .CopyFromDrawingBoard = OpenGL_SyncFBOToBitmap,
+    .CopyRegionFromDrawingBoard = OpenGL_SyncRegionFBOToBitmap,
 
     .CopyFromRastPort = OpenGLCopyFromRastPort,
-
-    .reserved = {NULL}
 };
 
 /*****************************************************************************/
@@ -1888,6 +1889,94 @@ BOOL OpenGL_SyncFBOToBitmap(struct RenderPort *rp)
 
     /* Mark FBO as clean after successful sync */
     fbo->dirty = FALSE;
+
+    return TRUE;
+}
+
+/*
+ * OpenGL_SyncRegionFBOToBitmap - Sync a region of FBO contents to DrawingBoard's bitmap
+ *
+ * This is more efficient than OpenGL_SyncFBOToBitmap when only a portion
+ * of the FBO needs to be synced (e.g., when flushing a specific dirty region).
+ *
+ * Parameters:
+ *   rp - RenderPort with target DrawingBoard
+ *   x, y - Top-left corner of region to sync
+ *   width, height - Size of region to sync
+ */
+static BOOL OpenGL_SyncRegionFBOToBitmap(struct RenderPort *rp,
+                                         WORD x, WORD y, UWORD width, UWORD height)
+{
+    struct DrawingBoard *board;
+    OpenGLFBOData *fbo;
+
+    /* Validate RenderPort */
+    if (!rp) {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncRegionFBOToBitmap: NULL RenderPort\n"));
+        return FALSE;
+    }
+
+    board = rp->target_board;
+
+    D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncRegionFBOToBitmap: board=%p region=(%d,%d %ux%u)\n",
+          board, x, y, width, height));
+
+    /* Validate DrawingBoard */
+    if (!board || !board->valid) {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncRegionFBOToBitmap: Invalid or NULL board\n"));
+        return FALSE;
+    }
+
+    if (!board->backend_data) {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncRegionFBOToBitmap: No backend_data (FBO)\n"));
+        return FALSE;
+    }
+
+    if (!board->rastport || !board->rastport->BitMap) {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncRegionFBOToBitmap: No rastport or bitmap\n"));
+        return FALSE;
+    }
+
+    fbo = (OpenGLFBOData *)board->backend_data;
+
+    /* Validate FBO */
+    if (!fbo->valid) {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncRegionFBOToBitmap: FBO not valid\n"));
+        return FALSE;
+    }
+
+    /*
+     * Only sync if the FBO has been modified since last sync.
+     */
+    if (!fbo->dirty) {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncRegionFBOToBitmap: FBO not dirty, skipping sync\n"));
+        return TRUE;
+    }
+
+    /* Clamp region to FBO bounds */
+    if (x < 0) { width += x; x = 0; }
+    if (y < 0) { height += y; y = 0; }
+    if (x + width > board->width) width = board->width - x;
+    if (y + height > board->height) height = board->height - y;
+
+    if (width <= 0 || height <= 0) {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncRegionFBOToBitmap: Region outside bounds\n"));
+        return TRUE;
+    }
+
+    /* Sync only the specified region */
+    OpenGL_BlitFBOToRastPort(board, board->rastport,
+                              x, y, x, y,
+                              width, height);
+
+    /*
+     * Note: We do NOT clear the dirty flag here because we only synced
+     * a region. The FBO may still have other dirty regions. The dirty
+     * flag is only cleared when the entire FBO is synced.
+     *
+     * For a more sophisticated implementation, we could track dirty
+     * regions and only clear when all are synced.
+     */
 
     return TRUE;
 }
