@@ -78,6 +78,8 @@ static BOOL CybergfxInitDrawingBoard(struct DrawingBoard *board);
 static void CybergfxCleanupDrawingBoard(struct DrawingBoard *board);
 
 static BOOL CybergfxCopyFromDrawingBoard(struct RenderPort *rp);
+static BOOL CybergfxCopyRegionFromDrawingBoard(struct RenderPort *rp,
+                                               WORD x, WORD y, UWORD width, UWORD height);
 
 static void CybergfxCopyFromRastPort(struct RenderPort *rp, struct RastPort *src_rp,
                                      WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
@@ -126,6 +128,7 @@ ZuneBackendOps cybergfx_backend_ops = {.name = "CyberGraphics",
                                        .InitDrawingBoard = CybergfxInitDrawingBoard,
                                        .CleanupDrawingBoard = CybergfxCleanupDrawingBoard,
                                        .CopyFromDrawingBoard = CybergfxCopyFromDrawingBoard,
+                                       .CopyRegionFromDrawingBoard = CybergfxCopyRegionFromDrawingBoard,
 
                                        /* Texture operations */
                                        .InitTexture = CybergfxInitTexture,
@@ -145,8 +148,7 @@ ZuneBackendOps cybergfx_backend_ops = {.name = "CyberGraphics",
                                        .ClearClipping = CybergfxClearClipping,
 
                                        .CopyFromRastPort = CybergfxCopyFromRastPort,
-
-                                       .reserved = {NULL}};
+};
 
 /*****************************************************************************/
 /* DrawingBoard Management */
@@ -185,6 +187,22 @@ static void CybergfxCleanupDrawingBoard(struct DrawingBoard *board) {
  */
 static BOOL CybergfxCopyFromDrawingBoard(struct RenderPort *rp) {
     (void)rp; /* Unused - no sync needed for CyberGfx */
+    return TRUE;
+}
+
+/*
+ * CybergfxCopyRegionFromDrawingBoard - Sync a region of DrawingBoard buffer to bitmap
+ *
+ * For CyberGraphics backend, this is also a no-op since the bitmap IS the
+ * render target directly.
+ */
+static BOOL CybergfxCopyRegionFromDrawingBoard(struct RenderPort *rp,
+                                               WORD x, WORD y, UWORD width, UWORD height) {
+    (void)rp;
+    (void)x;
+    (void)y;
+    (void)width;
+    (void)height;
     return TRUE;
 }
 

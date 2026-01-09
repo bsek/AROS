@@ -1244,14 +1244,23 @@ SEE ALSO
         dst_rp->target_board, dst_rp->target_rp));
 
   /*
-   * CRITICAL: Sync backend buffer to the DrawingBoard's bitmap BEFORE blitting.
-   * For OpenGL backend, this copies FBO content to the bitmap using glReadPixels.
+   * CRITICAL: Sync backend buffer region to the DrawingBoard's bitmap BEFORE blitting.
+   * For OpenGL backend, this copies only the needed region from FBO to bitmap
+   * using glReadPixels - much more efficient than syncing the entire FBO.
    * For CyberGfx backend, this is a no-op since the bitmap IS the render target.
    * This MUST happen regardless of whether destination is DrawingBoard or RastPort,
    * because both paths use the source bitmap for the actual blit operation.
    */
   if (src->valid) {
-    ZUNE_BACKEND_CALL_NO_ARGS_RET(src_rp, CopyFromDrawingBoard, FALSE);
+    ZuneBackend *backend = ZuneGetRenderPortBackend(src_rp);
+    if (backend && backend->ops) {
+      /* Use region-based sync if available - only sync the region we're blitting */
+      if (backend->ops->CopyRegionFromDrawingBoard) {
+        backend->ops->CopyRegionFromDrawingBoard(src_rp, src_x, src_y, width, height);
+      } else if (backend->ops->CopyFromDrawingBoard) {
+        backend->ops->CopyFromDrawingBoard(src_rp);
+      }
+    }
   }
 
   if (dst_rp->target_board) {
@@ -1455,10 +1464,10 @@ SEE ALSO
   }
 
   /*
-   * Flush the backend and sync FBO to bitmap before blitting.
-   * For OpenGL backend, this copies FBO content to the bitmap using glReadPixels.
-   * For CyberGfx backend, FlushBatch ensures pending operations complete,
-   * and CopyFromDrawingBoard is a no-op since the bitmap IS the render target.
+   * Flush the backend and sync FBO region to bitmap before blitting.
+   * For OpenGL backend, this copies only the needed region from FBO to bitmap
+   * using glReadPixels - much more efficient than syncing the entire FBO.
+   * For CyberGfx backend, these are no-ops since the bitmap IS the render target.
    */
   {
     ZuneBackend *backend = ZuneGetRenderPortBackend(rp);
@@ -1466,7 +1475,10 @@ SEE ALSO
       if (backend->ops->FlushBatch) {
         backend->ops->FlushBatch(rp);
       }
-      if (backend->ops->CopyFromDrawingBoard) {
+      /* Use region-based sync if available, otherwise fall back to full sync */
+      if (backend->ops->CopyRegionFromDrawingBoard) {
+        backend->ops->CopyRegionFromDrawingBoard(rp, src_x, src_y, width, height);
+      } else if (backend->ops->CopyFromDrawingBoard) {
         backend->ops->CopyFromDrawingBoard(rp);
       }
     }

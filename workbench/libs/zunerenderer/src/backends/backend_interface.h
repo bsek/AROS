@@ -167,10 +167,14 @@ typedef struct ZuneBackendOps {
   void (*CopyFromRastPort)(struct RenderPort *rp, struct RastPort *src_rp,
                            WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
                            UWORD width, UWORD height);
-  BOOL (*CopyFromDrawingBoard)(struct RenderPort *rp); /* Sync backend buffer to bitmap */
+  BOOL (*CopyFromDrawingBoard)(struct RenderPort *rp); /* Sync entire backend buffer to bitmap */
+  
+  /* Region-based sync (more efficient than full sync) */
+  BOOL (*CopyRegionFromDrawingBoard)(struct RenderPort *rp, 
+                                     WORD x, WORD y, UWORD width, UWORD height);
 
   /* Future extension slots */
-  APTR reserved[1];
+  APTR reserved[0];
 
 } ZuneBackendOps;
 
