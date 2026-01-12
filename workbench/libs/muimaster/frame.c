@@ -390,11 +390,9 @@ BOOL zune_frame_try_renderer(Object *obj, struct MUI_AreaData *data, const struc
         if (WindowObtainObjectDrawBuffer(mri, obj, (UWORD)bgw, (UWORD)bgh, ZUNE_DRAWINGBOARD_LINEARMEM, &board, &buffer_port)) {
             /*
              * Copy background from window to DrawingBoard for proper AA blending.
-             * This uses ZuneCopyFromRastPort which works with both CyberGfx and
-             * OpenGL backends - CyberGfx copies directly to pixel buffer, OpenGL
-             * uploads as texture and draws to framebuffer.
+             * ZuneCapture works with both CyberGfx and OpenGL backends.
              */
-            ZuneCopyFromRastPort(buffer_port, rp, bgleft, bgtop, 0, 0, bgw, bgh);
+            ZuneCapture(buffer_port, bgleft, bgtop, 0, 0, bgw, bgh);
 
             /* Draw to buffer with coordinates relative to buffer origin */
             struct ZuneRect buffer_rect = {
@@ -424,7 +422,7 @@ BOOL zune_frame_try_renderer(Object *obj, struct MUI_AreaData *data, const struc
             }
 
             /* Blit result back to screen */
-            BlitDrawingBoardToRenderPortRects(buffer_port, port, 0, 0, bgleft, bgtop, bgw, bgh);
+            ZuneBlit(buffer_port, port, 0, 0, bgleft, bgtop, bgw, bgh);
 
             data->mad_Flags2 |= MADF2_ZUNE_RENDERER_BG | MADF2_ZUNE_FRAME_RENDERED;
         } else {
@@ -552,10 +550,10 @@ void zune_frame_draw_deferred_outline(Object *obj, struct MUI_AreaData *data,
         /* Use LINEARMEM flag to get a bitmap that supports direct pixel locking for AA rendering */
         if (WindowObtainObjectDrawBuffer(mri, obj, (UWORD)bgw, (UWORD)bgh, ZUNE_DRAWINGBOARD_LINEARMEM, &board, &buffer_port)) {
             /* Copy background from screen to buffer for proper AA blending.
-             * This uses ZuneCopyFromRastPort which works with both CyberGfx and
+             * This uses ZuneCapture which works with both CyberGfx and
              * OpenGL backends (OpenGL doesn't support direct pixel access).
              */
-            ZuneCopyFromRastPort(buffer_port, rp, bgleft, bgtop, 0, 0, bgw, bgh);
+            ZuneCapture(buffer_port, bgleft, bgtop, 0, 0, bgw, bgh);
 
             /* Draw to buffer with coordinates relative to buffer origin */
             struct ZuneRect buffer_rect = {
@@ -568,7 +566,7 @@ void zune_frame_draw_deferred_outline(Object *obj, struct MUI_AreaData *data,
             ZuneDrawRectangleRoundedOutlineStyledAA(buffer_port, &buffer_rect, radius, border_width, border_color);
 
             /* Blit result back to screen */
-            BlitDrawingBoardToRenderPortRects(buffer_port, port, 0, 0, bgleft, bgtop, bgw, bgh);
+            ZuneBlit(buffer_port, port, 0, 0, bgleft, bgtop, bgw, bgh);
         } else {
             /* Fallback to direct rendering if buffer allocation failed */
             use_drawbuffer = FALSE;

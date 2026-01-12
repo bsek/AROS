@@ -1015,7 +1015,7 @@ void FlushDoubleBuffer(struct MUI_RenderInfo *mri);
 static void WindowSyncFboToBitmap(struct MUI_RenderInfo *mri) {
     if (!mri || !mri->mri_RenderPort || !mri->mri_DrawingBoard)
         return;
-    SyncDrawingBoard(mri->mri_RenderPort);
+    ZuneSync(mri->mri_RenderPort);
 }
 
 static void WindowSyncBitmapToFbo(struct MUI_RenderInfo *mri) {
@@ -1023,9 +1023,9 @@ static void WindowSyncBitmapToFbo(struct MUI_RenderInfo *mri) {
         !mri->mri_DrawingBoard->rastport)
         return;
     ZuneSetTarget(mri->mri_RenderPort, mri->mri_DrawingBoard);
-    ZuneCopyFromRastPort(mri->mri_RenderPort, mri->mri_DrawingBoard->rastport,
-                         0, 0, 0, 0, mri->mri_DrawingBoard->width,
-                         mri->mri_DrawingBoard->height);
+    /* Reload the FBO from the DrawingBoard's bitmap.
+     * This syncs any legacy bitmap drawing back to the OpenGL FBO. */
+    ZuneReload(mri->mri_RenderPort);
 }
 
 static VOID RefreshWindow(Object *oWin, struct MUI_WindowData *data) {
@@ -3355,7 +3355,7 @@ void FlushDoubleBufferRegion(struct MUI_RenderInfo *mri, LONG left, LONG top, LO
 
         D(bug("FlushDoubleBufferRegion: board (%ld,%ld,%ld,%ld) -> window (%ld,%ld)\n", src_x, src_y, copy_width, copy_height, copy_left, copy_top));
 
-        ZuneBlitToWindow(mri->mri_RenderPort, src_x, src_y, copy_left, copy_top, copy_width, copy_height);
+        ZunePresent(mri->mri_RenderPort, src_x, src_y, copy_left, copy_top, copy_width, copy_height);
     }
 }
 
@@ -3544,6 +3544,10 @@ void WindowEndBufferedBatch(struct MUI_RenderInfo *mri) {
 static void DeinstallBackbuffer(struct IClass *cl, Object *obj) {
     struct MUI_WindowData *data = INST_DATA(cl, obj);
     struct MUI_RenderInfo *mri = &data->wd_RenderInfo;
+
+    /* Cleanup per-object DrawBufferEntries first - they have their own RenderPorts
+     * that reference the window and must be cleaned up before the window closes */
+    ClearDrawBufferEntries(data);
 
     /* Cleanup DrawingBoard first (it may reference the RenderPort) */
     if (mri->mri_DrawingBoard) {
