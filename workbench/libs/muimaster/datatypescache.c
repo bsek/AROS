@@ -21,7 +21,7 @@
 #include <proto/utility.h>
 #include <proto/layers.h>
 #include <proto/cybergraphics.h>
-#include <proto/zunerenderer.h>
+#include <proto/zunegfx.h>
 
 //#define MYDEBUG 1
 #include "debug.h"

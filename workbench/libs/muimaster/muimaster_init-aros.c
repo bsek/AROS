@@ -8,7 +8,7 @@
 
 #include <proto/exec.h>
 #include <proto/graphics.h>
-#include <proto/zunerenderer.h>
+#include <proto/zunegfx.h>
 
 #include <clib/alib_protos.h>
 
@@ -22,7 +22,7 @@
 
 struct Library *MUIMasterBase;
 struct Library *MUIScreenBase;
-struct Library *ZuneRendererBase;
+struct Library *ZuneGfxBase;
 
 static struct TextAttr topaz8Attr = {
     "topaz.font",
@@ -92,7 +92,7 @@ static int MUIMasterInit(LIBBASETYPEPTR lh) {
 
     MUIScreenBase = OpenLibrary("muiscreen.library", 0);
 
-    MUIMB(lh)->zunerendererbase = ZuneRendererBase = OpenLibrary(ZUNERENDERER_NAME, ZUNERENDERER_VERSION);
+    MUIMB(lh)->zunegfxbase = ZuneGfxBase = OpenLibrary(ZUNEGFX_NAME, ZUNEGFX_VERSION);
     return TRUE;
 }
 
@@ -111,10 +111,10 @@ static int MUIMasterExpunge(LIBBASETYPEPTR lh) {
     if (MUIMB(lh)->topaz8font != NULL)
         CloseFont(MUIMB(lh)->topaz8font);
 
-    if (ZuneRendererBase) {
-        CloseLibrary(ZuneRendererBase);
-        ZuneRendererBase = NULL;
-        MUIMB(lh)->zunerendererbase = NULL;
+    if (ZuneGfxBase) {
+        CloseLibrary(ZuneGfxBase);
+        ZuneGfxBase = NULL;
+        MUIMB(lh)->zunegfxbase = NULL;
     }
 
     return TRUE;

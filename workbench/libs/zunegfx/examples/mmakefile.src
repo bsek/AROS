@@ -1,0 +1,26 @@
+#
+# Makefile for zunegfx examples
+
+include $(SRCDIR)/config/aros.cfg
+
+FILES  := \
+    opengl_test
+#    rect_demo
+#    texture_from_file_test \
+#    line_drawing_test \
+#    sdf_antialiasing_test_simple \
+#    texture_simple_test \
+#    texture_tiled_demo
+#    texture_test \
+#    simplified_batching_example \
+#    simplified_drawingboard_example \
+#    batching_performance_test \
+#    antialiasing_example
+
+#MM workbench-libs-zunegfx-examples : includes linklibs workbench-libs-zunegfx
+
+%build_progs mmake=workbench-libs-zunegfx-examples \
+    files=$(FILES) targetdir=$(AROSDIR)/ \
+    uselibs="zunegfx muimaster mui"
+
+%common

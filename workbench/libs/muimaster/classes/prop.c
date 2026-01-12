@@ -12,7 +12,7 @@
 #include <proto/utility.h>
 #include <proto/muimaster.h>
 #include <proto/cybergraphics.h>
-#include <proto/zunerenderer.h>
+#include <proto/zunegfx.h>
 
 #ifdef __AROS__
 #include <intuition/windecorclass.h>
@@ -590,7 +590,7 @@ int WriteTiledImageVertical(struct NewImage *dst, struct RastPort *maprp,
 }
 
 #ifdef __AROS__
-/* ZunePropRenderFunc - Renders prop gadget using zunerenderer
+/* ZunePropRenderFunc - Renders prop gadget using zunegfx
  * Used for STANDARD and NEWLOOK scrollbar types for modern rendering
  */
 AROS_UFH3
@@ -1083,7 +1083,7 @@ IPTR Prop__MUIM_Show(struct IClass *cl, Object *obj, struct MUIP_Show *msg)
             }
             else if (depth >= 15)
             {
-                /* Use zunerenderer for STANDARD and NEWLOOK scrollbar types
+                /* Use zunegfx for STANDARD and NEWLOOK scrollbar types
                  * when we have sufficient color depth */
                 struct MUI_RenderInfo *mri = muiRenderInfo(obj);
                 if (mri && mri->mri_RenderPort)

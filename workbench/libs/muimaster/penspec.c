@@ -7,7 +7,7 @@
 #include <string.h>
 #include <proto/dos.h>
 #include <proto/graphics.h>
-#include <proto/zunerenderer.h>
+#include <proto/zunegfx.h>
 
 /*  #define MYDEBUG 1 */
 #define DEBUG 0

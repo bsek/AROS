@@ -6,7 +6,7 @@
 #include <proto/graphics.h>
 #include <proto/intuition.h>
 #include <proto/muimaster.h>
-#include <proto/zunerenderer.h>
+#include <proto/zunegfx.h>
 
 #include "mui.h"
 #include "muimaster_intern.h"

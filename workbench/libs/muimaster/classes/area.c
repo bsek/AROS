@@ -27,7 +27,7 @@
 
 #include <proto/muimaster.h>
 #include <proto/utility.h>
-#include <proto/zunerenderer.h>
+#include <proto/zunegfx.h>
 #include <proto/cybergraphics.h>
 
 extern struct Library *MUIMasterBase;
