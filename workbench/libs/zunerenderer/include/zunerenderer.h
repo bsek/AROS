@@ -354,16 +354,34 @@ struct ZuneBrush {
 #define GetPixelAt(rp, x, y) GetPixel((rp), ZUNE_POINT_PTR((x), (y)))
 #define SetPixelAt(rp, x, y, color)                                            \
   SetPixel((rp), ZUNE_POINT_PTR((x), (y)), (color))
-#define BlitDrawingBoardRects(src, dst, src_x, src_y, dest_x, dest_y, width,   \
-                              height)                                          \
-  BlitDrawingBoard((src), (dst),                                               \
-                   ZUNE_RECT_PTR((src_x), (src_y), (width), (height)),         \
-                   ZUNE_RECT_PTR((dest_x), (dest_y), (width), (height)))
-#define BlitDrawingBoardToRenderPortRects(src_rp, dst_rp, src_x, src_y,        \
-                                          dest_x, dest_y, width, height)       \
-  BlitDrawingBoardToRenderPort(                                                \
-      (src_rp), (dst_rp), ZUNE_RECT_PTR((src_x), (src_y), (width), (height)),  \
-      ZUNE_RECT_PTR((dest_x), (dest_y), (width), (height)))
+
+/*
+ * Blit helper macros - set target before blitting for convenience
+ */
+
+/* Blit from DrawingBoard to DrawingBoard */
+#define ZuneBlitBoards(src_rp, dst_rp, src_x, src_y, dst_x, dst_y, w, h)       \
+  do {                                                                         \
+    ZuneSetTarget((src_rp), (src_rp)->target_board);                           \
+    ZuneSetTarget((dst_rp), (dst_rp)->target_board);                           \
+    ZuneBlit((src_rp), (dst_rp), (src_x), (src_y), (dst_x), (dst_y), (w), (h));\
+  } while (0)
+
+/* Blit from DrawingBoard to screen RastPort */
+#define ZuneBlitBoardToScreen(src_rp, dst_rp, src_x, src_y, dst_x, dst_y, w, h)\
+  do {                                                                         \
+    ZuneSetTarget((src_rp), (src_rp)->target_board);                           \
+    ZuneSetTarget((dst_rp), NULL);                                             \
+    ZuneBlit((src_rp), (dst_rp), (src_x), (src_y), (dst_x), (dst_y), (w), (h));\
+  } while (0)
+
+/* Blit from screen RastPort to DrawingBoard */  
+#define ZuneBlitScreenToBoard(src_rp, dst_rp, src_x, src_y, dst_x, dst_y, w, h)\
+  do {                                                                         \
+    ZuneSetTarget((src_rp), NULL);                                             \
+    ZuneSetTarget((dst_rp), (dst_rp)->target_board);                           \
+    ZuneBlit((src_rp), (dst_rp), (src_x), (src_y), (dst_x), (dst_y), (w), (h));\
+  } while (0)
 #define ZuneCreateCircleRegionAt(cx, cy, radius)                               \
   ZuneCreateCircleRegion(ZUNE_POINT_PTR((cx), (cy)), (radius))
 #define ZuneCreateRoundedRectRegionRect(x, y, w, h, radius)                    \
@@ -534,16 +552,8 @@ BOOL ZuneSetTarget(struct RenderPort *rp, struct DrawingBoard *board);
 void DestroyDrawingBoard(struct RenderPort *rp, struct DrawingBoard *board);
 void ClearDrawingBoard(struct RenderPort *rp, ULONG color);
 
-/*
- * SyncDrawingBoard - Sync backend buffer to DrawingBoard bitmap
- *
- * For OpenGL backend: Copies FBO contents to the DrawingBoard's bitmap.
- * This is required before using CyberGfx/graphics.library directly on
- * the DrawingBoard's bitmap after OpenGL rendering.
- *
- * For CyberGfx backend: No-op (bitmap is already the render target).
- */
-BOOL SyncDrawingBoard(struct RenderPort *rp);
+/* Note: SyncDrawingBoard has been removed. Use ZunePresent() or ZuneBlit()
+ * instead - they automatically sync the backend buffer before blitting. */
 
 /*****************************************************************************/
 /* Core Drawing API - Clean and Simple */
@@ -664,12 +674,58 @@ ULONG GetBatchCount(struct RenderPort *rp);
 /* Blitting and Surface Operations */
 /*****************************************************************************/
 
-void BlitDrawingBoard(struct DrawingBoard *source, struct DrawingBoard *target,
-                      struct ZuneRect *src_rect, struct ZuneRect *dest_rect);
-void BlitDrawingBoardToRenderPort(struct RenderPort *source,
-                                  struct RenderPort *target,
-                                  struct ZuneRect *src_rect,
-                                  struct ZuneRect *dest_rect);
+/*
+ * ZuneBlit - General-purpose blit between RenderPorts
+ *
+ * Handles all combinations:
+ * - DrawingBoard to DrawingBoard
+ * - DrawingBoard to screen RastPort  
+ * - Screen RastPort to DrawingBoard
+ * - Screen RastPort to screen RastPort
+ *
+ * Automatically syncs OpenGL FBO to bitmap when source is a DrawingBoard.
+ * Use the helper macros (ZuneBlitBoards, ZuneBlitBoardToScreen, etc.)
+ * for convenience when you need to set targets before blitting.
+ */
+void ZuneBlit(struct RenderPort *src_rp, struct RenderPort *dst_rp,
+              WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
+              UWORD width, UWORD height);
+
+/*
+ * ZunePresent - Present DrawingBoard content to window
+ *
+ * This is the primary function for double-buffered rendering.
+ * Call it to display what has been rendered to the DrawingBoard.
+ * Automatically syncs OpenGL FBO to bitmap before blitting.
+ */
+void ZunePresent(struct RenderPort *rp,
+                 WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
+                 UWORD width, UWORD height);
+
+/*
+ * ZuneCapture - Capture pixels from window into DrawingBoard
+ *
+ * Used to read background content for proper alpha blending
+ * when drawing antialiased graphics over existing window content.
+ */
+void ZuneCapture(struct RenderPort *rp,
+                 WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
+                 UWORD width, UWORD height);
+
+/**
+ * Synchronize backend render buffer to DrawingBoard's bitmap.
+ * For OpenGL: copies FBO to bitmap. For CyberGfx: no-op.
+ * Call after Zune drawing and before direct bitmap operations.
+ */
+BOOL ZuneSync(struct RenderPort *rp);
+
+/**
+ * Reload backend render buffer from DrawingBoard's bitmap.
+ * For OpenGL: uploads bitmap to FBO. For CyberGfx: no-op.
+ * Call after direct bitmap operations and before Zune drawing.
+ * This is the inverse of ZuneSync().
+ */
+BOOL ZuneReload(struct RenderPort *rp);
 
 /*****************************************************************************/
 /* Texture Management */
@@ -749,18 +805,5 @@ ULONG BlendColors(ULONG color1, ULONG color2, UBYTE alpha);
 /*****************************************************************************/
 
 void ZuneInitPenCache(struct RenderPort *rp, LONG *pens, UWORD count);
-
-/*****************************************************************************/
-/* Window Blitting */
-/*****************************************************************************/
-
-/*
- * ZuneBlitToWindow - Blit DrawingBoard content directly to window
- *
- * Blits from the RenderPort's DrawingBoard to its associated window.
- * This eliminates the need for a separate WindowRenderPort.
- */
-void ZuneBlitToWindow(struct RenderPort *rp, WORD src_x, WORD src_y,
-                      WORD dst_x, WORD dst_y, UWORD width, UWORD height);
 
 #endif /* LIBRARIES_ZUNERENDERER_H */
