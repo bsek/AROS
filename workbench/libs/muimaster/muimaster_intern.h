@@ -86,7 +86,7 @@ struct MUIMasterBase_intern
     struct MinList              Applications;
     struct MUI_PenSpec          *defaultPens;
 
-    struct Library *zunerendererbase;
+    struct Library *zunegfxbase;
 };
 
 

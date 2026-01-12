@@ -13,7 +13,7 @@
 #include <proto/layers.h>
 #include <proto/intuition.h>
 #include <proto/muimaster.h>
-#include <proto/zunerenderer.h>
+#include <proto/zunegfx.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -22,7 +22,7 @@
 #include <clib/alib_protos.h>
 
 #include "inline/muimaster.h"
-#include "inline/zunerenderer.h"
+#include "inline/zunegfx.h"
 #include "mui.h"
 #include "macros.h"
 #include "classes/area.h"
@@ -31,7 +31,7 @@
 #include "frame.h"
 #include "imspec_intern.h"
 #include "muimaster_intern.h"
-#include <libraries/zunerenderer.h>
+#include <libraries/zunegfx.h>
 #include <datatypes/pictureclass.h>
 
 #define DEBUG 1
@@ -53,7 +53,7 @@ struct FrameRendererBrush {
     struct ZuneTexture *texture; /* optional temp texture to destroy after draw */
 };
 
-static inline BOOL frame_renderer_can_use_zunerenderer(struct MUI_RenderInfo *mri) {
+static inline BOOL frame_renderer_can_use_zunegfx(struct MUI_RenderInfo *mri) {
     return mri && mri->mri_RenderPort && (mri->mri_RenderPort->target_rp == mri->mri_RastPort);
 }
 
@@ -310,7 +310,7 @@ BOOL zune_frame_try_renderer(Object *obj, struct MUI_AreaData *data, const struc
         return FALSE;
 
     mri = data->mad_RenderInfo;
-    if (!frame_renderer_can_use_zunerenderer(mri))
+    if (!frame_renderer_can_use_zunegfx(mri))
         return FALSE;
 
     D(bug("Checking border radius zune_frame_try_renderer\n"));
@@ -486,7 +486,7 @@ void zune_frame_draw_deferred_outline(Object *obj, struct MUI_AreaData *data,
         return;
 
     mri = data->mad_RenderInfo;
-    if (!frame_renderer_can_use_zunerenderer(mri))
+    if (!frame_renderer_can_use_zunegfx(mri))
         return;
 
     radius = frame->border_radius;
@@ -1031,13 +1031,13 @@ static void rect_draw(struct dt_frame_image *fi, struct MUI_RenderInfo *mri,
 }
 
 /**************************************************************************
- Helper function to draw simple rect borders using zunerenderer
+ Helper function to draw simple rect borders using zunegfx
 **************************************************************************/
-static BOOL rect_draw_with_zunerenderer(struct MUI_RenderInfo *mri, int left,
+static BOOL rect_draw_with_zunegfx(struct MUI_RenderInfo *mri, int left,
                                         int top, int width, int height,
                                         MPen preset_color)
 {
-    if (!frame_renderer_can_use_zunerenderer(mri))
+    if (!frame_renderer_can_use_zunegfx(mri))
         return FALSE;
 
     if (width <= 0 || height <= 0)
@@ -1074,8 +1074,8 @@ static void frame_white_rect_draw(struct dt_frame_image *fi,
                                   int gw, int gh, int left, int top, int width,
                                   int height)
 {
-    /* Try zunerenderer first, fallback to classic rendering */
-    if (rect_draw_with_zunerenderer(mri, left, top, width, height, MPEN_SHINE))
+    /* Try zunegfx first, fallback to classic rendering */
+    if (rect_draw_with_zunegfx(mri, left, top, width, height, MPEN_SHINE))
         return;
 
     rect_draw(fi, mri, left, top, width, height, MPEN_SHINE);
@@ -1089,8 +1089,8 @@ static void frame_black_rect_draw(struct dt_frame_image *fi,
                                   int gw, int gh, int left, int top, int width,
                                   int height)
 {
-    /* Try zunerenderer first, fallback to classic rendering */
-    if (rect_draw_with_zunerenderer(mri, left, top, width, height, MPEN_SHADOW))
+    /* Try zunegfx first, fallback to classic rendering */
+    if (rect_draw_with_zunegfx(mri, left, top, width, height, MPEN_SHADOW))
         return;
 
     rect_draw(fi, mri, left, top, width, height, MPEN_SHADOW);

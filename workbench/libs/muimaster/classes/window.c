@@ -4,7 +4,7 @@
     All rights reserved.
 
 */
-#include "libraries/zunerenderer.h"
+#include "libraries/zunegfx.h"
 #include <exec/memory.h>
 #include <exec/types.h>
 
@@ -29,7 +29,7 @@
 #include <proto/muimaster.h>
 #include <proto/utility.h>
 #include <proto/workbench.h>
-#include <proto/zunerenderer.h>
+#include <proto/zunegfx.h>
 
 #define MUI_OBSOLETE /* for the obsolete menu stuff */
 
@@ -750,7 +750,7 @@ static void ShowRenderInfo(struct MUI_RenderInfo *mri) {
     if (mri->mri_DrawingBoard) {
         /* Modern double buffering with DrawingBoard
          * MUI renders to the DrawingBoard's bitmap RastPort (legacy SetAPen/RectFill)
-         * zunerenderer draws to DrawingBoard via mri_RenderPort (may use FBO for OpenGL) */
+         * zunegfx draws to DrawingBoard via mri_RenderPort (may use FBO for OpenGL) */
         mri->mri_RastPort = mri->mri_DrawingBoard->rastport;
         D(bug("ShowRenderInfo: Using DrawingBoard for double buffering\n"));
         D(bug("  mri_DrawingBoard: %p\n", mri->mri_DrawingBoard));
@@ -3226,7 +3226,7 @@ static void InstallBackbuffer(struct IClass *cl, Object *obj) {
     if (!win)
         return;
 
-    /* Create main RenderPort for this window - always needed for zunerenderer */
+    /* Create main RenderPort for this window - always needed for zunegfx */
     if (!mri->mri_RenderPort) {
         mri->mri_RenderPort = CreateRenderPortForWindow(win, mri->mri_Colormap, BACKEND_CYBERGFX);
         if (!mri->mri_RenderPort) {
@@ -3264,7 +3264,7 @@ static void InstallBackbuffer(struct IClass *cl, Object *obj) {
         D(bug("  mri_DrawingBoard->rastport->BitMap: %p\n", mri->mri_DrawingBoard->rastport->BitMap));
         D(bug("  mri_DrawingBoard->bitmap: %p\n", mri->mri_DrawingBoard->bitmap));
 
-        /* Set the RenderPort to target the DrawingBoard for zunerenderer operations */
+        /* Set the RenderPort to target the DrawingBoard for zunegfx operations */
         ZuneSetTarget(mri->mri_RenderPort, mri->mri_DrawingBoard);
 
         D(bug("Double buffer installed: DrawingBoard %dx%d, bitmap=%p\n",

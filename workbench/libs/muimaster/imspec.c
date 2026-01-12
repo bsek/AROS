@@ -44,8 +44,8 @@
 #include "penspec.h"
 #include "imspec_intern.h"
 
-#include <proto/zunerenderer.h>
-#include <libraries/zunerenderer.h>
+#include <proto/zunegfx.h>
+#include <libraries/zunegfx.h>
 
 extern struct Library *MUIMasterBase;
 
