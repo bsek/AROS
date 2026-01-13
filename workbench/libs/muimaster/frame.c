@@ -391,8 +391,10 @@ BOOL zune_frame_try_renderer(Object *obj, struct MUI_AreaData *data, const struc
             /*
              * Copy background from window to DrawingBoard for proper AA blending.
              * ZuneCapture works with both CyberGfx and OpenGL backends.
+             * We pass 'rp' (mri->mri_RastPort) which points to the double buffer
+             * if enabled, ensuring we read from the correct source.
              */
-            ZuneCapture(buffer_port, bgleft, bgtop, 0, 0, bgw, bgh);
+            ZuneCapture(buffer_port, rp, bgleft, bgtop, 0, 0, bgw, bgh);
 
             /* Draw to buffer with coordinates relative to buffer origin */
             struct ZuneRect buffer_rect = {
@@ -552,8 +554,9 @@ void zune_frame_draw_deferred_outline(Object *obj, struct MUI_AreaData *data,
             /* Copy background from screen to buffer for proper AA blending.
              * This uses ZuneCapture which works with both CyberGfx and
              * OpenGL backends (OpenGL doesn't support direct pixel access).
+             * We pass 'rp' (mri->mri_RastPort) which points to the double buffer.
              */
-            ZuneCapture(buffer_port, bgleft, bgtop, 0, 0, bgw, bgh);
+            ZuneCapture(buffer_port, rp, bgleft, bgtop, 0, 0, bgw, bgh);
 
             /* Draw to buffer with coordinates relative to buffer origin */
             struct ZuneRect buffer_rect = {

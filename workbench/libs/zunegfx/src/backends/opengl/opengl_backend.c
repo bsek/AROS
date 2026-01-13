@@ -222,6 +222,7 @@ static void OpenGLCleanupBackend(ZuneBackendContext *ctx);
 static BOOL OpenGLIsAvailable(void);
 static BOOL OpenGLIsCompatible(struct RenderPort *rp);
 static ULONG OpenGLGetCapabilities(void);
+static ULONG OpenGLGetPixelFormat(struct BitMap *bitmap);
 
 static BOOL OpenGLInitRenderPort(struct RenderPort *rp);
 static void OpenGLCleanupRenderPort(struct RenderPort *rp);
@@ -454,8 +455,19 @@ static void OpenGLCopyFromRastPort(struct RenderPort *rp, struct RastPort *src_r
     }
 
     /* Read pixels from source RastPort */
+    D(bug("[ZuneRenderer:OpenGL] OpenGLCopyFromRastPort: Reading from RastPort %p, BitMap %p\n",
+          src_rp, src_rp->BitMap));
     ReadPixelArray(pixelbuffer, 0, 0, width * 4,
                    src_rp, src_x, src_y, width, height, RECTFMT_RGBA);
+
+    /* Debug: show first few pixels read from RastPort */
+    D(bug("[ZuneRenderer:OpenGL] OpenGLCopyFromRastPort: First pixel from RastPort: RGBA %02x %02x %02x %02x\n",
+          pixelbuffer[0], pixelbuffer[1], pixelbuffer[2], pixelbuffer[3]));
+    D(bug("[ZuneRenderer:OpenGL] OpenGLCopyFromRastPort: Pixel at (10,10): RGBA %02x %02x %02x %02x\n",
+          pixelbuffer[(10 * width + 10) * 4 + 0],
+          pixelbuffer[(10 * width + 10) * 4 + 1],
+          pixelbuffer[(10 * width + 10) * 4 + 2],
+          pixelbuffer[(10 * width + 10) * 4 + 3]));
 
     /* Legacy graphics.library draws often come back with alpha=0; force opaque */
     for (ULONG i = 3; i < (ULONG)width * height * 4; i += 4) {
@@ -491,16 +503,42 @@ static void OpenGLCopyFromRastPort(struct RenderPort *rp, struct RastPort *src_r
     /* Draw the texture at the destination position */
     glEnable(GL_TEXTURE_2D);
 
+    /*
+     * CRITICAL: Disable blending when copying from RastPort.
+     * We want to REPLACE the FBO contents with the RastPort contents,
+     * not blend them together. If blending is enabled and the FBO has
+     * uninitialized/garbage data, we'll see random artifacts.
+     */
+    glDisable(GL_BLEND);
+
+    /* Disable any active shader program - use fixed function pipeline */
+    if (glUseProgram_ptr) {
+        glUseProgram_ptr(0);
+    }
+
     /* Use white color so texture colors come through unchanged */
     glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 
+    D(bug("[ZuneRenderer:OpenGL] OpenGLCopyFromRastPort: Drawing quad dst(%d,%d) size %dx%d\n",
+          dst_x, dst_y, width, height));
+
+    /*
+     * Draw a textured quad covering the destination area.
+     * The texture coordinates map the full texture (0,0)-(1,1) to the quad.
+     * Note: texture was flipped vertically, so we use normal texcoords here.
+     */
     glBegin(GL_QUADS);
-    /* Note: Our ortho projection has Y flipped (0 at top, height at bottom) */
-    glTexCoord2f(0.0f, 1.0f); glVertex2i(dst_x, dst_y);
-    glTexCoord2f(1.0f, 1.0f); glVertex2i(dst_x + width, dst_y);
-    glTexCoord2f(1.0f, 0.0f); glVertex2i(dst_x + width, dst_y + height);
-    glTexCoord2f(0.0f, 0.0f); glVertex2i(dst_x, dst_y + height);
+    glTexCoord2f(0.0f, 0.0f); glVertex2i(dst_x, dst_y);
+    glTexCoord2f(1.0f, 0.0f); glVertex2i(dst_x + width, dst_y);
+    glTexCoord2f(1.0f, 1.0f); glVertex2i(dst_x + width, dst_y + height);
+    glTexCoord2f(0.0f, 1.0f); glVertex2i(dst_x, dst_y + height);
     glEnd();
+
+    /* Flush to ensure drawing is complete */
+    glFlush();
+
+    /* Re-enable blending for subsequent operations */
+    glEnable(GL_BLEND);
 
     glDisable(GL_TEXTURE_2D);
 
@@ -510,7 +548,7 @@ static void OpenGLCopyFromRastPort(struct RenderPort *rp, struct RastPort *src_r
     FreeVec(flipped_buffer);
     FreeVec(pixelbuffer);
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGLCopyFromRastPort: Copy complete\n"));
+    D(bug("[ZuneRenderer:OpenGL] OpenGLCopyFromRastPort: Copy complete, texture drawn to FBO\n"));
 }
 
 /*****************************************************************************/
@@ -526,6 +564,7 @@ ZuneBackendOps opengl_backend_ops = {
     .CleanupBackend = OpenGLCleanupBackend,
     .IsAvailable = OpenGLIsAvailable,
     .IsCompatible = OpenGLIsCompatible,
+    .GetPixelFormat = OpenGLGetPixelFormat,
 
     .InitRenderPort = OpenGLInitRenderPort,
     .CleanupRenderPort = OpenGLCleanupRenderPort,
@@ -1297,6 +1336,16 @@ static OpenGLFBOData *OpenGL_CreateFBO(UWORD width, UWORD height)
         return NULL;
     }
 
+    /*
+     * CRITICAL: Clear the FBO to a known state (transparent black) immediately
+     * after creation. Without this, the FBO contains uninitialized garbage data
+     * which will show through when drawing with alpha blending or when
+     * CopyFromRastPort is called before any other drawing.
+     */
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: Cleared FBO to transparent\n"));
+
     /* Unbind FBO (return to default framebuffer) */
     glBindFramebuffer_ptr(GL_FRAMEBUFFER, 0);
 
@@ -1736,11 +1785,36 @@ void OpenGL_BlitFBOToRastPort(struct DrawingBoard *board, struct RastPort *dst_r
         return;
     }
 
+    /*
+     * CRITICAL: Make the FBO's parent GL context current before any GL operations.
+     * FBOs are tied to the GL context they were created in - we must use that
+     * same context to read from them.
+     */
+    if (fbo->parent_context && fbo->parent_context->gl_context) {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: Using FBO's parent context %p\n",
+              fbo->parent_context->gl_context));
+        glAMakeCurrent((GLAContext)fbo->parent_context->gl_context);
+    } else if (g_opengl_priv && g_opengl_priv->gl_context) {
+        /* Fallback to global context */
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: Using global context %p\n",
+              g_opengl_priv->gl_context));
+        glAMakeCurrent((GLAContext)g_opengl_priv->gl_context);
+    } else {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: No GL context available\n"));
+        return;
+    }
+
     /* Clamp dimensions to FBO size */
+    D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: Before clamp: src(%d,%d) size %dx%d, fbo size %dx%d\n",
+          src_x, src_y, width, height, fbo->width, fbo->height));
+
     if (src_x < 0) { dst_x -= src_x; width += src_x; src_x = 0; }
     if (src_y < 0) { dst_y -= src_y; height += src_y; src_y = 0; }
     if (src_x + width > fbo->width) width = fbo->width - src_x;
     if (src_y + height > fbo->height) height = fbo->height - src_y;
+
+    D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: After clamp: src(%d,%d) size %dx%d\n",
+          src_x, src_y, width, height));
 
     if (width <= 0 || height <= 0) {
         D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: Nothing to blit after clamping\n"));
@@ -1748,13 +1822,29 @@ void OpenGL_BlitFBOToRastPort(struct DrawingBoard *board, struct RastPort *dst_r
     }
 
     /* Allocate buffers */
-    pixelbuffer = AllocVec(width * height * 4, MEMF_ANY);
+    {
+        ULONG buffer_size = (ULONG)width * (ULONG)height * 4;
+        APTR avail_mem;
+
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: Allocating buffer %ldx%ldx4 = %ld bytes\n",
+              (LONG)width, (LONG)height, buffer_size));
+
+        /* Check available memory before allocation attempt */
+        avail_mem = (APTR)AvailMem(MEMF_ANY);
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: Available memory: %ld bytes\n", (LONG)avail_mem));
+
+        pixelbuffer = AllocVec(buffer_size, MEMF_PUBLIC | MEMF_CLEAR);
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: AllocVec returned %p\n", pixelbuffer));
+    }
     if (!pixelbuffer) {
         D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: Failed to allocate pixel buffer\n"));
         return;
     }
 
-    flipped_buffer = AllocVec(width * height * 4, MEMF_ANY);
+    {
+        ULONG buffer_size = (ULONG)width * (ULONG)height * 4;
+        flipped_buffer = AllocVec(buffer_size, MEMF_PUBLIC | MEMF_CLEAR);
+    }
     if (!flipped_buffer) {
         D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: Failed to allocate flipped buffer\n"));
         FreeVec(pixelbuffer);
@@ -2160,6 +2250,15 @@ static ULONG OpenGLGetCapabilities(void)
            BACKEND_CAP_TEXTURES;
 }
 
+static ULONG OpenGLGetPixelFormat(struct BitMap *bitmap)
+{
+    /* OpenGL backend uses CyberGfx bitmaps as backing store */
+    if (CyberGfxBase && bitmap) {
+        return GetCyberMapAttr(bitmap, CYBRMATTR_PIXFMT);
+    }
+    return 0;
+}
+
 /*****************************************************************************/
 /* GL Context Management Helpers                                             */
 /*****************************************************************************/
@@ -2551,11 +2650,17 @@ static BOOL OpenGL_SwitchToDrawingBoard(struct RenderPort *rp)
         /* Store FBO in DrawingBoard */
         board->backend_data = fbo;
 
-        /* Track parent context for cleanup */
+        /*
+         * Track parent context for cleanup and for making the correct context
+         * current when blitting. Note: current_context may be NULL if we're
+         * using the global context path (which is common for single-context
+         * AROS/Mesa). In that case, OpenGL_BlitFBOToRastPort will fall back
+         * to g_opengl_priv->gl_context.
+         */
         fbo->parent_context = g_opengl_priv->current_context;
 
-        D(bug("[ZuneRenderer:OpenGL] SwitchToDrawingBoard: Created FBO %d for board %p\n",
-              fbo->fbo_id, board));
+        D(bug("[ZuneRenderer:OpenGL] SwitchToDrawingBoard: Created FBO %d for board %p (parent_context=%p)\n",
+              fbo->fbo_id, board, fbo->parent_context));
     }
 
     /* Check if we need to switch to this FBO */

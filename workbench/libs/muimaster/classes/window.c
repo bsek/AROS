@@ -3693,6 +3693,8 @@ static ULONG WindowOpen(struct IClass *cl, Object *obj) {
 static ULONG WindowClose(struct IClass *cl, Object *obj) {
     struct MUI_WindowData *data = INST_DATA(cl, obj);
 
+    D(bug("WindowClose: Start\n"));
+
     if (data->wd_ActiveObject != NULL) {
         data->wd_OldActive = data->wd_ActiveObject;
         set(obj, MUIA_Window_ActiveObject, MUIV_Window_ActiveObject_None);
@@ -3700,23 +3702,32 @@ static ULONG WindowClose(struct IClass *cl, Object *obj) {
 
     KillHelpBubble(data, obj, BUBBLEHELP_TICKER_FIRST);
 
+    D(bug("WindowClose: Before DoHideMethod\n"));
     /* remove from window */
     DoHideMethod(data->wd_RootObject);
+    D(bug("WindowClose: After DoHideMethod\n"));
     zune_imspec_hide(data->wd_Background);
+    D(bug("WindowClose: After zune_imspec_hide\n"));
 
     DeinstallBackbuffer(cl, obj);
+    D(bug("WindowClose: After DeinstallBackbuffer\n"));
 
     HideRenderInfo(&data->wd_RenderInfo);
+    D(bug("WindowClose: After HideRenderInfo\n"));
 
     /* close here ... */
     UndisplayWindow(obj, data);
+    D(bug("WindowClose: After UndisplayWindow\n"));
 
     data->wd_Flags &= ~MUIWF_OPENED;
     data->wd_Menustrip = NULL;
 
     /* free display dependant data */
+    D(bug("WindowClose: Before MUIM_Cleanup on RootObject\n"));
     DoMethod(data->wd_RootObject, MUIM_Cleanup);
+    D(bug("WindowClose: After MUIM_Cleanup on RootObject\n"));
     DoMethod(obj, MUIM_Window_Cleanup);
+    D(bug("WindowClose: Done\n"));
     return TRUE;
 }
 
