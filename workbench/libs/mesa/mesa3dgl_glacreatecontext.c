@@ -103,6 +103,8 @@
 *****************************************************************************/
 {
     struct mesa3dgl_context * ctx = NULL;
+    struct mesa3dgl_context * share_ctx = NULL;
+    struct st_context_iface * share_st = NULL;
     struct TagItem pscreen_tags[] =
     {
             { CPS_PipeFriendBitMap,     0       },
@@ -114,6 +116,13 @@
     enum st_context_error st_error = 0;
 
     D(bug("[MESA3DGL] %s()\n", __func__));
+
+    /* Check for shared context */
+    share_ctx = (struct mesa3dgl_context *)GetTagData(GLA_ShareContext, 0, tagList);
+    if (share_ctx)
+    {
+        D(bug("[MESA3DGL] %s: Sharing context with %p\n", __func__, share_ctx));
+    }
 
     /* Allocate MESA3DGL context */
     if (!(ctx = (struct mesa3dgl_context *)AllocVec(sizeof(struct mesa3dgl_context), MEMF_PUBLIC | MEMF_CLEAR)))
@@ -142,32 +151,73 @@
         goto error_out;
     }
 
-    if (CreatePipeV(pscreen_tags))
+    /*
+     * Shared Context Handling:
+     * If a share context is provided, we reuse its pipe_screen and stmanager.
+     * This allows sharing of textures, buffers, and shader programs between contexts.
+     * Each context still gets its own framebuffer and rendering state.
+     */
+    if (share_ctx && share_ctx->stmanager)
     {
-        pscreen = CreatePipeScreen(ctx->driver);
-        if (!pscreen)
+        D(bug("[MESA3DGL] %s: Reusing pipe_screen and stmanager from share context\n", __func__));
+        
+        /* Reuse the shared context's stmanager and pipe_screen */
+        ctx->stmanager = share_ctx->stmanager;
+        ctx->owns_stmanager = FALSE;
+        ctx->share_ctx = share_ctx;
+        
+        /* Increment reference count on the owning context */
+        share_ctx->ref_count++;
+        
+        /* We still need our own driver object for rendering */
+        pscreen_tags[0].ti_Data = (IPTR)ctx->visible_rp->BitMap;
+        if (!CreatePipeV(pscreen_tags))
         {
-            bug("%s: ERROR -  failed to create gallium pipe screen\n", __func__);
+            bug("%s: ERROR - failed to create gallium pipe for shared context\n", __func__);
+            share_ctx->ref_count--;
             goto error_out;
         }
+        
+        /* Get the Mesa st_context for sharing */
+        share_st = share_ctx->st;
+        
+        D(bug("[MESA3DGL] %s: Shared stmanager @ 0x%p, share_st @ 0x%p\n", __func__, ctx->stmanager, share_st));
     }
     else
     {
-        bug("%s: ERROR -  failed to create gallium pipe\n", __func__);
-        goto error_out;
-    }
+        /* No sharing - create new pipe_screen and stmanager */
+        if (CreatePipeV(pscreen_tags))
+        {
+            pscreen = CreatePipeScreen(ctx->driver);
+            if (!pscreen)
+            {
+                bug("%s: ERROR -  failed to create gallium pipe screen\n", __func__);
+                goto error_out;
+            }
+        }
+        else
+        {
+            bug("%s: ERROR -  failed to create gallium pipe\n", __func__);
+            goto error_out;
+        }
 
-    D(bug("[MESA3DGL] %s: pipe screen @ 0x%p\n", __func__, pscreen));
-    D(bug("[MESA3DGL] %s: pipe driver @ 0x%p\n", __func__, ctx->driver));
+        D(bug("[MESA3DGL] %s: pipe screen @ 0x%p\n", __func__, pscreen));
+        D(bug("[MESA3DGL] %s: pipe driver @ 0x%p\n", __func__, ctx->driver));
 
-    if (!(ctx->stmanager = MESA3DGLNewStManager(pscreen)))
-    {
-        bug("%s: ERROR - failed to create ST Manager\n", __func__);
-        DestroyPipeScreen(ctx->driver, pscreen);
+        if (!(ctx->stmanager = MESA3DGLNewStManager(pscreen)))
+        {
+            bug("%s: ERROR - failed to create ST Manager\n", __func__);
+            DestroyPipeScreen(ctx->driver, pscreen);
 #if (0)
-        DestroyPipe(ctx->driver);
+            DestroyPipe(ctx->driver);
 #endif
-        goto error_out;
+            goto error_out;
+        }
+        
+        /* This context owns its stmanager */
+        ctx->owns_stmanager = TRUE;
+        ctx->ref_count = 1;
+        ctx->share_ctx = NULL;
     }
 
     D(bug("[MESA3DGL] %s: ST Manager @ 0x%p \n", __func__, ctx->stmanager));
@@ -181,12 +231,12 @@
     attribs.profile = ST_PROFILE_DEFAULT;
     attribs.visual = ctx->stvis;
 
-    D(bug("[MESA3DGL] %s: Calling glstapi->create_context (glstapi=%p, stmanager=%p)\n", __func__, glstapi, ctx->stmanager));
+    D(bug("[MESA3DGL] %s: Calling glstapi->create_context (glstapi=%p, stmanager=%p, share_st=%p)\n", __func__, glstapi, ctx->stmanager, share_st));
     D(bug("[MESA3DGL] %s:   attribs.profile=%d\n", __func__, attribs.profile));
     D(bug("[MESA3DGL] %s:   visual.color_format=%d depth_stencil_format=%d\n", __func__,
           ctx->stvis.color_format, ctx->stvis.depth_stencil_format));
 
-    ctx->st = glstapi->create_context(glstapi, ctx->stmanager, &attribs, &st_error, NULL);
+    ctx->st = glstapi->create_context(glstapi, ctx->stmanager, &attribs, &st_error, share_st);
     if (!ctx->st)
     {
         bug("%s: ERROR - failed to create mesa state tracker context (st_error=%d)\n", __func__, st_error);
@@ -213,7 +263,18 @@
     return (GLAContext)ctx;
 
 error_out:
-    if (ctx->stmanager) MESA3DGLFreeStManager(ctx->driver, ctx->stmanager);
-    if (ctx) MESA3DGLFreeContext(ctx);
+    if (ctx)
+    {
+        if (ctx->stmanager && ctx->owns_stmanager)
+        {
+            MESA3DGLFreeStManager(ctx->driver, ctx->stmanager);
+        }
+        else if (ctx->share_ctx)
+        {
+            /* Decrement ref count on share context */
+            ctx->share_ctx->ref_count--;
+        }
+        MESA3DGLFreeContext(ctx);
+    }
     return (GLAContext)NULL;
 }

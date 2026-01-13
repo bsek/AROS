@@ -44,6 +44,9 @@ MESA3DGL_SOURCES = \
             mesa3dgl_glagetconfig \
             mesa3dgl_glagetcurrentcontext \
             mesa3dgl_glagetprocaddress \
+            mesa3dgl_glagetsharedcontext \
+            mesa3dgl_glagetpipescreen \
+            mesa3dgl_glagetresource \
             mesa3dgl_glamakecurrent \
             mesa3dgl_glasetrast \
             mesa3dgl_glaswapbuffers

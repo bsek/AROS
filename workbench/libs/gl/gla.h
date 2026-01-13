@@ -82,6 +82,15 @@ typedef APTR GLAContext;
 #define GLA_NoAccum             (GLA_Dummy + 0x003b)
 
 /*
+ * GLA_ShareContext: Share resources (textures, buffers, shaders) with another
+ *                   context. Pass an existing GLAContext. Both contexts must
+ *                   use the same visual format for sharing to work.
+ *                   The shared context must remain valid for the lifetime of
+ *                   all contexts sharing with it.
+ */
+#define GLA_ShareContext        (GLA_Dummy + 0x0040)
+
+/*
  * GLA API calls
  */
 
@@ -96,6 +105,13 @@ GLAPI GLAProc               GLAPIENTRY glAGetProcAddress(const GLubyte * procnam
 GLAPI GLAContext            GLAPIENTRY glAGetCurrentContext();
 GLAPI void                  GLAPIENTRY glASetRast(GLAContext ctx, struct TagItem *tagList);
 GLAPI void                  GLAPIENTRY glAGetConfig(GLAContext ctx, GLenum pname, GLint* params);
+
+/*
+ * Shared context query functions
+ */
+GLAPI GLAContext            GLAPIENTRY glAGetSharedContext(GLAContext ctx);
+GLAPI APTR                  GLAPIENTRY glAGetPipeScreen(GLAContext ctx);
+GLAPI APTR                  GLAPIENTRY glAGetRenderResource(GLAContext ctx);
 
 #ifdef __cplusplus
 }

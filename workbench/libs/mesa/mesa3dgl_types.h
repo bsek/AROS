@@ -46,6 +46,10 @@ struct mesa3dgl_context
     ULONG                      top, bottom;
     ULONG                      left, right;
 
+    /* Shared context support */
+    struct mesa3dgl_context     *share_ctx;      /* Context we share resources with (NULL if none) */
+    LONG                        ref_count;       /* Reference count for shared stmanager/pipe_screen */
+    BOOL                        owns_stmanager;  /* TRUE if this context owns the stmanager */
 };
 
 /*  state trackers GL API */
