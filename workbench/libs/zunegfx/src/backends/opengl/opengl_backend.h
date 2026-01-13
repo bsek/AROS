@@ -60,6 +60,7 @@ typedef struct OpenGLWindowContext {
     APTR        gl_context;         /* GLAContext for this window */
     BOOL        context_valid;      /* Context is valid and usable */
     BOOL        shaders_initialized; /* Shaders compiled for this context */
+    BOOL        uses_shared_context; /* TRUE if created with GLA_ShareContext */
     UWORD       width;              /* Current framebuffer width */
     UWORD       height;             /* Current framebuffer height */
 
@@ -87,6 +88,10 @@ typedef struct OpenGLFBOData {
     BOOL        valid;              /* FBO is valid and complete */
     BOOL        dirty;              /* FBO content modified, needs sync to bitmap */
 
+    /* Zero-copy compositing support */
+    APTR        pipe_resource;      /* Gallium pipe_resource for zero-copy access */
+    BOOL        resource_valid;     /* pipe_resource is valid for texture use */
+
     /* Parent context - the window context this FBO belongs to */
     OpenGLWindowContext *parent_context;
 } OpenGLFBOData;
@@ -112,6 +117,11 @@ typedef struct OpenGLPrivateData {
     struct Library *GLBase;         /* gl.library base */
     BOOL        initialized;        /* Backend initialized successfully */
     BOOL        gl_available;       /* GL library available and working */
+
+    /* Master GL context for shared resource management */
+    APTR        master_context;     /* Master GL context - all others share with this */
+    BOOL        master_context_created; /* Master context has been created */
+    BOOL        shared_contexts_supported; /* GLA_ShareContext is working */
 
     /* Global GL context (for single-context fallback mode) */
     APTR        gl_context;         /* GLAContext - the single global context */

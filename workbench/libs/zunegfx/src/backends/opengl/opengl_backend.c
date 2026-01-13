@@ -295,10 +295,17 @@ static BOOL OpenGL_BindFBO(OpenGLFBOData *fbo);
 static void OpenGL_UnbindFBO(void);
 
 /* Window context functions */
+static BOOL OpenGL_CreateMasterContext(struct Window *window);
 static OpenGLWindowContext *OpenGL_CreateWindowContext(struct Window *window);
 static void OpenGL_DestroyWindowContext(OpenGLWindowContext *ctx);
 static OpenGLWindowContext *OpenGL_FindWindowContext(struct Window *window);
 static BOOL OpenGL_MakeContextCurrent(OpenGLWindowContext *ctx);
+
+/* Zero-copy FBO compositing functions */
+static GLuint OpenGL_GetFBOAsTexture(struct DrawingBoard *board);
+static void OpenGL_BlitFBOToFBO(struct DrawingBoard *src, struct DrawingBoard *dst,
+                                WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
+                                UWORD width, UWORD height);
 static BOOL OpenGL_SyncFBOToBitmap(struct RenderPort *rp);
 static BOOL OpenGL_SyncRegionFBOToBitmap(struct RenderPort *rp,
                                          WORD x, WORD y, UWORD width, UWORD height);
@@ -1444,19 +1451,279 @@ static void OpenGL_UnbindFBO(void)
 }
 
 /*****************************************************************************/
+/* Zero-Copy FBO Compositing Functions                                       */
+/*****************************************************************************/
+
+/*
+ * OpenGL_GetFBOAsTexture - Get a DrawingBoard's FBO texture for compositing
+ *
+ * Returns the OpenGL texture ID of the FBO's color attachment, which can be
+ * used directly as a texture input in another rendering operation. This
+ * enables zero-copy compositing - the GPU never transfers data to the CPU.
+ *
+ * Prerequisites:
+ * - DrawingBoard must have been rendered to via OpenGL
+ * - Caller should call glFlush() on the source context before using texture
+ * - For cross-context use, contexts must share resources (GLA_ShareContext)
+ *
+ * Returns texture ID, or 0 if not available.
+ */
+static GLuint OpenGL_GetFBOAsTexture(struct DrawingBoard *board)
+{
+    OpenGLFBOData *fbo;
+
+    D(bug("[ZuneRenderer:OpenGL] OpenGL_GetFBOAsTexture: board=%p\n", board));
+
+    if (!board || !board->backend_data) {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_GetFBOAsTexture: No backend_data\n"));
+        return 0;
+    }
+
+    fbo = (OpenGLFBOData *)board->backend_data;
+
+    if (!fbo->valid || fbo->texture_id == 0) {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_GetFBOAsTexture: FBO not valid or no texture\n"));
+        return 0;
+    }
+
+    /* Ensure all rendering to this FBO is complete */
+    glFlush();
+
+    D(bug("[ZuneRenderer:OpenGL] OpenGL_GetFBOAsTexture: Returning texture %d (%dx%d)\n",
+          fbo->texture_id, fbo->width, fbo->height));
+
+    return fbo->texture_id;
+}
+
+/*
+ * OpenGL_BlitFBOToFBO - Blit from one DrawingBoard's FBO to another
+ *
+ * This is the key zero-copy compositing function. It renders the source
+ * FBO's texture directly onto the destination FBO without any CPU involvement.
+ * All data stays on the GPU.
+ *
+ * Prerequisites:
+ * - Both DrawingBoards must have OpenGL FBOs (backend_data != NULL)
+ * - For best performance, both should share the same GL context/pipe_screen
+ *
+ * Parameters:
+ *   src - Source DrawingBoard (texture will be read from its FBO)
+ *   dst - Destination DrawingBoard (texture will be drawn to its FBO)
+ *   src_x, src_y - Source rectangle origin
+ *   dst_x, dst_y - Destination rectangle origin
+ *   width, height - Size of region to blit
+ */
+static void OpenGL_BlitFBOToFBO(struct DrawingBoard *src, struct DrawingBoard *dst,
+                                WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
+                                UWORD width, UWORD height)
+{
+    OpenGLFBOData *src_fbo, *dst_fbo;
+    GLuint src_texture;
+    GLfloat tex_x1, tex_y1, tex_x2, tex_y2;
+
+    D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToFBO: src=%p dst=%p (%d,%d)->(%d,%d) %dx%d\n",
+          src, dst, src_x, src_y, dst_x, dst_y, width, height));
+
+    if (!src || !dst || !src->backend_data || !dst->backend_data) {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToFBO: Invalid parameters\n"));
+        return;
+    }
+
+    if (!g_fbo_available || !glBindFramebuffer_ptr) {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToFBO: FBO not available\n"));
+        return;
+    }
+
+    src_fbo = (OpenGLFBOData *)src->backend_data;
+    dst_fbo = (OpenGLFBOData *)dst->backend_data;
+
+    if (!src_fbo->valid || !dst_fbo->valid) {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToFBO: FBOs not valid\n"));
+        return;
+    }
+
+    /* Get source texture */
+    src_texture = src_fbo->texture_id;
+    if (src_texture == 0) {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToFBO: Source has no texture\n"));
+        return;
+    }
+
+    /* Ensure source rendering is complete */
+    glFlush();
+
+    /* Bind destination FBO */
+    if (!OpenGL_BindFBO(dst_fbo)) {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToFBO: Failed to bind destination FBO\n"));
+        return;
+    }
+
+    /* Calculate texture coordinates (normalized 0-1) */
+    tex_x1 = (GLfloat)src_x / (GLfloat)src_fbo->width;
+    tex_y1 = (GLfloat)src_y / (GLfloat)src_fbo->height;
+    tex_x2 = (GLfloat)(src_x + width) / (GLfloat)src_fbo->width;
+    tex_y2 = (GLfloat)(src_y + height) / (GLfloat)src_fbo->height;
+
+    /* Flip Y for OpenGL texture coordinates (FBO textures are not flipped) */
+    tex_y1 = 1.0f - tex_y1;
+    tex_y2 = 1.0f - tex_y2;
+
+    /* Setup state for textured quad rendering */
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, src_texture);
+
+    /* Use nearest filtering for pixel-perfect blitting */
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    /* Disable shader if active - use fixed function for simple blit */
+    if (glUseProgram_ptr) {
+        glUseProgram_ptr(0);
+    }
+
+    /* Enable blending for alpha compositing */
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    /* White color to pass through texture colors unchanged */
+    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+
+    /* Draw textured quad - all on GPU! */
+    glBegin(GL_QUADS);
+    glTexCoord2f(tex_x1, tex_y1); glVertex2i(dst_x, dst_y);
+    glTexCoord2f(tex_x2, tex_y1); glVertex2i(dst_x + width, dst_y);
+    glTexCoord2f(tex_x2, tex_y2); glVertex2i(dst_x + width, dst_y + height);
+    glTexCoord2f(tex_x1, tex_y2); glVertex2i(dst_x, dst_y + height);
+    glEnd();
+
+    glDisable(GL_TEXTURE_2D);
+
+    /* Mark destination as dirty */
+    dst_fbo->dirty = TRUE;
+
+    /* Update global state */
+    if (g_opengl_priv) {
+        g_opengl_priv->current_target_type = OPENGL_TARGET_DRAWINGBOARD;
+        g_opengl_priv->current_board = dst;
+        g_opengl_priv->current_window = NULL;
+    }
+
+    D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToFBO: Blit complete (zero-copy GPU operation)\n"));
+}
+
+/*****************************************************************************/
 /* Window Context Functions                                                  */
 /*****************************************************************************/
 
 /*
+ * OpenGL_CreateMasterContext - Create the master GL context for resource sharing
+ *
+ * The master context is created once and all other window contexts share
+ * resources (textures, buffers, shaders) with it via GLA_ShareContext.
+ * This enables zero-copy compositing between DrawingBoards.
+ *
+ * Returns TRUE if master context was created successfully.
+ */
+static BOOL OpenGL_CreateMasterContext(struct Window *window)
+{
+    struct TagItem tags[10];
+    int tag_idx = 0;
+    GLAContext master_ctx;
+    APTR master_pipe_screen;
+
+    D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateMasterContext: Window %p\n", window));
+
+    if (!window || !GLBase) {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateMasterContext: Invalid params\n"));
+        return FALSE;
+    }
+
+    if (!g_opengl_priv) {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateMasterContext: No g_opengl_priv\n"));
+        return FALSE;
+    }
+
+    /* Already created? */
+    if (g_opengl_priv->master_context_created && g_opengl_priv->master_context) {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateMasterContext: Already exists\n"));
+        return TRUE;
+    }
+
+    /* Set up tags for master context creation */
+    tags[tag_idx].ti_Tag = GLA_Window;
+    tags[tag_idx].ti_Data = (IPTR)window;
+    tag_idx++;
+
+    tags[tag_idx].ti_Tag = GLA_Left;
+    tags[tag_idx].ti_Data = window->BorderLeft;
+    tag_idx++;
+
+    tags[tag_idx].ti_Tag = GLA_Top;
+    tags[tag_idx].ti_Data = window->BorderTop;
+    tag_idx++;
+
+    tags[tag_idx].ti_Tag = GLA_Right;
+    tags[tag_idx].ti_Data = window->BorderRight;
+    tag_idx++;
+
+    tags[tag_idx].ti_Tag = GLA_Bottom;
+    tags[tag_idx].ti_Data = window->BorderBottom;
+    tag_idx++;
+
+    tags[tag_idx].ti_Tag = GLA_NoDepth;
+    tags[tag_idx].ti_Data = GL_TRUE;
+    tag_idx++;
+
+    tags[tag_idx].ti_Tag = GLA_NoStencil;
+    tags[tag_idx].ti_Data = GL_TRUE;
+    tag_idx++;
+
+    tags[tag_idx].ti_Tag = TAG_DONE;
+    tags[tag_idx].ti_Data = 0;
+
+    /* Create master GL context */
+    master_ctx = glACreateContext(tags);
+    if (!master_ctx) {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateMasterContext: glACreateContext FAILED\n"));
+        return FALSE;
+    }
+
+    /* Store master context */
+    g_opengl_priv->master_context = (APTR)master_ctx;
+    g_opengl_priv->master_context_created = TRUE;
+
+    /* Make it current to initialize GL state */
+    glAMakeCurrent(master_ctx);
+
+    /* Get pipe_screen to verify sharing will work */
+    master_pipe_screen = glAGetPipeScreen(master_ctx);
+    if (master_pipe_screen) {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateMasterContext: pipe_screen=%p - sharing supported\n",
+              master_pipe_screen));
+        g_opengl_priv->shared_contexts_supported = TRUE;
+    } else {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateMasterContext: No pipe_screen - sharing may not work\n"));
+        g_opengl_priv->shared_contexts_supported = FALSE;
+    }
+
+    D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateMasterContext: Master context %p created\n", master_ctx));
+
+    return TRUE;
+}
+
+/*
  * OpenGL_CreateWindowContext - Create a GL context for a window
  *
- * Each window gets its own GL context for independent rendering.
+ * If a master context exists, the new context will share resources with it
+ * via GLA_ShareContext. This enables efficient switching between windows
+ * using glAMakeCurrent() instead of the crash-prone glASetRast().
  */
 static OpenGLWindowContext *OpenGL_CreateWindowContext(struct Window *window)
 {
     OpenGLWindowContext *ctx;
-    struct TagItem tags[10];
+    struct TagItem tags[12];  /* Extra space for GLA_ShareContext */
     int tag_idx = 0;
+    BOOL use_shared_context = FALSE;
 
     D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateWindowContext: Window %p\n", window));
 
@@ -1469,6 +1736,18 @@ static OpenGLWindowContext *OpenGL_CreateWindowContext(struct Window *window)
     if (!ctx) {
         D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateWindowContext: Failed to allocate context\n"));
         return NULL;
+    }
+
+    /*
+     * Check if we should use shared context mode.
+     * If master context exists and sharing is supported, create this context
+     * with GLA_ShareContext to enable resource sharing.
+     */
+    if (g_opengl_priv && g_opengl_priv->master_context_created &&
+        g_opengl_priv->master_context && g_opengl_priv->shared_contexts_supported) {
+        use_shared_context = TRUE;
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateWindowContext: Will share with master context %p\n",
+              g_opengl_priv->master_context));
     }
 
     /* Set up tags for context creation */
@@ -1500,6 +1779,13 @@ static OpenGLWindowContext *OpenGL_CreateWindowContext(struct Window *window)
     tags[tag_idx].ti_Data = GL_TRUE;  /* No stencil buffer for 2D */
     tag_idx++;
 
+    /* Add GLA_ShareContext if master context is available */
+    if (use_shared_context) {
+        tags[tag_idx].ti_Tag = GLA_ShareContext;
+        tags[tag_idx].ti_Data = (IPTR)g_opengl_priv->master_context;
+        tag_idx++;
+    }
+
     tags[tag_idx].ti_Tag = TAG_DONE;
     tags[tag_idx].ti_Data = 0;
 
@@ -1507,8 +1793,66 @@ static OpenGLWindowContext *OpenGL_CreateWindowContext(struct Window *window)
     ctx->gl_context = glACreateContext(tags);
     if (!ctx->gl_context) {
         D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateWindowContext: glACreateContext failed\n"));
-        FreeVec(ctx);
-        return NULL;
+
+        /* If shared context failed, try again without sharing */
+        if (use_shared_context) {
+            D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateWindowContext: Retrying without GLA_ShareContext\n"));
+            use_shared_context = FALSE;
+
+            /* Rebuild tags without GLA_ShareContext */
+            tag_idx = 0;
+            tags[tag_idx].ti_Tag = GLA_Window;
+            tags[tag_idx].ti_Data = (IPTR)window;
+            tag_idx++;
+            tags[tag_idx].ti_Tag = GLA_Left;
+            tags[tag_idx].ti_Data = window->BorderLeft;
+            tag_idx++;
+            tags[tag_idx].ti_Tag = GLA_Top;
+            tags[tag_idx].ti_Data = window->BorderTop;
+            tag_idx++;
+            tags[tag_idx].ti_Tag = GLA_Right;
+            tags[tag_idx].ti_Data = window->BorderRight;
+            tag_idx++;
+            tags[tag_idx].ti_Tag = GLA_Bottom;
+            tags[tag_idx].ti_Data = window->BorderBottom;
+            tag_idx++;
+            tags[tag_idx].ti_Tag = GLA_NoDepth;
+            tags[tag_idx].ti_Data = GL_TRUE;
+            tag_idx++;
+            tags[tag_idx].ti_Tag = GLA_NoStencil;
+            tags[tag_idx].ti_Data = GL_TRUE;
+            tag_idx++;
+            tags[tag_idx].ti_Tag = TAG_DONE;
+            tags[tag_idx].ti_Data = 0;
+
+            ctx->gl_context = glACreateContext(tags);
+            if (!ctx->gl_context) {
+                D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateWindowContext: Fallback also failed\n"));
+                FreeVec(ctx);
+                return NULL;
+            }
+        } else {
+            FreeVec(ctx);
+            return NULL;
+        }
+    }
+
+    /* Verify sharing worked by comparing pipe_screen */
+    if (use_shared_context) {
+        APTR ctx_pipe_screen = glAGetPipeScreen((GLAContext)ctx->gl_context);
+        APTR master_pipe_screen = glAGetPipeScreen((GLAContext)g_opengl_priv->master_context);
+
+        if (ctx_pipe_screen && master_pipe_screen && ctx_pipe_screen == master_pipe_screen) {
+            D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateWindowContext: Sharing verified - same pipe_screen %p\n",
+                  ctx_pipe_screen));
+            ctx->uses_shared_context = TRUE;
+        } else {
+            D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateWindowContext: WARNING - pipe_screen mismatch! ctx=%p master=%p\n",
+                  ctx_pipe_screen, master_pipe_screen));
+            ctx->uses_shared_context = FALSE;
+        }
+    } else {
+        ctx->uses_shared_context = FALSE;
     }
 
     /* Fill in context data */
@@ -1526,22 +1870,29 @@ static OpenGLWindowContext *OpenGL_CreateWindowContext(struct Window *window)
         g_opengl_priv->contexts_created++;
     }
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateWindowContext: Created context %p for window %p\n",
-          ctx->gl_context, window));
+    D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateWindowContext: Created context %p for window %p (shared=%d)\n",
+          ctx->gl_context, window, ctx->uses_shared_context));
 
     return ctx;
 }
 
 /*
  * OpenGL_DestroyWindowContext - Destroy a window's GL context
+ *
+ * When using shared contexts, this handles the reference counting properly.
+ * The master context is only destroyed when all window contexts are gone.
  */
 static void OpenGL_DestroyWindowContext(OpenGLWindowContext *ctx)
 {
     OpenGLWindowContext **prev;
+    BOOL was_shared;
 
     if (!ctx) return;
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_DestroyWindowContext: Context %p\n", ctx));
+    D(bug("[ZuneRenderer:OpenGL] OpenGL_DestroyWindowContext: Context %p (shared=%d)\n",
+          ctx, ctx->uses_shared_context));
+
+    was_shared = ctx->uses_shared_context;
 
     /* Remove from linked list */
     if (g_opengl_priv) {
@@ -1561,10 +1912,41 @@ static void OpenGL_DestroyWindowContext(OpenGLWindowContext *ctx)
 
     /* Destroy GL context */
     if (ctx->gl_context) {
+        D(bug("[ZuneRenderer:OpenGL] OpenGL_DestroyWindowContext: Destroying GL context %p\n",
+              ctx->gl_context));
         glADestroyContext((GLAContext)ctx->gl_context);
     }
 
     FreeVec(ctx);
+
+    /*
+     * Check if we should destroy the master context.
+     * Only destroy it when there are no more window contexts using it.
+     */
+    if (was_shared && g_opengl_priv && g_opengl_priv->master_context_created) {
+        /* Check if any remaining contexts are using shared resources */
+        BOOL has_shared_contexts = FALSE;
+        OpenGLWindowContext *remaining = g_opengl_priv->window_contexts;
+
+        while (remaining) {
+            if (remaining->uses_shared_context) {
+                has_shared_contexts = TRUE;
+                break;
+            }
+            remaining = remaining->next;
+        }
+
+        if (!has_shared_contexts) {
+            D(bug("[ZuneRenderer:OpenGL] OpenGL_DestroyWindowContext: No more shared contexts, destroying master\n"));
+
+            if (g_opengl_priv->master_context) {
+                glADestroyContext((GLAContext)g_opengl_priv->master_context);
+                g_opengl_priv->master_context = NULL;
+            }
+            g_opengl_priv->master_context_created = FALSE;
+            g_opengl_priv->shared_contexts_supported = FALSE;
+        }
+    }
 }
 
 /*
@@ -2149,7 +2531,32 @@ static void OpenGLCleanupBackend(ZuneBackendContext *ctx)
     /* Destroy shaders before destroying the GL context */
     OpenGL_DestroyShaders();
 
-    /* Destroy the global GL context if it exists */
+    /* Destroy all window contexts first */
+    while (priv->window_contexts) {
+        OpenGLWindowContext *ctx_to_destroy = priv->window_contexts;
+        priv->window_contexts = ctx_to_destroy->next;
+
+        D(bug("[ZuneRenderer:OpenGL] OpenGLCleanupBackend: Destroying window context %p\n",
+              ctx_to_destroy->gl_context));
+
+        if (ctx_to_destroy->gl_context) {
+            glADestroyContext((GLAContext)ctx_to_destroy->gl_context);
+        }
+        FreeVec(ctx_to_destroy);
+    }
+    priv->current_context = NULL;
+
+    /* Destroy the master context if it exists */
+    if (priv->master_context) {
+        D(bug("[ZuneRenderer:OpenGL] OpenGLCleanupBackend: Destroying master GL context %p\n",
+              priv->master_context));
+        glADestroyContext((GLAContext)priv->master_context);
+        priv->master_context = NULL;
+        priv->master_context_created = FALSE;
+        priv->shared_contexts_supported = FALSE;
+    }
+
+    /* Destroy the global GL context if it exists (fallback mode) */
     if (priv->gl_context) {
         D(bug("[ZuneRenderer:OpenGL] OpenGLCleanupBackend: Destroying global GL context %p\n",
               priv->gl_context));
@@ -2440,10 +2847,15 @@ static BOOL OpenGL_EnsureGlobalContext(struct Window *window)
 }
 
 /*
- * OpenGL_SwitchToWindow - Switch the global GL context to render to a different window
+ * OpenGL_SwitchToWindow - Switch the GL context to render to a different window
  *
- * Uses glASetRast() to change the render target without creating a new context.
- * This is the key to supporting multiple windows with Mesa3DGL's single-context limitation.
+ * NEW ARCHITECTURE (with shared contexts):
+ * - Each window has its own GL context that shares resources with the master context
+ * - Switching uses glAMakeCurrent() which is safe and efficient
+ * - No glASetRast() needed - avoids crashes with different dimensions
+ *
+ * FALLBACK (without shared contexts):
+ * - Uses the old glASetRast() method with the single global context
  *
  * Returns TRUE if switch was successful.
  */
@@ -2451,6 +2863,7 @@ static BOOL OpenGL_SwitchToWindow(struct RenderPort *rp)
 {
     struct Window *window = NULL;
     struct RastPort *rastport;
+    OpenGLWindowContext *win_ctx;
     UWORD width, height;
 
     if (!rp || !g_opengl_priv) {
@@ -2470,15 +2883,81 @@ static BOOL OpenGL_SwitchToWindow(struct RenderPort *rp)
         return FALSE;
     }
 
+    /* Calculate window dimensions */
+    width = window->Width - window->BorderLeft - window->BorderRight;
+    height = window->Height - window->BorderTop - window->BorderBottom;
+
+    /*
+     * NEW: Try shared context approach first.
+     * Each window gets its own GL context that shares resources with master.
+     * This allows safe switching via glAMakeCurrent().
+     */
+    if (g_opengl_priv->shared_contexts_supported) {
+        /* Ensure master context exists */
+        if (!g_opengl_priv->master_context_created) {
+            if (!OpenGL_CreateMasterContext(window)) {
+                D(bug("[ZuneRenderer:OpenGL] SwitchToWindow: Failed to create master context, using fallback\n"));
+                goto fallback_setrast;
+            }
+        }
+
+        /* Find or create window context */
+        win_ctx = OpenGL_FindWindowContext(window);
+        if (!win_ctx) {
+            win_ctx = OpenGL_CreateWindowContext(window);
+            if (!win_ctx) {
+                D(bug("[ZuneRenderer:OpenGL] SwitchToWindow: Failed to create window context, using fallback\n"));
+                goto fallback_setrast;
+            }
+        }
+
+        /* Check if this window context uses shared resources */
+        if (win_ctx->uses_shared_context) {
+            /* Check if we need to switch */
+            if (g_opengl_priv->current_context != win_ctx ||
+                g_opengl_priv->current_target_type != OPENGL_TARGET_WINDOW) {
+
+                D(bug("[ZuneRenderer:OpenGL] SwitchToWindow: Using shared context for window %p\n", window));
+
+                /* Simply make this window's context current - fast! */
+                glAMakeCurrent((GLAContext)win_ctx->gl_context);
+
+                /* Update state */
+                g_opengl_priv->current_context = win_ctx;
+                g_opengl_priv->current_target_type = OPENGL_TARGET_WINDOW;
+                g_opengl_priv->current_window = window;
+                g_opengl_priv->current_board = NULL;
+                g_opengl_priv->current_width = width;
+                g_opengl_priv->current_height = height;
+                g_opengl_priv->context_switches++;
+
+                /* Setup projection for new dimensions */
+                OpenGL_SetupOrthoProjection(width, height);
+
+                g_opengl_priv->needs_sync = TRUE;
+
+                D(bug("[ZuneRenderer:OpenGL] SwitchToWindow: Shared context switch complete (context_switches=%ld)\n",
+                      g_opengl_priv->context_switches));
+            }
+            return TRUE;
+        }
+        /* Fall through to glASetRast if this context doesn't share */
+    }
+
+fallback_setrast:
+    /*
+     * FALLBACK: Use the old glASetRast() method.
+     * This is used when:
+     * - Shared contexts are not supported
+     * - Window context creation failed
+     * - The window context doesn't share resources
+     */
+
     /* Ensure global context exists (creates it if this is the first window) */
     if (!OpenGL_EnsureGlobalContext(window)) {
         D(bug("[ZuneRenderer:OpenGL] SwitchToWindow: Failed to ensure global context\n"));
         return FALSE;
     }
-
-    /* Calculate window dimensions */
-    width = window->Width - window->BorderLeft - window->BorderRight;
-    height = window->Height - window->BorderTop - window->BorderBottom;
 
     /* Check if we need to switch targets (including from DrawingBoard to Window) */
     if (g_opengl_priv->current_target_type != OPENGL_TARGET_WINDOW ||
@@ -2489,8 +2968,8 @@ static BOOL OpenGL_SwitchToWindow(struct RenderPort *rp)
         struct TagItem setrast_tags[6];
         int tag_idx = 0;
 
-        D(bug("[ZuneRenderer:OpenGL] SwitchToWindow: Switching from window %p to %p (%dx%d)\n",
-              g_opengl_priv->current_window, window, width, height));
+        D(bug("[ZuneRenderer:OpenGL] SwitchToWindow: Using glASetRast fallback for window %p (%dx%d)\n",
+              window, width, height));
 
         /* Build tags for glASetRast */
         setrast_tags[tag_idx].ti_Tag = GLA_Window;
@@ -2536,7 +3015,7 @@ static BOOL OpenGL_SwitchToWindow(struct RenderPort *rp)
         /* Mark that we need to sync from RastPort before drawing */
         g_opengl_priv->needs_sync = TRUE;
 
-        D(bug("[ZuneRenderer:OpenGL] SwitchToWindow: Switch complete (setrast_calls=%ld)\n",
+        D(bug("[ZuneRenderer:OpenGL] SwitchToWindow: glASetRast fallback complete (setrast_calls=%ld)\n",
               g_opengl_priv->setrast_calls));
     }
 
@@ -3742,9 +4221,72 @@ static void OpenGLBlitRenderPorts(struct RenderPort *source,
                                   WORD src_y, WORD dest_x, WORD dest_y,
                                   UWORD width, UWORD height)
 {
-    D(bug("[ZuneRenderer:OpenGL] OpenGLBlitRenderPorts: %dx%d\n", width, height));
+    struct DrawingBoard *src_board, *dst_board;
 
-    /* TODO: Implement using FBOs or texture copying */
+    D(bug("[ZuneRenderer:OpenGL] OpenGLBlitRenderPorts: src(%d,%d)->dst(%d,%d) %dx%d\n",
+          src_x, src_y, dest_x, dest_y, width, height));
+
+    if (!source || !dest) {
+        return;
+    }
+
+    src_board = source->target_board;
+    dst_board = dest->target_board;
+
+    /*
+     * ZERO-COPY PATH: Both source and destination are DrawingBoards with FBOs
+     *
+     * This is the optimal case - we can blit directly from one FBO texture
+     * to another FBO without involving the CPU at all. All data stays on GPU.
+     */
+    if (src_board && src_board->backend_data &&
+        dst_board && dst_board->backend_data &&
+        g_fbo_available) {
+
+        OpenGLFBOData *src_fbo = (OpenGLFBOData *)src_board->backend_data;
+        OpenGLFBOData *dst_fbo = (OpenGLFBOData *)dst_board->backend_data;
+
+        if (src_fbo->valid && dst_fbo->valid) {
+            D(bug("[ZuneRenderer:OpenGL] OpenGLBlitRenderPorts: Using zero-copy FBO-to-FBO blit\n"));
+
+            OpenGL_BlitFBOToFBO(src_board, dst_board,
+                                src_x, src_y, dest_x, dest_y, width, height);
+            return;
+        }
+    }
+
+    /*
+     * FALLBACK PATH: Use software blitting via CyberGfx
+     *
+     * This handles cases where:
+     * - Source or destination is a Window (not DrawingBoard)
+     * - FBOs are not available
+     * - One or both boards don't have valid FBO data
+     */
+    D(bug("[ZuneRenderer:OpenGL] OpenGLBlitRenderPorts: Using fallback (no zero-copy)\n"));
+
+    /* If source is a DrawingBoard with FBO, sync it to bitmap first */
+    if (src_board && src_board->backend_data && g_fbo_available) {
+        OpenGLFBOData *src_fbo = (OpenGLFBOData *)src_board->backend_data;
+        if (src_fbo->valid && src_fbo->dirty) {
+            D(bug("[ZuneRenderer:OpenGL] OpenGLBlitRenderPorts: Syncing source FBO to bitmap\n"));
+            OpenGL_SyncFBOToBitmap(source);
+        }
+    }
+
+    /* Use BltBitMapRastPort for the actual blit if both have rastports */
+    if (src_board && src_board->rastport && src_board->rastport->BitMap &&
+        dst_board && dst_board->rastport && dst_board->rastport->BitMap) {
+
+        BltBitMapRastPort(src_board->rastport->BitMap,
+                          src_x, src_y,
+                          dst_board->rastport,
+                          dest_x, dest_y,
+                          width, height,
+                          0xC0);  /* Copy */
+
+        D(bug("[ZuneRenderer:OpenGL] OpenGLBlitRenderPorts: Fallback blit via BltBitMapRastPort complete\n"));
+    }
 }
 
 static void OpenGLBlitToScreen(struct RenderPort *source,
@@ -3754,6 +4296,8 @@ static void OpenGLBlitToScreen(struct RenderPort *source,
 {
     struct DrawingBoard *board;
     OpenGLFBOData *fbo;
+    struct Window *target_window = NULL;
+    OpenGLWindowContext *win_ctx = NULL;
 
     D(bug("[ZuneRenderer:OpenGL] OpenGLBlitToScreen: src(%d,%d) -> dst(%d,%d) %dx%d\n",
           src_x, src_y, dest_x, dest_y, width, height));
@@ -3764,8 +4308,108 @@ static void OpenGLBlitToScreen(struct RenderPort *source,
 
     board = source->target_board;
 
+    /* Try to get target window from RastPort */
+    if (screen_rp->Layer && screen_rp->Layer->Window) {
+        target_window = (struct Window *)screen_rp->Layer->Window;
+    }
+
     /*
-     * FBO-based blitting
+     * GPU-ACCELERATED PATH: Blit FBO directly to window via shared context
+     *
+     * If the target RastPort belongs to a window that has a shared GL context,
+     * we can render the FBO texture directly to that window's framebuffer.
+     * This avoids the expensive glReadPixels + WritePixelArray roundtrip.
+     */
+    if (board && board->backend_data && g_fbo_available && target_window &&
+        g_opengl_priv && g_opengl_priv->shared_contexts_supported) {
+
+        fbo = (OpenGLFBOData *)board->backend_data;
+
+        /* Find or create window context */
+        win_ctx = OpenGL_FindWindowContext(target_window);
+        if (!win_ctx) {
+            /* Try to create shared context for this window */
+            if (g_opengl_priv->master_context_created) {
+                win_ctx = OpenGL_CreateWindowContext(target_window);
+            }
+        }
+
+        /* If we have a shared window context, use GPU path */
+        if (win_ctx && win_ctx->uses_shared_context && fbo->valid) {
+            GLuint src_texture = fbo->texture_id;
+            GLfloat tex_x1, tex_y1, tex_x2, tex_y2;
+            UWORD win_width, win_height;
+
+            D(bug("[ZuneRenderer:OpenGL] OpenGLBlitToScreen: Using GPU-accelerated path\n"));
+
+            /* Make window context current */
+            glAMakeCurrent((GLAContext)win_ctx->gl_context);
+
+            /* Update state */
+            g_opengl_priv->current_context = win_ctx;
+            g_opengl_priv->current_target_type = OPENGL_TARGET_WINDOW;
+            g_opengl_priv->current_window = target_window;
+            g_opengl_priv->current_board = NULL;
+            g_opengl_priv->context_switches++;
+
+            /* Setup projection for window */
+            win_width = target_window->Width - target_window->BorderLeft - target_window->BorderRight;
+            win_height = target_window->Height - target_window->BorderTop - target_window->BorderBottom;
+            OpenGL_SetupOrthoProjection(win_width, win_height);
+
+            /* Unbind any FBO - render to window's default framebuffer */
+            glBindFramebuffer_ptr(GL_FRAMEBUFFER, 0);
+
+            /* Ensure source FBO rendering is complete */
+            glFlush();
+
+            /* Calculate texture coordinates */
+            tex_x1 = (GLfloat)src_x / (GLfloat)fbo->width;
+            tex_y1 = (GLfloat)src_y / (GLfloat)fbo->height;
+            tex_x2 = (GLfloat)(src_x + width) / (GLfloat)fbo->width;
+            tex_y2 = (GLfloat)(src_y + height) / (GLfloat)fbo->height;
+
+            /* Flip Y for FBO texture */
+            tex_y1 = 1.0f - tex_y1;
+            tex_y2 = 1.0f - tex_y2;
+
+            /* Setup for textured rendering */
+            glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, src_texture);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+            /* Disable shader */
+            if (glUseProgram_ptr) {
+                glUseProgram_ptr(0);
+            }
+
+            /* Enable blending for alpha */
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+            glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+
+            /* Draw textured quad to window */
+            glBegin(GL_QUADS);
+            glTexCoord2f(tex_x1, tex_y1); glVertex2i(dest_x, dest_y);
+            glTexCoord2f(tex_x2, tex_y1); glVertex2i(dest_x + width, dest_y);
+            glTexCoord2f(tex_x2, tex_y2); glVertex2i(dest_x + width, dest_y + height);
+            glTexCoord2f(tex_x1, tex_y2); glVertex2i(dest_x, dest_y + height);
+            glEnd();
+
+            glDisable(GL_TEXTURE_2D);
+
+            /* Swap to make visible */
+            glASwapBuffers((GLAContext)win_ctx->gl_context);
+
+            D(bug("[ZuneRenderer:OpenGL] OpenGLBlitToScreen: GPU blit complete (zero-copy)\n"));
+            return;
+        }
+    }
+
+    /*
+     * FALLBACK: FBO-based software blitting
      *
      * If this DrawingBoard has an FBO, we need to:
      * 1. Bind the FBO to read from it
@@ -3781,7 +4425,7 @@ static void OpenGLBlitToScreen(struct RenderPort *source,
 
         fbo = (OpenGLFBOData *)board->backend_data;
 
-        D(bug("[ZuneRenderer:OpenGL] OpenGLBlitToScreen: FBO %d -> RastPort %p\n",
+        D(bug("[ZuneRenderer:OpenGL] OpenGLBlitToScreen: FBO %d -> RastPort %p (fallback)\n",
               fbo->fbo_id, screen_rp));
 
         if (!CyberGfxBase) {
@@ -3840,7 +4484,7 @@ static void OpenGLBlitToScreen(struct RenderPort *source,
         FreeVec(flipped_buffer);
         FreeVec(pixelbuffer);
 
-        D(bug("[ZuneRenderer:OpenGL] OpenGLBlitToScreen: FBO blit complete\n"));
+        D(bug("[ZuneRenderer:OpenGL] OpenGLBlitToScreen: FBO blit complete (fallback)\n"));
     } else {
         /*
          * No FBO: rendering went directly to window's GL buffer.
