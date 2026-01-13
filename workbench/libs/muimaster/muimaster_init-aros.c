@@ -8,7 +8,7 @@
 
 #include <proto/exec.h>
 #include <proto/graphics.h>
-#include <proto/zunegfx.h>
+#include <libraries/zunegfx.h>
 
 #include <clib/alib_protos.h>
 

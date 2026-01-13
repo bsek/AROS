@@ -37,8 +37,8 @@
 /* Library Information */
 /*****************************************************************************/
 
-#define ZUNERENDERER_NAME "zunegfx.library"
-#define ZUNERENDERER_VERSION 1
+#define ZUNEGFX_NAME "zunegfx.library"
+#define ZUNEGFX_VERSION 1
 
 /*****************************************************************************/
 /* Backend Types */
@@ -375,7 +375,7 @@ struct ZuneBrush {
     ZuneBlit((src_rp), (dst_rp), (src_x), (src_y), (dst_x), (dst_y), (w), (h));\
   } while (0)
 
-/* Blit from screen RastPort to DrawingBoard */  
+/* Blit from screen RastPort to DrawingBoard */
 #define ZuneBlitScreenToBoard(src_rp, dst_rp, src_x, src_y, dst_x, dst_y, w, h)\
   do {                                                                         \
     ZuneSetTarget((src_rp), NULL);                                             \
@@ -679,7 +679,7 @@ ULONG GetBatchCount(struct RenderPort *rp);
  *
  * Handles all combinations:
  * - DrawingBoard to DrawingBoard
- * - DrawingBoard to screen RastPort  
+ * - DrawingBoard to screen RastPort
  * - Screen RastPort to DrawingBoard
  * - Screen RastPort to screen RastPort
  *
@@ -703,12 +703,19 @@ void ZunePresent(struct RenderPort *rp,
                  UWORD width, UWORD height);
 
 /*
- * ZuneCapture - Capture pixels from window into DrawingBoard
+ * ZuneCapture - Capture pixels from a RastPort into DrawingBoard
  *
  * Used to read background content for proper alpha blending
- * when drawing antialiased graphics over existing window content.
+ * when drawing antialiased graphics over existing content.
+ *
+ * Parameters:
+ *   rp - RenderPort with a DrawingBoard target
+ *   src_rp - Source RastPort to read from (e.g., window RastPort or double buffer)
+ *   src_x, src_y - Source coordinates in the RastPort
+ *   dst_x, dst_y - Destination coordinates in the DrawingBoard
+ *   width, height - Size of area to capture
  */
-void ZuneCapture(struct RenderPort *rp,
+void ZuneCapture(struct RenderPort *rp, struct RastPort *src_rp,
                  WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
                  UWORD width, UWORD height);
 

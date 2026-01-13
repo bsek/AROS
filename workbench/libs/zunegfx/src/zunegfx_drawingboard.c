@@ -1260,10 +1260,11 @@ SEE ALSO
 /*****************************************************************************
 
     NAME */
-AROS_LH7(void, ZuneCapture,
+AROS_LH8(void, ZuneCapture,
 
          /*  SYNOPSIS */
          AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RastPort *, src_rp, A1),
          AROS_LHA(WORD, src_x, D0),
          AROS_LHA(WORD, src_y, D1),
          AROS_LHA(WORD, dst_x, D2),
@@ -1275,13 +1276,14 @@ AROS_LH7(void, ZuneCapture,
          struct Library *, ZuneGfxBase, 98, zunegfx)
 
 /*  FUNCTION
-    Captures pixels from the window into the DrawingBoard.
+    Captures pixels from a RastPort into the DrawingBoard.
     This is used to read background content for proper alpha blending
-    when drawing antialiased graphics over existing window content.
+    when drawing antialiased graphics over existing content.
 
 INPUTS
-    rp - RenderPort with a DrawingBoard and associated window
-    src_x, src_y - Source coordinates in the window
+    rp - RenderPort with a DrawingBoard target
+    src_rp - Source RastPort to read pixels from (e.g., window or double buffer)
+    src_x, src_y - Source coordinates in the RastPort
     dst_x, dst_y - Destination coordinates in the DrawingBoard
     width, height - Size of area to capture
 
@@ -1289,7 +1291,7 @@ RESULT
     None
 
 NOTES
-    The RenderPort must have both a valid target_board and window reference.
+    The RenderPort must have a valid target_board.
     For OpenGL backend, this uploads the captured pixels to the FBO.
     For CyberGfx backend, this copies directly to the DrawingBoard's bitmap.
 
@@ -1304,17 +1306,11 @@ SEE ALSO
 
   ENTER_FUNCTION("ZuneCapture");
 
-  D(bug("ZuneRenderer: ZuneCapture(rp=%p, src=%d,%d dst=%d,%d %dx%d)\n",
-        rp, src_x, src_y, dst_x, dst_y, width, height));
+  D(bug("ZuneRenderer: ZuneCapture(rp=%p, src_rp=%p, src=%d,%d dst=%d,%d %dx%d)\n",
+        rp, src_rp, src_x, src_y, dst_x, dst_y, width, height));
 
-  if (!rp) {
-    D(bug("ZuneRenderer: Invalid RenderPort for ZuneCapture\n"));
-    EXIT_FUNCTION("ZuneCapture");
-    return;
-  }
-
-  if (!rp->window || !rp->window->RPort) {
-    D(bug("ZuneRenderer: RenderPort has no valid window\n"));
+  if (!rp || !src_rp) {
+    D(bug("ZuneRenderer: Invalid RenderPort or source RastPort for ZuneCapture\n"));
     EXIT_FUNCTION("ZuneCapture");
     return;
   }
@@ -1330,10 +1326,10 @@ SEE ALSO
     return;
   }
 
-  /* Use backend's CopyFromRastPort to capture window content */
+  /* Use backend's CopyFromRastPort to capture content from source RastPort */
   backend = ZuneGetRenderPortBackend(rp);
   if (backend && backend->ops && backend->ops->CopyFromRastPort) {
-    backend->ops->CopyFromRastPort(rp, rp->window->RPort, src_x, src_y,
+    backend->ops->CopyFromRastPort(rp, src_rp, src_x, src_y,
                                    dst_x, dst_y, width, height);
   } else {
     D(bug("ZuneRenderer: Backend does not support CopyFromRastPort\n"));

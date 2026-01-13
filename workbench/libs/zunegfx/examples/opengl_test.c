@@ -65,15 +65,14 @@ struct Screen *screen = NULL;
 struct Window *window = NULL;
 struct DrawingBoard *board = NULL;
 struct RenderPort *render_port = NULL;
-struct RenderPort *window_rp = NULL;
 
-TestMode current_test = TEST_OPENGL_BG_CYBERGFX_FG;
+TestMode current_test = TEST_OPENGL_ONLY;
 
 /* Function prototypes */
 BOOL InitDemo(void);
 void CleanupDemo(void);
 void RunTest(TestMode mode);
-void BlitToWindow(void);
+void PresentToWindow(void);
 
 /* Test implementations */
 void Test_OpenGLOnly(void);
@@ -151,7 +150,7 @@ int main(void) {
 
                 case IDCMP_REFRESHWINDOW:
                     BeginRefresh(window);
-                    BlitToWindow();
+                    PresentToWindow();
                     EndRefresh(window, TRUE);
                     break;
             }
@@ -257,15 +256,8 @@ BOOL InitDemo(void) {
     printf("DrawingBoard hardware_surface: %s\n", board->hardware_surface ? "Yes" : "No");
     printf("DrawingBoard backend_data (FBO): %p\n", board->backend_data);
 
-    /*
-     * Create a separate RenderPort for window output (blitting destination).
-     * This uses BACKEND_DEFAULT since we just need it for BltBitMapRastPort.
-     */
-    window_rp = CreateRenderPortForWindow(window, screen->ViewPort.ColorMap, BACKEND_CYBERGFX);
-    if (!window_rp) {
-        printf("ERROR: Cannot create window RenderPort\n");
-        return FALSE;
-    }
+    /* Set the DrawingBoard as target */
+    ZuneSetTarget(render_port, board);
 
     return TRUE;
 }
@@ -274,11 +266,6 @@ void CleanupDemo(void) {
     if (board) {
         DestroyDrawingBoard(render_port, board);
         board = NULL;
-    }
-
-    if (window_rp) {
-        DestroyRenderPort(window_rp);
-        window_rp = NULL;
     }
 
     if (render_port) {
@@ -318,20 +305,18 @@ void CleanupDemo(void) {
 }
 
 /*
- * Blit the DrawingBoard contents to the window.
- *
- * render_port (source) has the board as target and the correct backend.
- * window_rp (destination) targets the window for output.
+ * Present the DrawingBoard contents to the window using ZunePresent.
+ * This automatically syncs the OpenGL FBO to bitmap before blitting.
  */
-void BlitToWindow(void) {
-    struct ZuneRect src_rect = {0, 0, board->width, board->height};
-    struct ZuneRect dst_rect = {window->BorderLeft, window->BorderTop, board->width, board->height};
+void PresentToWindow(void) {
+    WORD dst_x = window->BorderLeft;
+    WORD dst_y = window->BorderTop;
 
     /* Ensure render_port targets the board */
     ZuneSetTarget(render_port, board);
 
-    /* Blit from render_port (board) to window_rp (window) */
-    BlitDrawingBoardToRenderPort(render_port, window_rp, &src_rect, &dst_rect);
+    /* Present entire DrawingBoard to window */
+    ZunePresent(render_port, 0, 0, dst_x, dst_y, board->width, board->height);
 }
 
 void RunTest(TestMode mode) {
@@ -358,8 +343,8 @@ void RunTest(TestMode mode) {
             break;
     }
 
-    BlitToWindow();
-    printf("Test complete, blitted to window.\n");
+    PresentToWindow();
+    printf("Test complete, presented to window.\n");
 }
 
 /*
@@ -554,6 +539,13 @@ void Test_CyberGfxOnly(void) {
 
     DrawBackground_CyberGfx(0xFF404040);  /* Dark gray in ARGB */
     DrawShapes_CyberGfx();
+
+    /*
+     * After CyberGfx drawing directly to bitmap, we need to reload the
+     * FBO from the bitmap so ZunePresent will show the correct content.
+     */
+    printf("  Reloading FBO from bitmap...\n");
+    ZuneReload(render_port);
 }
 
 /*
@@ -561,12 +553,13 @@ void Test_CyberGfxOnly(void) {
  *
  * This tests the sync FROM OpenGL FBO TO RastPort bitmap.
  * 1. ZuneRenderer clears background via OpenGL (renders to FBO)
- * 2. FBO contents must be synced to bitmap for CyberGfx to see it
- * 3. CyberGfx draws shapes on top
+ * 2. ZuneSync copies FBO contents to bitmap for CyberGfx to see
+ * 3. CyberGfx draws shapes on top (to bitmap)
+ * 4. ZuneReload uploads bitmap back to FBO for presentation
  */
 void Test_OpenGLBg_CyberGfxFg(void) {
     printf("TEST: OpenGL Background + CyberGfx Foreground\n");
-    printf("  This tests FBO -> RastPort sync\n");
+    printf("  This tests FBO -> Bitmap -> FBO sync\n");
 
     /* Step 1: Clear background with ZuneRenderer (OpenGL FBO) */
     printf("  Step 1: ZuneRenderer clears background (OpenGL)...\n");
@@ -581,27 +574,21 @@ void Test_OpenGLBg_CyberGfxFg(void) {
                        ZUNE_BRUSH_SOLID(ZUNE_GREEN));
 
     /*
-     * Step 3: CRITICAL - Sync FBO to RastPort before CyberGfx drawing
-     *
-     * For this to work, the FBO contents need to be copied to the
-     * DrawingBoard's bitmap so CyberGfx can draw over it.
-     *
-     * SyncDrawingBoard() copies the OpenGL FBO contents to the bitmap.
+     * Step 3: Sync FBO to bitmap before CyberGfx drawing.
+     * ZuneSync copies the OpenGL FBO contents to the DrawingBoard's bitmap.
      */
-    printf("  Step 3: Syncing FBO to bitmap (SyncDrawingBoard)...\n");
-    SyncDrawingBoard(render_port);
+    printf("  Step 3: Syncing FBO to bitmap (ZuneSync)...\n");
+    ZuneSync(render_port);
 
-    /* Step 4: Draw CyberGfx shapes on top */
+    /* Step 4: Draw CyberGfx shapes on top (to bitmap) */
     printf("  Step 4: CyberGfx draws right-side shapes...\n");
     DrawShapes_CyberGfx();
 
     /*
-     * Step 5: Sync bitmap back to FBO so OpenGL blit shows CyberGfx content
+     * Step 5: Reload bitmap back to FBO so ZunePresent shows everything.
      */
-    printf("  Step 5: Syncing bitmap to FBO (ZuneCopyFromRastPort)...\n");
-    ZuneSetTarget(render_port, board);
-    ZuneCopyFromRastPort(render_port, board->rastport,
-                         0, 0, 0, 0, board->width, board->height);
+    printf("  Step 5: Reloading bitmap to FBO (ZuneReload)...\n");
+    ZuneReload(render_port);
 
     printf("  Test complete - left shapes from OpenGL, right from CyberGfx\n");
 }
@@ -611,12 +598,12 @@ void Test_OpenGLBg_CyberGfxFg(void) {
  *
  * This tests the sync FROM RastPort bitmap TO OpenGL FBO.
  * 1. CyberGfx clears background (writes to bitmap)
- * 2. Bitmap contents must be uploaded to FBO for OpenGL to see it
- * 3. OpenGL draws shapes on top
+ * 2. ZuneReload uploads bitmap to FBO for OpenGL to see
+ * 3. OpenGL draws shapes on top (to FBO)
  */
 void Test_CyberGfxBg_OpenGLFg(void) {
     printf("TEST: CyberGfx Background + OpenGL Foreground\n");
-    printf("  This tests RastPort -> FBO sync\n");
+    printf("  This tests Bitmap -> FBO sync\n");
 
     /* Step 1: Clear background with CyberGfx directly */
     printf("  Step 1: CyberGfx clears background...\n");
@@ -640,19 +627,11 @@ void Test_CyberGfxBg_OpenGLFg(void) {
     }
 
     /*
-     * Step 3: CRITICAL - Sync RastPort to FBO before OpenGL drawing
-     *
-     * For this to work, the bitmap contents need to be uploaded to the
-     * OpenGL FBO so OpenGL doesn't overwrite the CyberGfx content.
-     *
-     * This requires reading the bitmap and uploading it as a texture
-     * to the FBO, or using CopyFromRastPort in the backend.
+     * Step 3: Reload bitmap to FBO before OpenGL drawing.
+     * This uploads the CyberGfx content to the OpenGL FBO.
      */
-    printf("  Step 3: Syncing RastPort to FBO...\n");
-    /*
-     * The backend's CopyFromRastPort should handle this when we switch
-     * to the DrawingBoard target with needs_sync flag set.
-     */
+    printf("  Step 3: Reloading bitmap to FBO (ZuneReload)...\n");
+    ZuneReload(render_port);
 
     /* Step 4: Draw OpenGL shapes on top */
     printf("  Step 4: ZuneRenderer draws left-side shapes (OpenGL)...\n");
@@ -677,7 +656,7 @@ void Test_Alternating(void) {
     WORD x, y;
 
     printf("TEST: Alternating - Elements drawn by alternating backends\n");
-    printf("  This is the stress test for FBO <-> RastPort sync\n");
+    printf("  This is the stress test for FBO <-> Bitmap sync\n");
 
     /* Clear with ZuneRenderer */
     DrawBackground_Zune(ZUNE_COLOR_RGB24(30, 30, 40));
@@ -698,7 +677,7 @@ void Test_Alternating(void) {
             ZuneFillRectangleRoundedAAXYWH(render_port, x + 240, y, 100, 100, 15,
                                            ZUNE_BRUSH_SOLID(ZUNE_BLUE));
             /* Sync FBO to bitmap before CyberGfx draws in next iteration */
-            SyncDrawingBoard(render_port);
+            ZuneSync(render_port);
         } else {
             /* Odd rows: CyberGfx direct */
             printf("  Row %d: CyberGfx shapes at y=%d\n", i, y);
@@ -707,6 +686,8 @@ void Test_Alternating(void) {
                 FillPixelArray(board->rastport, x + 120, y, 100, 100, 0xFFFF00FF); /* Magenta */
                 FillPixelArray(board->rastport, x + 240, y, 100, 100, 0xFF00FFFF); /* Cyan */
             }
+            /* Reload bitmap to FBO before OpenGL draws in next iteration */
+            ZuneReload(render_port);
         }
     }
 
