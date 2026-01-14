@@ -34,6 +34,10 @@
 struct List ZuneBackendList;
 struct SignalSemaphore ZuneBackendSemaphore;
 
+/* Cached result for ZuneFindBestBackend(NULL) - doesn't change after init */
+static ZuneBackend *g_default_backend_cached = NULL;
+static BOOL g_default_backend_checked = FALSE;
+
 /*****************************************************************************/
 /* Backend Registration Functions */
 /*****************************************************************************/
@@ -148,6 +152,15 @@ ZuneBackend *ZuneFindBestBackend(struct RenderPort *rp) {
   ZuneBackend *best_backend = NULL;
   ZuneBackend *current_backend;
 
+  /*
+   * Fast path: Return cached result for NULL rp.
+   * This is called very frequently from SelectTextureBackend and others.
+   * The result doesn't change after initialization.
+   */
+  if (!rp && g_default_backend_checked) {
+    return g_default_backend_cached;
+  }
+
   D(bug("ZuneFindBestBackend: Finding best backend for RenderPort %p\n", rp));
 
   ObtainSemaphoreShared(&ZuneBackendSemaphore);
@@ -171,6 +184,12 @@ ZuneBackend *ZuneFindBestBackend(struct RenderPort *rp) {
   }
 
   ReleaseSemaphore(&ZuneBackendSemaphore);
+
+  /* Cache result for NULL rp */
+  if (!rp && !g_default_backend_checked) {
+    g_default_backend_cached = best_backend;
+    g_default_backend_checked = TRUE;
+  }
 
   D(bug("ZuneFindBestBackend: Selected backend %s\n",
         best_backend && best_backend->ops

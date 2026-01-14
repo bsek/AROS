@@ -738,30 +738,36 @@ BOOL ZuneReload(struct RenderPort *rp);
 /* Texture Management */
 /*****************************************************************************/
 
-struct ZuneTexture *CreateTexture(UWORD width, UWORD height, UBYTE depth,
-                                  ULONG format, ULONG flags);
-struct ZuneTexture *CreateTextureFromData(APTR data, UWORD width, UWORD height,
+struct ZuneTexture *CreateTexture(struct RenderPort *rp, UWORD width,
+                                  UWORD height, UBYTE depth, ULONG format,
+                                  ULONG flags);
+struct ZuneTexture *CreateTextureFromData(struct RenderPort *rp, APTR data,
+                                          UWORD width, UWORD height,
                                           UBYTE depth, ULONG format,
                                           ULONG pitch, ULONG flags);
 struct ZuneTexture *CreateTextureFromDrawingBoard(struct RenderPort *rp,
                                                   ULONG flags);
-struct ZuneTexture *CreateTextureFromDatatype(APTR dt_object, ULONG flags);
-struct ZuneTexture *CreateTextureFromFile(CONST_STRPTR filename,
+struct ZuneTexture *CreateTextureFromDatatype(struct RenderPort *rp,
+                                              APTR dt_object, ULONG flags);
+struct ZuneTexture *CreateTextureFromFile(struct RenderPort *rp,
+                                          CONST_STRPTR filename,
                                           struct Screen *screen,
                                           ULONG flags);
-void DestroyTexture(struct ZuneTexture *texture);
+void DestroyTexture(struct RenderPort *rp, struct ZuneTexture *texture);
 
 /*****************************************************************************/
 /* Texture Data Operations */
 /*****************************************************************************/
 
-BOOL UpdateTextureData(struct ZuneTexture *texture, APTR data,
-                       struct ZuneRect *rect);
-APTR LockTexturePixels(struct ZuneTexture *texture, ULONG *pitch);
-void UnlockTexturePixels(struct ZuneTexture *texture);
-ULONG GetTexturePixel(struct ZuneTexture *texture, struct ZunePoint *point);
-void SetTexturePixel(struct ZuneTexture *texture, struct ZunePoint *point,
-                     ULONG color);
+BOOL UpdateTextureData(struct RenderPort *rp, struct ZuneTexture *texture,
+                       APTR data, struct ZuneRect *rect);
+APTR LockTexturePixels(struct RenderPort *rp, struct ZuneTexture *texture,
+                       ULONG *pitch);
+void UnlockTexturePixels(struct RenderPort *rp, struct ZuneTexture *texture);
+ULONG GetTexturePixel(struct RenderPort *rp, struct ZuneTexture *texture,
+                      struct ZunePoint *point);
+void SetTexturePixel(struct RenderPort *rp, struct ZuneTexture *texture,
+                     struct ZunePoint *point, ULONG color);
 
 /*****************************************************************************/
 /* Texture Rendering */

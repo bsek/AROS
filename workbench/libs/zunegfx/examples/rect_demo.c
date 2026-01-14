@@ -372,7 +372,7 @@ void DemoLockedRectangles(void) {
     }
 
     locked_pattern_texture =
-        CreateTextureFromData(locked_pattern_pixels, locked_pattern_width,
+        CreateTextureFromData(demo_rp, locked_pattern_pixels, locked_pattern_width,
                               locked_pattern_height, 32,
                               ZUNE_TEXTURE_FORMAT_ARGB32, locked_pattern_pitch,
                               ZUNE_TEXTURE_WRAPPING);
@@ -396,7 +396,7 @@ void DemoLockedRectangles(void) {
   }
 
   if (locked_pattern_texture) {
-    DestroyTexture(locked_pattern_texture);
+    DestroyTexture(demo_rp, locked_pattern_texture);
   }
   if (locked_pattern_pixels) {
     FreeMem(locked_pattern_pixels, locked_pattern_size);
@@ -517,7 +517,7 @@ void DemoUnlockedRectangles(void) {
     }
 
     pattern_texture =
-        CreateTextureFromData(pattern_pixels, pattern_width, pattern_height, 32,
+        CreateTextureFromData(demo_rp, pattern_pixels, pattern_width, pattern_height, 32,
                               ZUNE_TEXTURE_FORMAT_ARGB32, pattern_pitch,
                               ZUNE_TEXTURE_WRAPPING);
   }
@@ -540,7 +540,7 @@ void DemoUnlockedRectangles(void) {
   }
 
   if (pattern_texture) {
-    DestroyTexture(pattern_texture);
+    DestroyTexture(demo_rp, pattern_texture);
   }
   if (pattern_pixels) {
     FreeMem(pattern_pixels, pattern_size);
@@ -1113,7 +1113,7 @@ void DemoTextures(void) {
 
     ULONG pitch = texture_width * 4; /* 4 bytes per pixel for ARGB32 */
     test_texture = CreateTextureFromData(
-        pixel_data, texture_width, texture_height, 32,
+        demo_rp, pixel_data, texture_width, texture_height, 32,
         ZUNE_TEXTURE_FORMAT_ARGB32, pitch, ZUNE_TEXTURE_HARDWARE);
 
     if (test_texture) {
@@ -1225,7 +1225,7 @@ void DemoTextures(void) {
     printf("  Testing texture pixel manipulation...\n");
 
     ULONG pitch = 0;
-    APTR lock_handle = LockTexturePixels(test_texture, &pitch);
+    APTR lock_handle = LockTexturePixels(demo_rp, test_texture, &pitch);
     if (lock_handle) {
       /* Modify some pixels directly */
       {
@@ -1234,21 +1234,21 @@ void DemoTextures(void) {
         struct ZunePoint p3 = {33, 33};
         struct ZunePoint p4 = {32, 31};
         struct ZunePoint p5 = {32, 33};
-        SetTexturePixel(test_texture, &p1, ZUNE_WHITE);
-        SetTexturePixel(test_texture, &p2, ZUNE_WHITE);
-        SetTexturePixel(test_texture, &p3, ZUNE_WHITE);
-        SetTexturePixel(test_texture, &p4, ZUNE_WHITE);
-        SetTexturePixel(test_texture, &p5, ZUNE_WHITE);
+        SetTexturePixel(demo_rp, test_texture, &p1, ZUNE_WHITE);
+        SetTexturePixel(demo_rp, test_texture, &p2, ZUNE_WHITE);
+        SetTexturePixel(demo_rp, test_texture, &p3, ZUNE_WHITE);
+        SetTexturePixel(demo_rp, test_texture, &p4, ZUNE_WHITE);
+        SetTexturePixel(demo_rp, test_texture, &p5, ZUNE_WHITE);
       }
 
       /* Test getting pixel colors */
       {
         struct ZunePoint p = {10, 10};
-        ULONG pixel_color = GetTexturePixel(test_texture, &p);
+        ULONG pixel_color = GetTexturePixel(demo_rp, test_texture, &p);
         printf("  Pixel at (10,10): ARGB=0x%08X\n", (unsigned int)pixel_color);
       }
 
-      UnlockTexturePixels(test_texture);
+      UnlockTexturePixels(demo_rp, test_texture);
 
       /* Draw the modified texture */
       {
@@ -1281,7 +1281,7 @@ void DemoTextures(void) {
     /* Update the texture with new data */
     {
       struct ZuneRect update_rect = {0, 0, texture_width, texture_height};
-      if (UpdateTextureData(test_texture, pixel_data, &update_rect)) {
+      if (UpdateTextureData(demo_rp, test_texture, pixel_data, &update_rect)) {
         printf("  Texture data updated successfully\n");
 
         /* Draw the updated texture */
@@ -1297,12 +1297,12 @@ void DemoTextures(void) {
 
   /* Cleanup */
   if (test_texture) {
-    DestroyTexture(test_texture);
+    DestroyTexture(demo_rp, test_texture);
     printf("  Test texture destroyed\n");
   }
 
   if (board_texture) {
-    DestroyTexture(board_texture);
+    DestroyTexture(demo_rp, board_texture);
     printf("  DrawingBoard texture destroyed\n");
   }
 
@@ -1349,7 +1349,7 @@ void DemoTexturesTiled(void) {
 
     ULONG pitch = tile_width * 4; /* 4 bytes per pixel for ARGB32 */
     tile_texture = CreateTextureFromData(
-        pixel_data, tile_width, tile_height, 32, ZUNE_TEXTURE_FORMAT_ARGB32,
+        demo_rp, pixel_data, tile_width, tile_height, 32, ZUNE_TEXTURE_FORMAT_ARGB32,
         pitch, ZUNE_TEXTURE_HARDWARE | ZUNE_TEXTURE_WRAPPING);
 
     if (tile_texture) {
@@ -1429,7 +1429,7 @@ void DemoTexturesTiled(void) {
 
   /* Cleanup */
   if (tile_texture) {
-    DestroyTexture(tile_texture);
+    DestroyTexture(demo_rp, tile_texture);
     printf("  Tile texture destroyed\n");
   }
 

@@ -33,7 +33,8 @@ BOOL HostGL_FillFBAttributes(LONG * fbattributes, LONG size, struct TagItem *tag
     noAccum     = GetTagData(GLA_NoAccum, GL_FALSE, tagList);
     noDepth     = GetTagData(GLA_NoDepth, GL_FALSE, tagList);
 
-    D(bug("[HostGL] %s()\n", __func__));
+    D(bug("[HostGL] %s(novisinfo=%d, noDepth=%d, noStencil=%d, noAccum=%d)\n",
+          __func__, novisinfo, noDepth, noStencil, noAccum));
 
 #if defined(RENDERER_SEPARATE_X_WINDOW)
     SETFBATTR(GLX_DRAWABLE_TYPE, GLX_WINDOW_BIT)
@@ -53,37 +54,38 @@ BOOL HostGL_FillFBAttributes(LONG * fbattributes, LONG size, struct TagItem *tag
 #endif
 
     SETFBATTR(GLX_RENDER_TYPE, GLX_RGBA_BIT)
-    SETFBATTR(GLX_RED_SIZE, 1)
-    SETFBATTR(GLX_GREEN_SIZE, 1)
-    SETFBATTR(GLX_BLUE_SIZE, 1)
+    SETFBATTR(GLX_RED_SIZE, 8)
+    SETFBATTR(GLX_GREEN_SIZE, 8)
+    SETFBATTR(GLX_BLUE_SIZE, 8)
     SETFBATTR(GLX_ALPHA_SIZE, 0)
 
+    /*
+     * Use minimum requirements for depth/stencil - let GLX choose the best match.
+     * Requesting exact sizes like 24/8 can fail on configs that only support
+     * pbuffer/pixmap with different buffer sizes.
+     */
     if (noDepth)
         SETFBATTR(GLX_DEPTH_SIZE, 0)
     else
-        SETFBATTR(GLX_DEPTH_SIZE, 24)
+        SETFBATTR(GLX_DEPTH_SIZE, 1)  /* Request at least 1 bit, let GLX pick */
 
     if (noStencil)
         SETFBATTR(GLX_STENCIL_SIZE, 0)
     else
-        SETFBATTR(GLX_STENCIL_SIZE, 8)
+        SETFBATTR(GLX_STENCIL_SIZE, 1)  /* Request at least 1 bit, let GLX pick */
 
-    if (noAccum)
-    {
-        SETFBATTR(GLX_ACCUM_RED_SIZE, 0)
-        SETFBATTR(GLX_ACCUM_GREEN_SIZE, 0)
-        SETFBATTR(GLX_ACCUM_BLUE_SIZE, 0)
-        SETFBATTR(GLX_ACCUM_ALPHA_SIZE, 0)
-    }
-    else
-    {
-        SETFBATTR(GLX_ACCUM_RED_SIZE, 16)
-        SETFBATTR(GLX_ACCUM_GREEN_SIZE, 16)
-        SETFBATTR(GLX_ACCUM_BLUE_SIZE, 16)
-        SETFBATTR(GLX_ACCUM_ALPHA_SIZE, 16)
-    }
+    /*
+     * Accumulator buffers are rarely supported on modern hardware/drivers,
+     * especially for pbuffer/pixmap configs. Don't request them by default.
+     */
+    SETFBATTR(GLX_ACCUM_RED_SIZE, 0)
+    SETFBATTR(GLX_ACCUM_GREEN_SIZE, 0)
+    SETFBATTR(GLX_ACCUM_BLUE_SIZE, 0)
+    SETFBATTR(GLX_ACCUM_ALPHA_SIZE, 0)
 
     SETFBATTR(None, None)
+
+    D(bug("[HostGL] %s: filled %d attributes\n", __func__, i));
 
     return TRUE;
 }

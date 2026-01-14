@@ -29,6 +29,9 @@ LIBRARY_SOURCES = \
                 hostgl_glagetcurrentcontext \
                 hostgl_glagetopenglstatetrackerapi \
                 hostgl_glagetprocaddress \
+                hostgl_glagetsharedcontext \
+                hostgl_glagetpipescreen \
+                hostgl_glagetresource \
                 hostgl_glamakecurrent \
                 hostgl_glasetrast \
                 hostgl_glaswapbuffers \

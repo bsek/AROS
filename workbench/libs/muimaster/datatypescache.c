@@ -790,8 +790,9 @@ struct dt_node *dt_load_picture(CONST_STRPTR filename, struct Screen *scr)
     /* 
      * New path: Load directly as ZuneTexture via CreateTextureFromFile.
      * This avoids keeping the DataTypes object around.
+     * Pass NULL for RenderPort since we don't have one at cache time.
      */
-    node->texture = CreateTextureFromFile(filename, scr, 
+    node->texture = CreateTextureFromFile(NULL, filename, scr, 
                                           ZUNE_TEXTURE_WRAPPING | ZUNE_TEXTURE_ALPHA);
     
     if (node->texture)
@@ -879,7 +880,7 @@ void dt_dispose_picture(struct dt_node *node)
                 /* Free ZuneTexture (new path) */
                 if (node->texture)
                 {
-                    DestroyTexture(node->texture);
+                    DestroyTexture(NULL, node->texture);
                     node->texture = NULL;
                 }
                 

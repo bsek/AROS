@@ -34,6 +34,7 @@
 #include <proto/cybergraphics.h>
 #include <utility/tagitem.h>
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
 
 /* GL includes */
@@ -70,6 +71,7 @@ static PFNGLDELETESHADERPROC        glDeleteShader_ptr      = NULL;
 static PFNGLDELETEPROGRAMPROC       glDeleteProgram_ptr     = NULL;
 static PFNGLGETUNIFORMLOCATIONPROC  glGetUniformLocation_ptr = NULL;
 static PFNGLUNIFORM1FPROC           glUniform1f_ptr         = NULL;
+static PFNGLUNIFORM1IPROC           glUniform1i_ptr         = NULL;
 static PFNGLUNIFORM2FPROC           glUniform2f_ptr         = NULL;
 static PFNGLUNIFORM4FPROC           glUniform4f_ptr         = NULL;
 
@@ -181,7 +183,11 @@ static GLuint g_rounded_rect_program = 0;
 static GLuint g_rounded_rect_vs = 0;
 static GLuint g_rounded_rect_fs = 0;
 
-/* Shader uniform locations */
+/* Textured rounded rect shader (for non-solid brushes) */
+static GLuint g_rounded_rect_textured_program = 0;
+static GLuint g_rounded_rect_textured_fs = 0;
+
+/* Shader uniform locations - solid color shader */
 static GLint g_uniform_rect_size = -1;
 static GLint g_uniform_rect_radius = -1;
 static GLint g_uniform_fill_color = -1;
@@ -189,6 +195,15 @@ static GLint g_uniform_border_color = -1;
 static GLint g_uniform_border_width = -1;
 static GLint g_uniform_has_border = -1;
 static GLint g_uniform_has_fill = -1;
+
+/* Shader uniform locations - textured shader */
+static GLint g_uniform_tex_rect_size = -1;
+static GLint g_uniform_tex_rect_radius = -1;
+static GLint g_uniform_tex_fill_texture = -1;
+static GLint g_uniform_tex_border_color = -1;
+static GLint g_uniform_tex_border_width = -1;
+static GLint g_uniform_tex_has_border = -1;
+static GLint g_uniform_tex_has_fill = -1;
 
 #define DEBUG 1
 #include <aros/debug.h>
@@ -310,6 +325,19 @@ static BOOL OpenGL_SyncFBOToBitmap(struct RenderPort *rp);
 static BOOL OpenGL_SyncRegionFBOToBitmap(struct RenderPort *rp,
                                          WORD x, WORD y, UWORD width, UWORD height);
 
+/* Pixel buffer helper functions */
+static void OpenGL_FlipPixelBufferY(UBYTE *buffer, UWORD width, UWORD height, UBYTE *temp);
+static void OpenGL_FlipPixelBufferYCopy(const UBYTE *src, UBYTE *dst, UWORD width, UWORD height);
+static UBYTE *OpenGL_ReadPixelsToBuffer(WORD x, WORD y, UWORD width, UWORD height, BOOL flip_y);
+static UBYTE *OpenGL_ReadRastPortToBuffer(struct RastPort *rp, WORD x, WORD y,
+                                          UWORD width, UWORD height, BOOL force_opaque);
+static GLuint OpenGL_UploadTextureFromBuffer(const UBYTE *buffer, UWORD width, UWORD height);
+static void OpenGL_DrawTexturedQuad(WORD x, WORD y, UWORD width, UWORD height, BOOL flip_texcoord);
+
+/* Brush to texture conversion */
+static GLuint OpenGL_BrushToTexture(struct RenderPort *rp, struct ZuneBrush *brush,
+                                    WORD x, WORD y, UWORD width, UWORD height);
+
 /*****************************************************************************/
 /* Rounded Rectangle Shader Source                                           */
 /*****************************************************************************/
@@ -360,8 +388,8 @@ static const GLchar *g_rounded_rect_fs_source =
     "    /* Calculate signed distance to rounded rect edge */\n"
     "    float dist = sdRoundedRect(pixelPos, halfSize, u_radius);\n"
     "    \n"
-    "    /* Antialiasing: smooth transition over ~1.5 pixels */\n"
-    "    float aa = 1.5;\n"
+    "    /* Antialiasing: smooth transition over ~1.0 pixels for sharper edges */\n"
+    "    float aa = 1.0;\n"
     "    \n"
     "    /* Start with transparent */\n"
     "    vec4 color = vec4(0.0);\n"
@@ -370,6 +398,65 @@ static const GLchar *g_rounded_rect_fs_source =
     "    if (u_has_fill > 0.5) {\n"
     "        float fillAlpha = 1.0 - smoothstep(-aa, 0.0, dist);\n"
     "        color = u_fill_color * fillAlpha;\n"
+    "    }\n"
+    "    \n"
+    "    /* Border: ring around the edge */\n"
+    "    if (u_has_border > 0.5 && u_border_width > 0.0) {\n"
+    "        /* Border is from (edge - border_width) to edge */\n"
+    "        float innerDist = dist + u_border_width;\n"
+    "        /* Alpha is 1 when between inner and outer edge */\n"
+    "        float borderAlpha = (1.0 - smoothstep(-aa, 0.0, dist)) * smoothstep(-aa, 0.0, innerDist);\n"
+    "        /* Blend border over fill */\n"
+    "        color = mix(color, u_border_color, borderAlpha * u_border_color.a);\n"
+    "    }\n"
+    "    \n"
+    "    gl_FragColor = color;\n"
+    "}\n";
+
+/*
+ * Fragment Shader for Textured Rounded Rectangle using SDF
+ *
+ * Same as the solid color shader, but samples fill color from a texture
+ * instead of using a uniform color. Used for gradient, pattern, and
+ * texture brush fills with rounded corners.
+ */
+static const GLchar *g_rounded_rect_textured_fs_source =
+    "varying vec2 v_texcoord;\n"
+    "uniform vec2 u_size;\n"           /* Rectangle size in pixels */
+    "uniform float u_radius;\n"        /* Corner radius in pixels */
+    "uniform sampler2D u_fill_texture;\n" /* Fill texture */
+    "uniform vec4 u_border_color;\n"   /* Border color RGBA */
+    "uniform float u_border_width;\n"  /* Border width in pixels */
+    "uniform float u_has_fill;\n"      /* 1.0 if filled, 0.0 otherwise */
+    "uniform float u_has_border;\n"    /* 1.0 if has border, 0.0 otherwise */
+    "\n"
+    "/* SDF for a rounded rectangle */\n"
+    "float sdRoundedRect(vec2 p, vec2 b, float r) {\n"
+    "    vec2 q = abs(p) - b + vec2(r);\n"
+    "    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;\n"
+    "}\n"
+    "\n"
+    "void main() {\n"
+    "    /* Convert texcoord (0-1) to pixel coordinates centered at origin */\n"
+    "    vec2 pixelPos = (v_texcoord - 0.5) * u_size;\n"
+    "    \n"
+    "    /* Half-size of rectangle */\n"
+    "    vec2 halfSize = u_size * 0.5;\n"
+    "    \n"
+    "    /* Calculate signed distance to rounded rect edge */\n"
+    "    float dist = sdRoundedRect(pixelPos, halfSize, u_radius);\n"
+    "    \n"
+    "    /* Antialiasing: smooth transition over ~0.75 pixels for sharper edges */\n"
+    "    float aa = 0.75;\n"
+    "    \n"
+    "    /* Start with transparent */\n"
+    "    vec4 color = vec4(0.0);\n"
+    "    \n"
+    "    /* Fill: inside the shape (dist < 0) - sample from texture */\n"
+    "    if (u_has_fill > 0.5) {\n"
+    "        vec4 fillColor = texture2D(u_fill_texture, v_texcoord);\n"
+    "        float fillAlpha = 1.0 - smoothstep(-aa, 0.0, dist);\n"
+    "        color = fillColor * fillAlpha;\n"
     "    }\n"
     "    \n"
     "    /* Border: ring around the edge */\n"
@@ -409,153 +496,69 @@ static void OpenGLCopyFromRastPort(struct RenderPort *rp, struct RastPort *src_r
     UBYTE *pixelbuffer;
     UBYTE *flipped_buffer;
     GLuint texture;
-    ULONG row, src_row, dst_row;
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGLCopyFromRastPort: src(%d,%d) -> dst(%d,%d) %dx%d\n",
-          src_x, src_y, dst_x, dst_y, width, height));
-
-    if (!rp || !src_rp || !g_opengl_priv) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGLCopyFromRastPort: Invalid parameters\n"));
+    if (!rp || !src_rp || !g_opengl_priv || !CyberGfxBase) {
         return;
     }
 
-    if (!CyberGfxBase) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGLCopyFromRastPort: CyberGfxBase not available\n"));
-        return;
-    }
-
-    /* Ensure we have a GL context */
     if (!OpenGL_SwitchToTarget(rp)) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGLCopyFromRastPort: Failed to switch to target\n"));
         return;
     }
 
-    /* Validate dimensions */
     if (width == 0 || height == 0) {
         return;
     }
 
-    /* Check maximum texture size to avoid Mesa errors */
+    /* Check maximum texture size */
     {
         GLint max_texture_size = 0;
         glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_size);
         if (max_texture_size > 0 && ((GLint)width > max_texture_size || (GLint)height > max_texture_size)) {
-            D(bug("[ZuneRenderer:OpenGL] OpenGLCopyFromRastPort: Size %dx%d exceeds max texture size %d\n",
-                  width, height, max_texture_size));
             return;
         }
     }
 
-    /* Allocate buffer for pixel data (RGBA format, 4 bytes per pixel) */
-    pixelbuffer = AllocVec(width * height * 4, MEMF_ANY);
+    /* Read pixels from RastPort with alpha forced to opaque */
+    pixelbuffer = OpenGL_ReadRastPortToBuffer(src_rp, src_x, src_y, width, height, TRUE);
     if (!pixelbuffer) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGLCopyFromRastPort: Failed to allocate pixel buffer\n"));
         return;
     }
 
     /* Allocate buffer for Y-flipped data */
-    flipped_buffer = AllocVec(width * height * 4, MEMF_ANY);
+    flipped_buffer = AllocVec((ULONG)width * height * 4, MEMF_ANY);
     if (!flipped_buffer) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGLCopyFromRastPort: Failed to allocate flipped buffer\n"));
         FreeVec(pixelbuffer);
         return;
     }
 
-    /* Read pixels from source RastPort */
-    D(bug("[ZuneRenderer:OpenGL] OpenGLCopyFromRastPort: Reading from RastPort %p, BitMap %p\n",
-          src_rp, src_rp->BitMap));
-    ReadPixelArray(pixelbuffer, 0, 0, width * 4,
-                   src_rp, src_x, src_y, width, height, RECTFMT_RGBA);
+    /* Flip vertically for OpenGL texture coordinates */
+    OpenGL_FlipPixelBufferYCopy(pixelbuffer, flipped_buffer, width, height);
 
-    /* Debug: show first few pixels read from RastPort */
-    D(bug("[ZuneRenderer:OpenGL] OpenGLCopyFromRastPort: First pixel from RastPort: RGBA %02x %02x %02x %02x\n",
-          pixelbuffer[0], pixelbuffer[1], pixelbuffer[2], pixelbuffer[3]));
-    D(bug("[ZuneRenderer:OpenGL] OpenGLCopyFromRastPort: Pixel at (10,10): RGBA %02x %02x %02x %02x\n",
-          pixelbuffer[(10 * width + 10) * 4 + 0],
-          pixelbuffer[(10 * width + 10) * 4 + 1],
-          pixelbuffer[(10 * width + 10) * 4 + 2],
-          pixelbuffer[(10 * width + 10) * 4 + 3]));
+    /* Upload to texture */
+    texture = OpenGL_UploadTextureFromBuffer(flipped_buffer, width, height);
+    FreeVec(flipped_buffer);
+    FreeVec(pixelbuffer);
 
-    /* Legacy graphics.library draws often come back with alpha=0; force opaque */
-    for (ULONG i = 3; i < (ULONG)width * height * 4; i += 4) {
-        pixelbuffer[i] = 0xFF;
+    if (texture == 0) {
+        return;
     }
 
-    /*
-     * Flip the image vertically because:
-     * - Screen coordinates have Y=0 at top
-     * - OpenGL has Y=0 at bottom
-     * Our ortho projection flips rendering, but textures still need manual flip.
-     */
-    for (row = 0; row < height; row++) {
-        src_row = row * width * 4;
-        dst_row = (height - 1 - row) * width * 4;
-        CopyMem(pixelbuffer + src_row, flipped_buffer + dst_row, width * 4);
-    }
-
-    /* Create a temporary texture to hold the RastPort contents */
-    glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
-
-    /* Set texture parameters for pixel-perfect rendering */
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-
-    /* Upload the pixel data to the texture */
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0,
-                 GL_RGBA, GL_UNSIGNED_BYTE, flipped_buffer);
-
-    /* Draw the texture at the destination position */
+    /* Draw texture to framebuffer (replace, not blend) */
     glEnable(GL_TEXTURE_2D);
-
-    /*
-     * CRITICAL: Disable blending when copying from RastPort.
-     * We want to REPLACE the FBO contents with the RastPort contents,
-     * not blend them together. If blending is enabled and the FBO has
-     * uninitialized/garbage data, we'll see random artifacts.
-     */
     glDisable(GL_BLEND);
 
-    /* Disable any active shader program - use fixed function pipeline */
     if (glUseProgram_ptr) {
         glUseProgram_ptr(0);
     }
 
-    /* Use white color so texture colors come through unchanged */
     glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+    OpenGL_DrawTexturedQuad(dst_x, dst_y, width, height, FALSE);
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGLCopyFromRastPort: Drawing quad dst(%d,%d) size %dx%d\n",
-          dst_x, dst_y, width, height));
-
-    /*
-     * Draw a textured quad covering the destination area.
-     * The texture coordinates map the full texture (0,0)-(1,1) to the quad.
-     * Note: texture was flipped vertically, so we use normal texcoords here.
-     */
-    glBegin(GL_QUADS);
-    glTexCoord2f(0.0f, 0.0f); glVertex2i(dst_x, dst_y);
-    glTexCoord2f(1.0f, 0.0f); glVertex2i(dst_x + width, dst_y);
-    glTexCoord2f(1.0f, 1.0f); glVertex2i(dst_x + width, dst_y + height);
-    glTexCoord2f(0.0f, 1.0f); glVertex2i(dst_x, dst_y + height);
-    glEnd();
-
-    /* Flush to ensure drawing is complete */
     glFlush();
-
-    /* Re-enable blending for subsequent operations */
     glEnable(GL_BLEND);
-
     glDisable(GL_TEXTURE_2D);
 
-    /* Clean up the texture */
     glDeleteTextures(1, &texture);
-
-    FreeVec(flipped_buffer);
-    FreeVec(pixelbuffer);
-
-    D(bug("[ZuneRenderer:OpenGL] OpenGLCopyFromRastPort: Copy complete, texture drawn to FBO\n"));
 }
 
 /*****************************************************************************/
@@ -608,6 +611,594 @@ ZuneBackendOps opengl_backend_ops = {
 };
 
 /*****************************************************************************/
+/* Pixel Buffer Helper Functions                                             */
+/*****************************************************************************/
+
+/*
+ * OpenGL_FlipPixelBufferY - Flip a pixel buffer vertically in-place
+ *
+ * OpenGL and screen coordinates have opposite Y directions:
+ * - Screen: Y=0 at top
+ * - OpenGL: Y=0 at bottom
+ *
+ * This function flips an RGBA pixel buffer vertically.
+ *
+ * Parameters:
+ *   buffer - RGBA pixel buffer to flip (modified in place)
+ *   width  - Width in pixels
+ *   height - Height in pixels
+ *   temp   - Temporary row buffer (must be at least width*4 bytes)
+ */
+static void OpenGL_FlipPixelBufferY(UBYTE *buffer, UWORD width, UWORD height, UBYTE *temp)
+{
+    ULONG row_size = (ULONG)width * 4;
+    UWORD top, bottom;
+
+    for (top = 0, bottom = height - 1; top < bottom; top++, bottom--) {
+        UBYTE *top_row = buffer + top * row_size;
+        UBYTE *bottom_row = buffer + bottom * row_size;
+
+        CopyMem(top_row, temp, row_size);
+        CopyMem(bottom_row, top_row, row_size);
+        CopyMem(temp, bottom_row, row_size);
+    }
+}
+
+/*
+ * OpenGL_FlipPixelBufferYCopy - Copy pixel buffer with vertical flip
+ *
+ * Copies src to dst while flipping vertically.
+ *
+ * Parameters:
+ *   src    - Source RGBA pixel buffer
+ *   dst    - Destination RGBA pixel buffer
+ *   width  - Width in pixels
+ *   height - Height in pixels
+ */
+static void OpenGL_FlipPixelBufferYCopy(const UBYTE *src, UBYTE *dst, UWORD width, UWORD height)
+{
+    ULONG row_size = (ULONG)width * 4;
+    UWORD row;
+
+    for (row = 0; row < height; row++) {
+        const UBYTE *src_row = src + row * row_size;
+        UBYTE *dst_row = dst + (height - 1 - row) * row_size;
+        CopyMem((APTR)src_row, dst_row, row_size);
+    }
+}
+
+/*
+ * OpenGL_ReadPixelsToBuffer - Read pixels from current GL framebuffer
+ *
+ * Allocates a buffer and reads pixels from the current GL framebuffer.
+ * The buffer is Y-flipped to match screen coordinates.
+ *
+ * Parameters:
+ *   x, y          - Source position in framebuffer
+ *   width, height - Size of region to read
+ *   flip_y        - If TRUE, flip the buffer vertically
+ *
+ * Returns allocated buffer (caller must FreeVec), or NULL on failure.
+ */
+static UBYTE *OpenGL_ReadPixelsToBuffer(WORD x, WORD y, UWORD width, UWORD height, BOOL flip_y)
+{
+    UBYTE *buffer;
+    ULONG buffer_size = (ULONG)width * height * 4;
+
+    buffer = AllocVec(buffer_size, MEMF_ANY);
+    if (!buffer) {
+        return NULL;
+    }
+
+    glReadPixels(x, y, width, height, GL_RGBA, GL_UNSIGNED_BYTE, buffer);
+
+    if (flip_y) {
+        UBYTE *temp = AllocVec(width * 4, MEMF_ANY);
+        if (temp) {
+            OpenGL_FlipPixelBufferY(buffer, width, height, temp);
+            FreeVec(temp);
+        }
+    }
+
+    return buffer;
+}
+
+/*
+ * OpenGL_ReadRastPortToBuffer - Read pixels from RastPort into buffer
+ *
+ * Allocates a buffer and reads pixels from a RastPort using CyberGraphics.
+ *
+ * Parameters:
+ *   rp            - Source RastPort
+ *   x, y          - Source position
+ *   width, height - Size of region to read
+ *   force_opaque  - If TRUE, set alpha to 0xFF for all pixels
+ *
+ * Returns allocated buffer (caller must FreeVec), or NULL on failure.
+ */
+static UBYTE *OpenGL_ReadRastPortToBuffer(struct RastPort *rp, WORD x, WORD y,
+                                          UWORD width, UWORD height, BOOL force_opaque)
+{
+    UBYTE *buffer;
+    ULONG buffer_size = (ULONG)width * height * 4;
+
+    if (!CyberGfxBase || !rp) {
+        return NULL;
+    }
+
+    buffer = AllocVec(buffer_size, MEMF_ANY);
+    if (!buffer) {
+        return NULL;
+    }
+
+    ReadPixelArray(buffer, 0, 0, width * 4, rp, x, y, width, height, RECTFMT_RGBA);
+
+    if (force_opaque) {
+        ULONG i;
+        for (i = 3; i < buffer_size; i += 4) {
+            buffer[i] = 0xFF;
+        }
+    }
+
+    return buffer;
+}
+
+/*
+ * OpenGL_UploadTextureFromBuffer - Create and upload a texture from pixel buffer
+ *
+ * Creates a GL texture and uploads pixel data to it.
+ *
+ * Parameters:
+ *   buffer        - RGBA pixel buffer
+ *   width, height - Texture dimensions
+ *
+ * Returns texture ID, or 0 on failure.
+ */
+static GLuint OpenGL_UploadTextureFromBuffer(const UBYTE *buffer, UWORD width, UWORD height)
+{
+    GLuint texture;
+
+    glGenTextures(1, &texture);
+    if (texture == 0) {
+        return 0;
+    }
+
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0,
+                 GL_RGBA, GL_UNSIGNED_BYTE, buffer);
+
+    return texture;
+}
+
+/*
+ * OpenGL_DrawTexturedQuad - Draw a textured quad
+ *
+ * Draws a quad with the currently bound texture.
+ *
+ * Parameters:
+ *   x, y          - Destination position
+ *   width, height - Quad size
+ *   flip_texcoord - If TRUE, flip texture V coordinates
+ */
+static void OpenGL_DrawTexturedQuad(WORD x, WORD y, UWORD width, UWORD height, BOOL flip_texcoord)
+{
+    GLfloat v0 = flip_texcoord ? 1.0f : 0.0f;
+    GLfloat v1 = flip_texcoord ? 0.0f : 1.0f;
+
+    glBegin(GL_QUADS);
+    glTexCoord2f(0.0f, v0); glVertex2i(x, y);
+    glTexCoord2f(1.0f, v0); glVertex2i(x + width, y);
+    glTexCoord2f(1.0f, v1); glVertex2i(x + width, y + height);
+    glTexCoord2f(0.0f, v1); glVertex2i(x, y + height);
+    glEnd();
+}
+
+/*
+ * OpenGL_BrushToTexture - Convert a ZuneBrush to an OpenGL texture
+ *
+ * Rasterizes any brush type to an RGBA buffer and uploads it as a GL texture.
+ * Supports: TEXTURE, DATATYPE, LINEAR_GRADIENT, RADIAL_GRADIENT, PATTERN, PEN, SOLID.
+ *
+ * Parameters:
+ *   rp           - RenderPort (for colormap/pen resolution)
+ *   brush        - The brush to convert
+ *   x, y         - Rectangle position (for gradient calculations)
+ *   width,height - Rectangle dimensions
+ *
+ * Returns texture ID, or 0 on failure. Caller must delete the texture.
+ */
+static GLuint OpenGL_BrushToTexture(struct RenderPort *rp, struct ZuneBrush *brush,
+                                    WORD x, WORD y, UWORD width, UWORD height)
+{
+    UBYTE *buffer;
+    GLuint texture;
+    ULONG row_bytes;
+    UWORD px, py;
+
+    if (!brush || width == 0 || height == 0) {
+        return 0;
+    }
+
+    row_bytes = (ULONG)width * 4;
+    buffer = AllocVec(row_bytes * height, MEMF_PUBLIC);
+    if (!buffer) {
+        return 0;
+    }
+
+    switch (brush->type) {
+    case ZUNE_BRUSH_TYPE_SOLID: {
+        /* Solid color - fill entire buffer with same color */
+        ULONG color = brush->data.solid.color;
+        UBYTE r = (color >> 16) & 0xFF;
+        UBYTE g = (color >> 8) & 0xFF;
+        UBYTE b = color & 0xFF;
+        UBYTE a = (color >> 24) & 0xFF;
+
+        UBYTE *dst = buffer;
+        for (py = 0; py < height; py++) {
+            for (px = 0; px < width; px++) {
+                *dst++ = r;
+                *dst++ = g;
+                *dst++ = b;
+                *dst++ = a;
+            }
+        }
+        break;
+    }
+
+    case ZUNE_BRUSH_TYPE_PEN: {
+        /* PEN - convert pen to color using colormap */
+        ULONG rgb[3];
+        UBYTE r, g, b, a = 0xFF;
+
+        if (rp && rp->colormap) {
+            GetRGB32(rp->colormap, brush->data.pen.pen, 1, rgb);
+            r = rgb[0] >> 24;
+            g = rgb[1] >> 24;
+            b = rgb[2] >> 24;
+        } else {
+            /* Fallback - use pen as gray value */
+            r = g = b = (UBYTE)(brush->data.pen.pen & 0xFF);
+        }
+
+        UBYTE *dst = buffer;
+        for (py = 0; py < height; py++) {
+            for (px = 0; px < width; px++) {
+                *dst++ = r;
+                *dst++ = g;
+                *dst++ = b;
+                *dst++ = a;
+            }
+        }
+        break;
+    }
+
+    case ZUNE_BRUSH_TYPE_TEXTURE:
+    case ZUNE_BRUSH_TYPE_DATATYPE: {
+        /* TEXTURE/DATATYPE - copy from ZuneTexture with wrapping */
+        struct ZuneTexture *tex = (brush->type == ZUNE_BRUSH_TYPE_TEXTURE)
+                                      ? brush->data.texture.texture
+                                      : brush->data.datatype.texture;
+        struct ZuneRect src = (brush->type == ZUNE_BRUSH_TYPE_TEXTURE)
+                                  ? brush->data.texture.source
+                                  : brush->data.datatype.source;
+        enum ZuneBrushWrapMode wrap_u = (brush->type == ZUNE_BRUSH_TYPE_TEXTURE)
+                                            ? brush->data.texture.wrap_u
+                                            : brush->data.datatype.wrap_u;
+        enum ZuneBrushWrapMode wrap_v = (brush->type == ZUNE_BRUSH_TYPE_TEXTURE)
+                                            ? brush->data.texture.wrap_v
+                                            : brush->data.datatype.wrap_v;
+
+        if (!tex || !tex->pixel_data || !tex->valid) {
+            FreeVec(buffer);
+            return 0;
+        }
+
+        UWORD src_w = src.width ? src.width : tex->width;
+        UWORD src_h = src.height ? src.height : tex->height;
+        ULONG *src_pixels = (ULONG *)tex->pixel_data;
+        ULONG src_pitch = tex->pitch / 4;
+
+        UBYTE *dst = buffer;
+        for (py = 0; py < height; py++) {
+            for (px = 0; px < width; px++) {
+                int tex_x = px;
+                int tex_y = py;
+
+                /* Apply wrapping */
+                switch (wrap_u) {
+                case ZUNE_BRUSH_WRAP_REPEAT:
+                    tex_x = tex_x % src_w;
+                    if (tex_x < 0) tex_x += src_w;
+                    break;
+                case ZUNE_BRUSH_WRAP_MIRROR: {
+                    int doubled = src_w * 2;
+                    tex_x = tex_x % doubled;
+                    if (tex_x < 0) tex_x += doubled;
+                    if (tex_x >= src_w) tex_x = (doubled - 1) - tex_x;
+                    break;
+                }
+                default: /* CLAMP */
+                    if (tex_x < 0) tex_x = 0;
+                    if (tex_x >= src_w) tex_x = src_w - 1;
+                    break;
+                }
+
+                switch (wrap_v) {
+                case ZUNE_BRUSH_WRAP_REPEAT:
+                    tex_y = tex_y % src_h;
+                    if (tex_y < 0) tex_y += src_h;
+                    break;
+                case ZUNE_BRUSH_WRAP_MIRROR: {
+                    int doubled = src_h * 2;
+                    tex_y = tex_y % doubled;
+                    if (tex_y < 0) tex_y += doubled;
+                    if (tex_y >= src_h) tex_y = (doubled - 1) - tex_y;
+                    break;
+                }
+                default: /* CLAMP */
+                    if (tex_y < 0) tex_y = 0;
+                    if (tex_y >= src_h) tex_y = src_h - 1;
+                    break;
+                }
+
+                /* Add source offset */
+                tex_x += src.x;
+                tex_y += src.y;
+
+                /* Sample pixel */
+                ULONG pixel = src_pixels[tex_y * src_pitch + tex_x];
+                *dst++ = (pixel >> 16) & 0xFF; /* R */
+                *dst++ = (pixel >> 8) & 0xFF;  /* G */
+                *dst++ = pixel & 0xFF;         /* B */
+                *dst++ = (pixel >> 24) & 0xFF; /* A */
+            }
+        }
+        break;
+    }
+
+    case ZUNE_BRUSH_TYPE_LINEAR_GRADIENT: {
+        /* LINEAR_GRADIENT - rasterize gradient */
+        float start_x = x + brush->data.linear.start.x;
+        float start_y = y + brush->data.linear.start.y;
+        float end_x = x + brush->data.linear.end.x;
+        float end_y = y + brush->data.linear.end.y;
+
+        float dx = end_x - start_x;
+        float dy = end_y - start_y;
+        float length_sq = dx * dx + dy * dy;
+
+        if (length_sq < 0.001f || !brush->data.linear.stops ||
+            brush->data.linear.stop_count == 0) {
+            /* Degenerate gradient - use first stop color or black */
+            ULONG color = (brush->data.linear.stops && brush->data.linear.stop_count > 0)
+                              ? brush->data.linear.stops[0].color : 0xFF000000;
+            UBYTE r = (color >> 16) & 0xFF;
+            UBYTE g = (color >> 8) & 0xFF;
+            UBYTE b = color & 0xFF;
+            UBYTE a = (color >> 24) & 0xFF;
+
+            UBYTE *dst = buffer;
+            for (py = 0; py < height; py++) {
+                for (px = 0; px < width; px++) {
+                    *dst++ = r;
+                    *dst++ = g;
+                    *dst++ = b;
+                    *dst++ = a;
+                }
+            }
+        } else {
+            const struct ZuneGradientStop *stops = brush->data.linear.stops;
+            UWORD stop_count = brush->data.linear.stop_count;
+
+            UBYTE *dst = buffer;
+            for (py = 0; py < height; py++) {
+                for (px = 0; px < width; px++) {
+                    float pixel_x = x + px;
+                    float pixel_y = y + py;
+                    float t = ((pixel_x - start_x) * dx + (pixel_y - start_y) * dy) / length_sq;
+
+                    /* Clamp t to [0,1] */
+                    if (t < 0.0f) t = 0.0f;
+                    if (t > 1.0f) t = 1.0f;
+
+                    /* Interpolate gradient stops */
+                    UBYTE r, g, b, a;
+                    if (t <= stops[0].position) {
+                        ULONG c = stops[0].color;
+                        a = (c >> 24) & 0xFF;
+                        r = (c >> 16) & 0xFF;
+                        g = (c >> 8) & 0xFF;
+                        b = c & 0xFF;
+                    } else if (t >= stops[stop_count - 1].position) {
+                        ULONG c = stops[stop_count - 1].color;
+                        a = (c >> 24) & 0xFF;
+                        r = (c >> 16) & 0xFF;
+                        g = (c >> 8) & 0xFF;
+                        b = c & 0xFF;
+                    } else {
+                        /* Find surrounding stops */
+                        UWORD i;
+                        for (i = 1; i < stop_count; i++) {
+                            if (t <= stops[i].position) {
+                                float pos0 = stops[i - 1].position;
+                                float pos1 = stops[i].position;
+                                float local_t = (t - pos0) / (pos1 - pos0);
+                                ULONG c0 = stops[i - 1].color;
+                                ULONG c1 = stops[i].color;
+
+                                a = (UBYTE)((1.0f - local_t) * ((c0 >> 24) & 0xFF) + local_t * ((c1 >> 24) & 0xFF));
+                                r = (UBYTE)((1.0f - local_t) * ((c0 >> 16) & 0xFF) + local_t * ((c1 >> 16) & 0xFF));
+                                g = (UBYTE)((1.0f - local_t) * ((c0 >> 8) & 0xFF) + local_t * ((c1 >> 8) & 0xFF));
+                                b = (UBYTE)((1.0f - local_t) * (c0 & 0xFF) + local_t * (c1 & 0xFF));
+                                break;
+                            }
+                        }
+                    }
+
+                    *dst++ = r;
+                    *dst++ = g;
+                    *dst++ = b;
+                    *dst++ = a;
+                }
+            }
+        }
+        break;
+    }
+
+    case ZUNE_BRUSH_TYPE_RADIAL_GRADIENT: {
+        /* RADIAL_GRADIENT - rasterize radial gradient */
+        float center_x = x + brush->data.radial.center.x;
+        float center_y = y + brush->data.radial.center.y;
+        float radius = (float)brush->data.radial.radius;
+
+        if (radius < 0.001f || !brush->data.radial.stops ||
+            brush->data.radial.stop_count == 0) {
+            /* Degenerate gradient */
+            ULONG color = (brush->data.radial.stops && brush->data.radial.stop_count > 0)
+                              ? brush->data.radial.stops[0].color : 0xFF000000;
+            UBYTE r = (color >> 16) & 0xFF;
+            UBYTE g = (color >> 8) & 0xFF;
+            UBYTE b = color & 0xFF;
+            UBYTE a = (color >> 24) & 0xFF;
+
+            UBYTE *dst = buffer;
+            for (py = 0; py < height; py++) {
+                for (px = 0; px < width; px++) {
+                    *dst++ = r;
+                    *dst++ = g;
+                    *dst++ = b;
+                    *dst++ = a;
+                }
+            }
+        } else {
+            const struct ZuneGradientStop *stops = brush->data.radial.stops;
+            UWORD stop_count = brush->data.radial.stop_count;
+
+            UBYTE *dst = buffer;
+            for (py = 0; py < height; py++) {
+                for (px = 0; px < width; px++) {
+                    float pixel_x = x + px;
+                    float pixel_y = y + py;
+                    float dist_x = pixel_x - center_x;
+                    float dist_y = pixel_y - center_y;
+                    float dist = sqrtf(dist_x * dist_x + dist_y * dist_y);
+                    float t = dist / radius;
+
+                    /* Clamp t to [0,1] */
+                    if (t < 0.0f) t = 0.0f;
+                    if (t > 1.0f) t = 1.0f;
+
+                    /* Interpolate gradient stops */
+                    UBYTE r, g, b, a;
+                    if (t <= stops[0].position) {
+                        ULONG c = stops[0].color;
+                        a = (c >> 24) & 0xFF;
+                        r = (c >> 16) & 0xFF;
+                        g = (c >> 8) & 0xFF;
+                        b = c & 0xFF;
+                    } else if (t >= stops[stop_count - 1].position) {
+                        ULONG c = stops[stop_count - 1].color;
+                        a = (c >> 24) & 0xFF;
+                        r = (c >> 16) & 0xFF;
+                        g = (c >> 8) & 0xFF;
+                        b = c & 0xFF;
+                    } else {
+                        /* Find surrounding stops */
+                        UWORD i;
+                        for (i = 1; i < stop_count; i++) {
+                            if (t <= stops[i].position) {
+                                float pos0 = stops[i - 1].position;
+                                float pos1 = stops[i].position;
+                                float local_t = (t - pos0) / (pos1 - pos0);
+                                ULONG c0 = stops[i - 1].color;
+                                ULONG c1 = stops[i].color;
+
+                                a = (UBYTE)((1.0f - local_t) * ((c0 >> 24) & 0xFF) + local_t * ((c1 >> 24) & 0xFF));
+                                r = (UBYTE)((1.0f - local_t) * ((c0 >> 16) & 0xFF) + local_t * ((c1 >> 16) & 0xFF));
+                                g = (UBYTE)((1.0f - local_t) * ((c0 >> 8) & 0xFF) + local_t * ((c1 >> 8) & 0xFF));
+                                b = (UBYTE)((1.0f - local_t) * (c0 & 0xFF) + local_t * (c1 & 0xFF));
+                                break;
+                            }
+                        }
+                    }
+
+                    *dst++ = r;
+                    *dst++ = g;
+                    *dst++ = b;
+                    *dst++ = a;
+                }
+            }
+        }
+        break;
+    }
+
+    case ZUNE_BRUSH_TYPE_PATTERN: {
+        /* PATTERN - 16x2 bit pattern with fg/bg colors */
+        ULONG fg_color, bg_color;
+        UBYTE fg_r, fg_g, fg_b, fg_a = 0xFF;
+        UBYTE bg_r, bg_g, bg_b, bg_a = 0xFF;
+
+        if (!brush->data.pattern.pattern || !brush->data.pattern.colormap) {
+            FreeVec(buffer);
+            return 0;
+        }
+
+        /* Get colors from pens */
+        ULONG rgb[3];
+        GetRGB32(brush->data.pattern.colormap, brush->data.pattern.fg_pen, 1, rgb);
+        fg_r = rgb[0] >> 24;
+        fg_g = rgb[1] >> 24;
+        fg_b = rgb[2] >> 24;
+
+        GetRGB32(brush->data.pattern.colormap, brush->data.pattern.bg_pen, 1, rgb);
+        bg_r = rgb[0] >> 24;
+        bg_g = rgb[1] >> 24;
+        bg_b = rgb[2] >> 24;
+
+        UBYTE *dst = buffer;
+        for (py = 0; py < height; py++) {
+            int pat_y = py % 2;
+            UWORD pat_row = brush->data.pattern.pattern[pat_y];
+
+            for (px = 0; px < width; px++) {
+                int pat_x = px % 16;
+                BOOL is_fg = (pat_row >> (15 - pat_x)) & 1;
+
+                if (is_fg) {
+                    *dst++ = fg_r;
+                    *dst++ = fg_g;
+                    *dst++ = fg_b;
+                    *dst++ = fg_a;
+                } else {
+                    *dst++ = bg_r;
+                    *dst++ = bg_g;
+                    *dst++ = bg_b;
+                    *dst++ = bg_a;
+                }
+            }
+        }
+        break;
+    }
+
+    default:
+        FreeVec(buffer);
+        return 0;
+    }
+
+    /* Upload to GL texture */
+    texture = OpenGL_UploadTextureFromBuffer(buffer, width, height);
+    FreeVec(buffer);
+
+    return texture;
+}
+
+/*****************************************************************************/
 /* Library Management                                                        */
 /*****************************************************************************/
 
@@ -621,25 +1212,16 @@ ZuneBackendOps opengl_backend_ops = {
  */
 BOOL OpenGL_CheckLibrary(OpenGLPrivateData *priv)
 {
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_CheckLibrary: Checking gl.library\n"));
-
     if (!priv) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CheckLibrary: NULL priv pointer\n"));
         return FALSE;
     }
 
     /* GLBase is opened in DetectLibraries() */
     if (GLBase) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CheckLibrary: gl.library v%ld.%ld available\n",
-              GLBase->lib_Version, GLBase->lib_Revision));
-
         priv->GLBase = GLBase;
         priv->gl_available = TRUE;
-
         return TRUE;
     }
-
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_CheckLibrary: gl.library not available\n"));
 
     priv->gl_available = FALSE;
     return FALSE;
@@ -653,8 +1235,6 @@ BOOL OpenGL_CheckLibrary(OpenGLPrivateData *priv)
  */
 BOOL OpenGL_CheckCapabilities(OpenGLPrivateData *priv)
 {
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_CheckCapabilities\n"));
-
     if (!priv || !priv->gl_available) {
         return FALSE;
     }
@@ -664,19 +1244,12 @@ BOOL OpenGL_CheckCapabilities(OpenGLPrivateData *priv)
      * This function should be called after the first context is created.
      * For now, we set reasonable defaults.
      */
-
     priv->gl_version_major = 1;
     priv->gl_version_minor = 1;
-    priv->max_texture_size = 1024;      /* Conservative default */
-    priv->has_npot_textures = FALSE;    /* Assume no NPOT support */
-    priv->has_framebuffers = FALSE;     /* Will check when context available */
-    priv->has_shaders = FALSE;          /* Will check when context available */
-
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_CheckCapabilities: Defaults set\n"));
-    D(bug("[ZuneRenderer:OpenGL]   Version: %ld.%ld\n",
-          priv->gl_version_major, priv->gl_version_minor));
-    D(bug("[ZuneRenderer:OpenGL]   Max texture size: %ld\n",
-          priv->max_texture_size));
+    priv->max_texture_size = 1024;
+    priv->has_npot_textures = FALSE;
+    priv->has_framebuffers = FALSE;
+    priv->has_shaders = FALSE;
 
     return TRUE;
 }
@@ -735,8 +1308,6 @@ void OpenGL_DumpDebugInfo(OpenGLPrivateData *priv)
  */
 static BOOL OpenGL_LoadShaderFunctions(void)
 {
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_LoadShaderFunctions: Loading shader functions\n"));
-
     glCreateShader_ptr = (PFNGLCREATESHADERPROC)glAGetProcAddress("glCreateShader");
     glShaderSource_ptr = (PFNGLSHADERSOURCEPROC)glAGetProcAddress("glShaderSource");
     glCompileShader_ptr = (PFNGLCOMPILESHADERPROC)glAGetProcAddress("glCompileShader");
@@ -753,6 +1324,7 @@ static BOOL OpenGL_LoadShaderFunctions(void)
     glDeleteProgram_ptr = (PFNGLDELETEPROGRAMPROC)glAGetProcAddress("glDeleteProgram");
     glGetUniformLocation_ptr = (PFNGLGETUNIFORMLOCATIONPROC)glAGetProcAddress("glGetUniformLocation");
     glUniform1f_ptr = (PFNGLUNIFORM1FPROC)glAGetProcAddress("glUniform1f");
+    glUniform1i_ptr = (PFNGLUNIFORM1IPROC)glAGetProcAddress("glUniform1i");
     glUniform2f_ptr = (PFNGLUNIFORM2FPROC)glAGetProcAddress("glUniform2f");
     glUniform4f_ptr = (PFNGLUNIFORM4FPROC)glAGetProcAddress("glUniform4f");
 
@@ -761,16 +1333,9 @@ static BOOL OpenGL_LoadShaderFunctions(void)
         !glCreateProgram_ptr || !glAttachShader_ptr || !glLinkProgram_ptr ||
         !glUseProgram_ptr || !glGetUniformLocation_ptr ||
         !glUniform1f_ptr || !glUniform2f_ptr || !glUniform4f_ptr) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_LoadShaderFunctions: Some functions not available\n"));
-        D(bug("[ZuneRenderer:OpenGL]   glCreateShader: %p\n", glCreateShader_ptr));
-        D(bug("[ZuneRenderer:OpenGL]   glShaderSource: %p\n", glShaderSource_ptr));
-        D(bug("[ZuneRenderer:OpenGL]   glCompileShader: %p\n", glCompileShader_ptr));
-        D(bug("[ZuneRenderer:OpenGL]   glCreateProgram: %p\n", glCreateProgram_ptr));
-        D(bug("[ZuneRenderer:OpenGL]   glUseProgram: %p\n", glUseProgram_ptr));
         return FALSE;
     }
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_LoadShaderFunctions: All shader functions loaded\n"));
     return TRUE;
 }
 
@@ -782,8 +1347,6 @@ static BOOL OpenGL_LoadShaderFunctions(void)
  */
 static BOOL OpenGL_LoadVBOFunctions(void)
 {
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_LoadVBOFunctions: Loading VBO functions\n"));
-
     if (g_vbo_available) {
         return TRUE;
     }
@@ -806,12 +1369,10 @@ static BOOL OpenGL_LoadVBOFunctions(void)
     }
 
     if (!glGenBuffers_ptr || !glBindBuffer_ptr || !glBufferData_ptr) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_LoadVBOFunctions: VBO functions not available\n"));
         return FALSE;
     }
 
     g_vbo_available = TRUE;
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_LoadVBOFunctions: VBO functions loaded\n"));
     return TRUE;
 }
 
@@ -832,7 +1393,6 @@ static BOOL OpenGL_CreateQuadVBO(void)
 
     glGenBuffers_ptr(1, &g_quad_vbo);
     if (g_quad_vbo == 0) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateQuadVBO: glGenBuffers failed\n"));
         return FALSE;
     }
 
@@ -840,7 +1400,6 @@ static BOOL OpenGL_CreateQuadVBO(void)
     glBufferData_ptr(GL_ARRAY_BUFFER, sizeof(g_quad_vertices), g_quad_vertices, GL_STATIC_DRAW);
     glBindBuffer_ptr(GL_ARRAY_BUFFER, 0);
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateQuadVBO: Created VBO %d\n", g_quad_vbo));
     return TRUE;
 }
 
@@ -852,7 +1411,6 @@ static void OpenGL_DestroyQuadVBO(void)
     if (g_quad_vbo != 0 && glDeleteBuffers_ptr) {
         glDeleteBuffers_ptr(1, &g_quad_vbo);
         g_quad_vbo = 0;
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_DestroyQuadVBO: VBO destroyed\n"));
     }
 }
 
@@ -865,8 +1423,6 @@ static GLuint OpenGL_CompileShader(GLenum type, const GLchar *source)
 {
     GLuint shader;
     GLint compiled;
-    char infoLog[512];
-    GLsizei logLength;
 
     if (!glCreateShader_ptr || !glShaderSource_ptr || !glCompileShader_ptr) {
         return 0;
@@ -874,7 +1430,6 @@ static GLuint OpenGL_CompileShader(GLenum type, const GLchar *source)
 
     shader = glCreateShader_ptr(type);
     if (shader == 0) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CompileShader: glCreateShader failed\n"));
         return 0;
     }
 
@@ -885,10 +1440,6 @@ static GLuint OpenGL_CompileShader(GLenum type, const GLchar *source)
     if (glGetShaderiv_ptr) {
         glGetShaderiv_ptr(shader, GL_COMPILE_STATUS, &compiled);
         if (!compiled) {
-            if (glGetShaderInfoLog_ptr) {
-                glGetShaderInfoLog_ptr(shader, sizeof(infoLog), &logLength, infoLog);
-                D(bug("[ZuneRenderer:OpenGL] Shader compile error: %s\n", infoLog));
-            }
             if (glDeleteShader_ptr) {
                 glDeleteShader_ptr(shader);
             }
@@ -896,7 +1447,6 @@ static GLuint OpenGL_CompileShader(GLenum type, const GLchar *source)
         }
     }
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_CompileShader: Shader %d compiled successfully\n", shader));
     return shader;
 }
 
@@ -908,27 +1458,20 @@ static GLuint OpenGL_CompileShader(GLenum type, const GLchar *source)
 static BOOL OpenGL_CreateRoundedRectShader(void)
 {
     GLint linked;
-    char infoLog[512];
-    GLsizei logLength;
-
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateRoundedRectShader: Creating shader program\n"));
 
     if (!glCreateProgram_ptr || !glAttachShader_ptr || !glLinkProgram_ptr) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateRoundedRectShader: Missing shader functions\n"));
         return FALSE;
     }
 
     /* Compile vertex shader */
     g_rounded_rect_vs = OpenGL_CompileShader(GL_VERTEX_SHADER, g_rounded_rect_vs_source);
     if (g_rounded_rect_vs == 0) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateRoundedRectShader: Vertex shader failed\n"));
         return FALSE;
     }
 
     /* Compile fragment shader */
     g_rounded_rect_fs = OpenGL_CompileShader(GL_FRAGMENT_SHADER, g_rounded_rect_fs_source);
     if (g_rounded_rect_fs == 0) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateRoundedRectShader: Fragment shader failed\n"));
         if (glDeleteShader_ptr) glDeleteShader_ptr(g_rounded_rect_vs);
         g_rounded_rect_vs = 0;
         return FALSE;
@@ -937,7 +1480,6 @@ static BOOL OpenGL_CreateRoundedRectShader(void)
     /* Create and link program */
     g_rounded_rect_program = glCreateProgram_ptr();
     if (g_rounded_rect_program == 0) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateRoundedRectShader: glCreateProgram failed\n"));
         if (glDeleteShader_ptr) {
             glDeleteShader_ptr(g_rounded_rect_vs);
             glDeleteShader_ptr(g_rounded_rect_fs);
@@ -955,10 +1497,6 @@ static BOOL OpenGL_CreateRoundedRectShader(void)
     if (glGetProgramiv_ptr) {
         glGetProgramiv_ptr(g_rounded_rect_program, GL_LINK_STATUS, &linked);
         if (!linked) {
-            if (glGetProgramInfoLog_ptr) {
-                glGetProgramInfoLog_ptr(g_rounded_rect_program, sizeof(infoLog), &logLength, infoLog);
-                D(bug("[ZuneRenderer:OpenGL] Program link error: %s\n", infoLog));
-            }
             OpenGL_DestroyShaders();
             return FALSE;
         }
@@ -973,16 +1511,49 @@ static BOOL OpenGL_CreateRoundedRectShader(void)
     g_uniform_has_fill = glGetUniformLocation_ptr(g_rounded_rect_program, "u_has_fill");
     g_uniform_has_border = glGetUniformLocation_ptr(g_rounded_rect_program, "u_has_border");
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateRoundedRectShader: Program %d created\n", g_rounded_rect_program));
-    D(bug("[ZuneRenderer:OpenGL]   u_size: %d\n", g_uniform_rect_size));
-    D(bug("[ZuneRenderer:OpenGL]   u_radius: %d\n", g_uniform_rect_radius));
-    D(bug("[ZuneRenderer:OpenGL]   u_fill_color: %d\n", g_uniform_fill_color));
-    D(bug("[ZuneRenderer:OpenGL]   u_border_color: %d\n", g_uniform_border_color));
-    D(bug("[ZuneRenderer:OpenGL]   u_border_width: %d\n", g_uniform_border_width));
-    D(bug("[ZuneRenderer:OpenGL]   u_has_fill: %d\n", g_uniform_has_fill));
-    D(bug("[ZuneRenderer:OpenGL]   u_has_border: %d\n", g_uniform_has_border));
+    /*
+     * Create textured rounded rectangle shader program
+     * This shader samples fill color from a texture instead of using a uniform.
+     */
 
-    g_shaders_available = TRUE;
+    /* Compile textured fragment shader */
+    g_rounded_rect_textured_fs = OpenGL_CompileShader(GL_FRAGMENT_SHADER, g_rounded_rect_textured_fs_source);
+    if (g_rounded_rect_textured_fs == 0) {
+        return TRUE; /* Continue with solid shader only */
+    }
+
+    /* Create and link textured program (reuses same vertex shader) */
+    g_rounded_rect_textured_program = glCreateProgram_ptr();
+    if (g_rounded_rect_textured_program == 0) {
+        glDeleteShader_ptr(g_rounded_rect_textured_fs);
+        g_rounded_rect_textured_fs = 0;
+        return TRUE;
+    }
+
+    glAttachShader_ptr(g_rounded_rect_textured_program, g_rounded_rect_vs);
+    glAttachShader_ptr(g_rounded_rect_textured_program, g_rounded_rect_textured_fs);
+    glLinkProgram_ptr(g_rounded_rect_textured_program);
+
+    if (glGetProgramiv_ptr) {
+        glGetProgramiv_ptr(g_rounded_rect_textured_program, GL_LINK_STATUS, &linked);
+        if (!linked) {
+            glDeleteProgram_ptr(g_rounded_rect_textured_program);
+            g_rounded_rect_textured_program = 0;
+            glDeleteShader_ptr(g_rounded_rect_textured_fs);
+            g_rounded_rect_textured_fs = 0;
+            return TRUE;
+        }
+    }
+
+    /* Get uniform locations for textured shader */
+    g_uniform_tex_rect_size = glGetUniformLocation_ptr(g_rounded_rect_textured_program, "u_size");
+    g_uniform_tex_rect_radius = glGetUniformLocation_ptr(g_rounded_rect_textured_program, "u_radius");
+    g_uniform_tex_fill_texture = glGetUniformLocation_ptr(g_rounded_rect_textured_program, "u_fill_texture");
+    g_uniform_tex_border_color = glGetUniformLocation_ptr(g_rounded_rect_textured_program, "u_border_color");
+    g_uniform_tex_border_width = glGetUniformLocation_ptr(g_rounded_rect_textured_program, "u_border_width");
+    g_uniform_tex_has_fill = glGetUniformLocation_ptr(g_rounded_rect_textured_program, "u_has_fill");
+    g_uniform_tex_has_border = glGetUniformLocation_ptr(g_rounded_rect_textured_program, "u_has_border");
+
     return TRUE;
 }
 
@@ -991,12 +1562,28 @@ static BOOL OpenGL_CreateRoundedRectShader(void)
  */
 static void OpenGL_DestroyShaders(void)
 {
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_DestroyShaders\n"));
 
-    if (g_rounded_rect_program && glUseProgram_ptr) {
+    if ((g_rounded_rect_program || g_rounded_rect_textured_program) && glUseProgram_ptr) {
         glUseProgram_ptr(0);
     }
 
+    /* Clean up textured shader */
+    if (g_rounded_rect_textured_program && glDetachShader_ptr) {
+        if (g_rounded_rect_vs) glDetachShader_ptr(g_rounded_rect_textured_program, g_rounded_rect_vs);
+        if (g_rounded_rect_textured_fs) glDetachShader_ptr(g_rounded_rect_textured_program, g_rounded_rect_textured_fs);
+    }
+
+    if (g_rounded_rect_textured_fs && glDeleteShader_ptr) {
+        glDeleteShader_ptr(g_rounded_rect_textured_fs);
+        g_rounded_rect_textured_fs = 0;
+    }
+
+    if (g_rounded_rect_textured_program && glDeleteProgram_ptr) {
+        glDeleteProgram_ptr(g_rounded_rect_textured_program);
+        g_rounded_rect_textured_program = 0;
+    }
+
+    /* Clean up solid color shader */
     if (g_rounded_rect_program && glDetachShader_ptr) {
         if (g_rounded_rect_vs) glDetachShader_ptr(g_rounded_rect_program, g_rounded_rect_vs);
         if (g_rounded_rect_fs) glDetachShader_ptr(g_rounded_rect_program, g_rounded_rect_fs);
@@ -1018,6 +1605,8 @@ static void OpenGL_DestroyShaders(void)
     }
 
     g_shaders_available = FALSE;
+
+    /* Reset solid shader uniforms */
     g_uniform_rect_size = -1;
     g_uniform_rect_radius = -1;
     g_uniform_fill_color = -1;
@@ -1025,35 +1614,94 @@ static void OpenGL_DestroyShaders(void)
     g_uniform_border_width = -1;
     g_uniform_has_fill = -1;
     g_uniform_has_border = -1;
+
+    /* Reset textured shader uniforms */
+    g_uniform_tex_rect_size = -1;
+    g_uniform_tex_rect_radius = -1;
+    g_uniform_tex_fill_texture = -1;
+    g_uniform_tex_border_color = -1;
+    g_uniform_tex_border_width = -1;
+    g_uniform_tex_has_fill = -1;
+    g_uniform_tex_has_border = -1;
 }
+
+/*
+ * Minimum stack size required for shader compilation.
+ * Mesa/LLVM shader compilation requires significant stack space.
+ */
+#define ZUNEGFX_SHADER_SAFESTACK    (1 << 18)  /* 256KB */
 
 /*
  * OpenGL_InitShaders - Initialize shaders after context creation
  *
  * Call this after the first GL context is created and made current.
+ *
+ * NOTE: We cannot use NewStackSwap/StackSwap to work around small stacks
+ * because Mesa's shader compilation uses posixc.library functions (like fprintf
+ * in error paths) which have thread-local state tied to the original stack.
+ * Swapping stacks corrupts this state and causes crashes.
  */
 static BOOL OpenGL_InitShaders(void)
 {
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_InitShaders\n"));
+    const GLubyte *version_str;
+    int major = 0, minor = 0;
+    struct Task *this_task;
+    IPTR stack_size;
 
     if (g_shaders_available) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_InitShaders: Shaders already initialized\n"));
         return TRUE;
+    }
+
+    /*
+     * Check stack size before attempting shader compilation.
+     * Mesa shader compilation (especially with LLVM) requires significant stack.
+     * If we don't have enough stack, shader compilation will crash.
+     */
+    this_task = FindTask(NULL);
+    if (this_task) {
+        stack_size = (IPTR)this_task->tc_SPUpper - (IPTR)this_task->tc_SPLower;
+        D(bug("[ZuneGfx:OpenGL] InitShaders: stack=%ld, required=%ld\n",
+              (LONG)stack_size, (LONG)ZUNEGFX_SHADER_SAFESTACK));
+        if (stack_size < ZUNEGFX_SHADER_SAFESTACK) {
+            D(bug("[ZuneGfx:OpenGL] InitShaders: Stack too small!\n"));
+            return FALSE;
+        }
+    }
+
+    /*
+     * Check GL version before attempting to use shaders.
+     * GLSL shaders require OpenGL 2.0 or higher.
+     */
+    version_str = glGetString(GL_VERSION);
+    if (version_str) {
+        D(bug("[ZuneGfx:OpenGL] InitShaders: GL_VERSION=%s\n", version_str));
+        /* Parse version string - format is "major.minor" or "major.minor.release" */
+        sscanf((const char *)version_str, "%d.%d", &major, &minor);
+    } else {
+        D(bug("[ZuneGfx:OpenGL] InitShaders: glGetString(GL_VERSION) failed\n"));
+        return FALSE;
+    }
+
+    /* Require at least OpenGL 2.0 for GLSL shaders */
+    if (major < 2) {
+        D(bug("[ZuneGfx:OpenGL] InitShaders: GL %d.%d < 2.0, no shaders\n", major, minor));
+        return FALSE;
     }
 
     /* Load shader function pointers */
     if (!OpenGL_LoadShaderFunctions()) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_InitShaders: Failed to load shader functions\n"));
+        D(bug("[ZuneGfx:OpenGL] InitShaders: LoadShaderFunctions failed\n"));
         return FALSE;
     }
 
     /* Create the rounded rectangle shader program */
     if (!OpenGL_CreateRoundedRectShader()) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_InitShaders: Failed to create rounded rect shader\n"));
+        D(bug("[ZuneGfx:OpenGL] InitShaders: CreateRoundedRectShader failed\n"));
         return FALSE;
     }
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_InitShaders: Shaders initialized successfully\n"));
+    g_shaders_available = TRUE;
+    D(bug("[ZuneGfx:OpenGL] InitShaders: Shaders OK!\n"));
     return TRUE;
 }
 
@@ -1069,11 +1717,8 @@ static BOOL OpenGL_InitShaders(void)
  */
 static BOOL OpenGL_LoadFBOFunctions(void)
 {
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_LoadFBOFunctions: Loading FBO functions\n"));
-
     /* Already loaded? */
     if (g_fbo_available) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_LoadFBOFunctions: FBO already initialized\n"));
         return TRUE;
     }
 
@@ -1091,7 +1736,6 @@ static BOOL OpenGL_LoadFBOFunctions(void)
 
     /* If core functions not available, try EXT versions */
     if (!glGenFramebuffers_ptr) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_LoadFBOFunctions: Trying EXT versions\n"));
         glGenFramebuffers_ptr = (PFNGLGENFRAMEBUFFERSPROC)glAGetProcAddress("glGenFramebuffersEXT");
         glDeleteFramebuffers_ptr = (PFNGLDELETEFRAMEBUFFERSPROC)glAGetProcAddress("glDeleteFramebuffersEXT");
         glBindFramebuffer_ptr = (PFNGLBINDFRAMEBUFFERPROC)glAGetProcAddress("glBindFramebufferEXT");
@@ -1104,29 +1748,19 @@ static BOOL OpenGL_LoadFBOFunctions(void)
         glFramebufferRenderbuffer_ptr = (PFNGLFRAMEBUFFERRENDERBUFFERPROC)glAGetProcAddress("glFramebufferRenderbufferEXT");
     }
 
-    /* Log all function pointers for debugging */
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_LoadFBOFunctions: Function pointers:\n"));
-    D(bug("[ZuneRenderer:OpenGL]   glGenFramebuffers: %p\n", glGenFramebuffers_ptr));
-    D(bug("[ZuneRenderer:OpenGL]   glDeleteFramebuffers: %p\n", glDeleteFramebuffers_ptr));
-    D(bug("[ZuneRenderer:OpenGL]   glBindFramebuffer: %p\n", glBindFramebuffer_ptr));
-    D(bug("[ZuneRenderer:OpenGL]   glCheckFramebufferStatus: %p\n", glCheckFramebufferStatus_ptr));
-    D(bug("[ZuneRenderer:OpenGL]   glFramebufferTexture2D: %p\n", glFramebufferTexture2D_ptr));
-    D(bug("[ZuneRenderer:OpenGL]   glGenRenderbuffers: %p\n", glGenRenderbuffers_ptr));
-    D(bug("[ZuneRenderer:OpenGL]   glBindRenderbuffer: %p\n", glBindRenderbuffer_ptr));
-    D(bug("[ZuneRenderer:OpenGL]   glRenderbufferStorage: %p\n", glRenderbufferStorage_ptr));
-    D(bug("[ZuneRenderer:OpenGL]   glFramebufferRenderbuffer: %p\n", glFramebufferRenderbuffer_ptr));
-
     /* Check if minimum required functions were loaded */
     if (!glGenFramebuffers_ptr || !glDeleteFramebuffers_ptr ||
         !glBindFramebuffer_ptr || !glCheckFramebufferStatus_ptr ||
         !glFramebufferTexture2D_ptr) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_LoadFBOFunctions: FBO functions not available\n"));
+        D(bug("[ZuneGfx:OpenGL] LoadFBOFunctions: Missing functions - Gen=%p Del=%p Bind=%p Status=%p Tex2D=%p\n",
+              glGenFramebuffers_ptr, glDeleteFramebuffers_ptr, glBindFramebuffer_ptr,
+              glCheckFramebufferStatus_ptr, glFramebufferTexture2D_ptr));
         g_fbo_available = FALSE;
         return FALSE;
     }
 
+    D(bug("[ZuneGfx:OpenGL] LoadFBOFunctions: All FBO functions loaded OK\n"));
     g_fbo_available = TRUE;
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_LoadFBOFunctions: FBO functions loaded successfully\n"));
     return TRUE;
 }
 
@@ -1141,134 +1775,65 @@ static OpenGLFBOData *OpenGL_CreateFBO(UWORD width, UWORD height)
     OpenGLFBOData *fbo;
     GLuint fbo_id, texture_id;
     GLenum status;
-    GLenum gl_error;
     GLint max_texture_size = 0;
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: Creating FBO %dx%d\n", width, height));
-
-    /* Validate dimensions - must be non-zero */
+    /* Validate dimensions */
     if (width == 0 || height == 0) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: Invalid dimensions (zero)\n"));
         return NULL;
     }
 
     if (!g_fbo_available || !glGenFramebuffers_ptr) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: FBO not available\n"));
         return NULL;
     }
 
-    /* Ensure GL context is current before any GL operations */
+    /* Ensure GL context is current */
     if (g_opengl_priv && g_opengl_priv->gl_context) {
-        const GLubyte *gl_version, *gl_renderer, *gl_extensions;
-
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: Making context %p current\n", g_opengl_priv->gl_context));
         glAMakeCurrent((GLAContext)g_opengl_priv->gl_context);
 
-        /* Log GL info for debugging */
-        gl_version = glGetString(GL_VERSION);
-        gl_renderer = glGetString(GL_RENDERER);
-        gl_extensions = glGetString(GL_EXTENSIONS);
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: GL_VERSION: %s\n", gl_version ? (char*)gl_version : "NULL"));
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: GL_RENDERER: %s\n", gl_renderer ? (char*)gl_renderer : "NULL"));
-
-        /* Check if glGetString returned NULL - indicates no valid context */
-        if (!gl_version) {
-            D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: ERROR - glGetString(GL_VERSION) returned NULL!\n"));
-            D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: This means the GL context is not properly current.\n"));
+        /* Verify context is valid */
+        if (!glGetString(GL_VERSION)) {
             return NULL;
         }
 
-        /* Check maximum texture size and validate dimensions */
+        /* Check maximum texture size */
         glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_size);
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: GL_MAX_TEXTURE_SIZE = %d\n", max_texture_size));
         if (max_texture_size > 0 && ((GLint)width > max_texture_size || (GLint)height > max_texture_size)) {
-            D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: Requested size %dx%d exceeds max texture size %d\n",
-                  width, height, max_texture_size));
             return NULL;
-        }
-
-        /* Check for FBO extension */
-        if (gl_extensions) {
-            if (strstr((char*)gl_extensions, "GL_ARB_framebuffer_object")) {
-                D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: GL_ARB_framebuffer_object supported\n"));
-            } else if (strstr((char*)gl_extensions, "GL_EXT_framebuffer_object")) {
-                D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: GL_EXT_framebuffer_object supported\n"));
-            } else {
-                D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: WARNING - No FBO extension found in GL_EXTENSIONS!\n"));
-            }
         }
     } else {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: ERROR - No GL context available!\n"));
         return NULL;
     }
 
     /* Clear any pending GL errors */
-    while ((gl_error = glGetError()) != GL_NO_ERROR) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: Clearing pending GL error 0x%04x\n", gl_error));
-    }
+    while (glGetError() != GL_NO_ERROR) {}
 
     /* Allocate FBO data structure */
     fbo = AllocVec(sizeof(OpenGLFBOData), MEMF_PUBLIC | MEMF_CLEAR);
     if (!fbo) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: Failed to allocate FBO structure\n"));
         return NULL;
     }
 
-    /* Generate FBO */
+    /* Generate and bind FBO */
     glGenFramebuffers_ptr(1, &fbo_id);
-    gl_error = glGetError();
-    if (gl_error != GL_NO_ERROR) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: glGenFramebuffers GL error 0x%04x\n", gl_error));
-    }
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: Generated FBO id=%d\n", fbo_id));
     if (fbo_id == 0) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: glGenFramebuffers failed\n"));
         FreeVec(fbo);
         return NULL;
     }
-
-    /* Bind the FBO */
     glBindFramebuffer_ptr(GL_FRAMEBUFFER, fbo_id);
-    gl_error = glGetError();
-    if (gl_error != GL_NO_ERROR) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: glBindFramebuffer GL error 0x%04x\n", gl_error));
-    }
 
     /* Create color texture attachment */
     glGenTextures(1, &texture_id);
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: Generated texture id=%d\n", texture_id));
     glBindTexture(GL_TEXTURE_2D, texture_id);
-    gl_error = glGetError();
-    if (gl_error != GL_NO_ERROR) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: glBindTexture GL error 0x%04x\n", gl_error));
-    }
 
-    /*
-     * Create texture for FBO color attachment.
-     *
-     * AROS Mesa/SoftPipe has issues with certain format combinations and
-     * crashes in _mesa_error -> fprintf when it encounters unsupported formats.
-     * We use the most basic GL 1.1 compatible format specification.
-     */
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: Calling glTexImage2D %dx%d\n", width, height));
-
-    /* Set texture parameters BEFORE uploading data - some drivers require this */
+    /* Set texture parameters */
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
 
-    gl_error = glGetError();
-    if (gl_error != GL_NO_ERROR) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: glTexParameteri GL error 0x%04x\n", gl_error));
-    }
-
-    /* Use GL_RGBA with GL_UNSIGNED_BYTE - most compatible combination */
+    /* Create texture storage */
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-    gl_error = glGetError();
-    if (gl_error != GL_NO_ERROR) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: glTexImage2D GL error 0x%04x\n", gl_error));
-        /* If GL_RGBA fails, the FBO creation will fail - clean up */
+    if (glGetError() != GL_NO_ERROR) {
         glDeleteTextures(1, &texture_id);
         glBindFramebuffer_ptr(GL_FRAMEBUFFER, 0);
         glDeleteFramebuffers_ptr(1, &fbo_id);
@@ -1278,64 +1843,22 @@ static OpenGLFBOData *OpenGL_CreateFBO(UWORD width, UWORD height)
 
     /* Attach texture to FBO */
     glFramebufferTexture2D_ptr(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture_id, 0);
-    gl_error = glGetError();
-    if (gl_error != GL_NO_ERROR) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: glFramebufferTexture2D GL error 0x%04x\n", gl_error));
-    }
-
-    /* Set draw buffer to the color attachment */
     glDrawBuffer(GL_COLOR_ATTACHMENT0);
-    gl_error = glGetError();
-    if (gl_error != GL_NO_ERROR) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: glDrawBuffer GL error 0x%04x\n", gl_error));
-    }
-
-    /* Set read buffer to the color attachment */
     glReadBuffer(GL_COLOR_ATTACHMENT0);
-    gl_error = glGetError();
-    if (gl_error != GL_NO_ERROR) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: glReadBuffer GL error 0x%04x\n", gl_error));
-    }
 
     /* Check FBO completeness */
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: Calling glCheckFramebufferStatus_ptr at %p with GL_FRAMEBUFFER=0x%04x\n",
-          glCheckFramebufferStatus_ptr, GL_FRAMEBUFFER));
-
-    /* Flush any pending operations before checking status */
     glFlush();
-
     status = glCheckFramebufferStatus_ptr(GL_FRAMEBUFFER);
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: glCheckFramebufferStatus returned 0x%04x (COMPLETE=0x%04x)\n",
-          status, GL_FRAMEBUFFER_COMPLETE));
 
-    /* Also try checking with GL_DRAW_FRAMEBUFFER if status is 0 */
+    /* Try GL_DRAW_FRAMEBUFFER if status is 0 */
     if (status == 0) {
         #ifndef GL_DRAW_FRAMEBUFFER
         #define GL_DRAW_FRAMEBUFFER 0x8CA9
         #endif
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: Status was 0, trying GL_DRAW_FRAMEBUFFER\n"));
         status = glCheckFramebufferStatus_ptr(GL_DRAW_FRAMEBUFFER);
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER) returned 0x%04x\n", status));
     }
+
     if (status != GL_FRAMEBUFFER_COMPLETE) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: FBO incomplete, status=0x%04x\n", status));
-        switch (status) {
-            case 0:
-                D(bug("[ZuneRenderer:OpenGL]   Status 0 usually means no GL context is current!\n"));
-                break;
-            case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
-                D(bug("[ZuneRenderer:OpenGL]   GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT\n"));
-                break;
-            case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
-                D(bug("[ZuneRenderer:OpenGL]   GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT\n"));
-                break;
-            case GL_FRAMEBUFFER_UNSUPPORTED:
-                D(bug("[ZuneRenderer:OpenGL]   GL_FRAMEBUFFER_UNSUPPORTED\n"));
-                break;
-            default:
-                D(bug("[ZuneRenderer:OpenGL]   Unknown status\n"));
-                break;
-        }
         glDeleteTextures(1, &texture_id);
         glDeleteFramebuffers_ptr(1, &fbo_id);
         glBindFramebuffer_ptr(GL_FRAMEBUFFER, 0);
@@ -1343,17 +1866,11 @@ static OpenGLFBOData *OpenGL_CreateFBO(UWORD width, UWORD height)
         return NULL;
     }
 
-    /*
-     * CRITICAL: Clear the FBO to a known state (transparent black) immediately
-     * after creation. Without this, the FBO contains uninitialized garbage data
-     * which will show through when drawing with alpha blending or when
-     * CopyFromRastPort is called before any other drawing.
-     */
+    /* Clear FBO to transparent black */
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT);
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: Cleared FBO to transparent\n"));
 
-    /* Unbind FBO (return to default framebuffer) */
+    /* Unbind FBO */
     glBindFramebuffer_ptr(GL_FRAMEBUFFER, 0);
 
     /* Fill in FBO data */
@@ -1363,14 +1880,13 @@ static OpenGLFBOData *OpenGL_CreateFBO(UWORD width, UWORD height)
     fbo->width = width;
     fbo->height = height;
     fbo->valid = TRUE;
-    fbo->dirty = FALSE;  /* Not dirty until we draw to it */
+    fbo->dirty = FALSE;
     fbo->parent_context = NULL;
 
     if (g_opengl_priv) {
         g_opengl_priv->fbos_created++;
     }
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateFBO: Created FBO %d with texture %d\n", fbo_id, texture_id));
     return fbo;
 }
 
@@ -1380,8 +1896,6 @@ static OpenGLFBOData *OpenGL_CreateFBO(UWORD width, UWORD height)
 static void OpenGL_DestroyFBO(OpenGLFBOData *fbo)
 {
     if (!fbo) return;
-
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_DestroyFBO: Destroying FBO %d\n", fbo->fbo_id));
 
     if (fbo->texture_id && glDeleteTextures) {
         glDeleteTextures(1, (GLuint*)&fbo->texture_id);
@@ -1409,9 +1923,6 @@ static BOOL OpenGL_BindFBO(OpenGLFBOData *fbo)
     if (!fbo || !fbo->valid || !glBindFramebuffer_ptr) {
         return FALSE;
     }
-
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_BindFBO: Binding FBO %d (%dx%d)\n",
-          fbo->fbo_id, fbo->width, fbo->height));
 
     glBindFramebuffer_ptr(GL_FRAMEBUFFER, fbo->fbo_id);
 
@@ -1446,7 +1957,6 @@ static void OpenGL_UnbindFBO(void)
 {
     if (!glBindFramebuffer_ptr) return;
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_UnbindFBO: Unbinding FBO\n"));
     glBindFramebuffer_ptr(GL_FRAMEBUFFER, 0);
 }
 
@@ -1472,25 +1982,18 @@ static GLuint OpenGL_GetFBOAsTexture(struct DrawingBoard *board)
 {
     OpenGLFBOData *fbo;
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_GetFBOAsTexture: board=%p\n", board));
-
     if (!board || !board->backend_data) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_GetFBOAsTexture: No backend_data\n"));
         return 0;
     }
 
     fbo = (OpenGLFBOData *)board->backend_data;
 
     if (!fbo->valid || fbo->texture_id == 0) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_GetFBOAsTexture: FBO not valid or no texture\n"));
         return 0;
     }
 
     /* Ensure all rendering to this FBO is complete */
     glFlush();
-
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_GetFBOAsTexture: Returning texture %d (%dx%d)\n",
-          fbo->texture_id, fbo->width, fbo->height));
 
     return fbo->texture_id;
 }
@@ -1521,16 +2024,11 @@ static void OpenGL_BlitFBOToFBO(struct DrawingBoard *src, struct DrawingBoard *d
     GLuint src_texture;
     GLfloat tex_x1, tex_y1, tex_x2, tex_y2;
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToFBO: src=%p dst=%p (%d,%d)->(%d,%d) %dx%d\n",
-          src, dst, src_x, src_y, dst_x, dst_y, width, height));
-
     if (!src || !dst || !src->backend_data || !dst->backend_data) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToFBO: Invalid parameters\n"));
         return;
     }
 
     if (!g_fbo_available || !glBindFramebuffer_ptr) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToFBO: FBO not available\n"));
         return;
     }
 
@@ -1538,14 +2036,12 @@ static void OpenGL_BlitFBOToFBO(struct DrawingBoard *src, struct DrawingBoard *d
     dst_fbo = (OpenGLFBOData *)dst->backend_data;
 
     if (!src_fbo->valid || !dst_fbo->valid) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToFBO: FBOs not valid\n"));
         return;
     }
 
     /* Get source texture */
     src_texture = src_fbo->texture_id;
     if (src_texture == 0) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToFBO: Source has no texture\n"));
         return;
     }
 
@@ -1554,7 +2050,6 @@ static void OpenGL_BlitFBOToFBO(struct DrawingBoard *src, struct DrawingBoard *d
 
     /* Bind destination FBO */
     if (!OpenGL_BindFBO(dst_fbo)) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToFBO: Failed to bind destination FBO\n"));
         return;
     }
 
@@ -1607,8 +2102,6 @@ static void OpenGL_BlitFBOToFBO(struct DrawingBoard *src, struct DrawingBoard *d
         g_opengl_priv->current_board = dst;
         g_opengl_priv->current_window = NULL;
     }
-
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToFBO: Blit complete (zero-copy GPU operation)\n"));
 }
 
 /*****************************************************************************/
@@ -1631,21 +2124,16 @@ static BOOL OpenGL_CreateMasterContext(struct Window *window)
     GLAContext master_ctx;
     APTR master_pipe_screen;
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateMasterContext: Window %p\n", window));
-
     if (!window || !GLBase) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateMasterContext: Invalid params\n"));
         return FALSE;
     }
 
     if (!g_opengl_priv) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateMasterContext: No g_opengl_priv\n"));
         return FALSE;
     }
 
     /* Already created? */
     if (g_opengl_priv->master_context_created && g_opengl_priv->master_context) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateMasterContext: Already exists\n"));
         return TRUE;
     }
 
@@ -1697,16 +2185,7 @@ static BOOL OpenGL_CreateMasterContext(struct Window *window)
 
     /* Get pipe_screen to verify sharing will work */
     master_pipe_screen = glAGetPipeScreen(master_ctx);
-    if (master_pipe_screen) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateMasterContext: pipe_screen=%p - sharing supported\n",
-              master_pipe_screen));
-        g_opengl_priv->shared_contexts_supported = TRUE;
-    } else {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateMasterContext: No pipe_screen - sharing may not work\n"));
-        g_opengl_priv->shared_contexts_supported = FALSE;
-    }
-
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateMasterContext: Master context %p created\n", master_ctx));
+    g_opengl_priv->shared_contexts_supported = (master_pipe_screen != NULL);
 
     return TRUE;
 }
@@ -1725,8 +2204,6 @@ static OpenGLWindowContext *OpenGL_CreateWindowContext(struct Window *window)
     int tag_idx = 0;
     BOOL use_shared_context = FALSE;
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateWindowContext: Window %p\n", window));
-
     if (!window || !GLBase) {
         return NULL;
     }
@@ -1734,7 +2211,6 @@ static OpenGLWindowContext *OpenGL_CreateWindowContext(struct Window *window)
     /* Allocate context structure */
     ctx = AllocVec(sizeof(OpenGLWindowContext), MEMF_PUBLIC | MEMF_CLEAR);
     if (!ctx) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateWindowContext: Failed to allocate context\n"));
         return NULL;
     }
 
@@ -1746,8 +2222,6 @@ static OpenGLWindowContext *OpenGL_CreateWindowContext(struct Window *window)
     if (g_opengl_priv && g_opengl_priv->master_context_created &&
         g_opengl_priv->master_context && g_opengl_priv->shared_contexts_supported) {
         use_shared_context = TRUE;
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateWindowContext: Will share with master context %p\n",
-              g_opengl_priv->master_context));
     }
 
     /* Set up tags for context creation */
@@ -1792,11 +2266,8 @@ static OpenGLWindowContext *OpenGL_CreateWindowContext(struct Window *window)
     /* Create GL context */
     ctx->gl_context = glACreateContext(tags);
     if (!ctx->gl_context) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateWindowContext: glACreateContext failed\n"));
-
         /* If shared context failed, try again without sharing */
         if (use_shared_context) {
-            D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateWindowContext: Retrying without GLA_ShareContext\n"));
             use_shared_context = FALSE;
 
             /* Rebuild tags without GLA_ShareContext */
@@ -1827,7 +2298,6 @@ static OpenGLWindowContext *OpenGL_CreateWindowContext(struct Window *window)
 
             ctx->gl_context = glACreateContext(tags);
             if (!ctx->gl_context) {
-                D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateWindowContext: Fallback also failed\n"));
                 FreeVec(ctx);
                 return NULL;
             }
@@ -1842,15 +2312,8 @@ static OpenGLWindowContext *OpenGL_CreateWindowContext(struct Window *window)
         APTR ctx_pipe_screen = glAGetPipeScreen((GLAContext)ctx->gl_context);
         APTR master_pipe_screen = glAGetPipeScreen((GLAContext)g_opengl_priv->master_context);
 
-        if (ctx_pipe_screen && master_pipe_screen && ctx_pipe_screen == master_pipe_screen) {
-            D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateWindowContext: Sharing verified - same pipe_screen %p\n",
-                  ctx_pipe_screen));
-            ctx->uses_shared_context = TRUE;
-        } else {
-            D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateWindowContext: WARNING - pipe_screen mismatch! ctx=%p master=%p\n",
-                  ctx_pipe_screen, master_pipe_screen));
-            ctx->uses_shared_context = FALSE;
-        }
+        ctx->uses_shared_context = (ctx_pipe_screen && master_pipe_screen &&
+                                    ctx_pipe_screen == master_pipe_screen);
     } else {
         ctx->uses_shared_context = FALSE;
     }
@@ -1870,9 +2333,6 @@ static OpenGLWindowContext *OpenGL_CreateWindowContext(struct Window *window)
         g_opengl_priv->contexts_created++;
     }
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateWindowContext: Created context %p for window %p (shared=%d)\n",
-          ctx->gl_context, window, ctx->uses_shared_context));
-
     return ctx;
 }
 
@@ -1888,9 +2348,6 @@ static void OpenGL_DestroyWindowContext(OpenGLWindowContext *ctx)
     BOOL was_shared;
 
     if (!ctx) return;
-
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_DestroyWindowContext: Context %p (shared=%d)\n",
-          ctx, ctx->uses_shared_context));
 
     was_shared = ctx->uses_shared_context;
 
@@ -1912,8 +2369,6 @@ static void OpenGL_DestroyWindowContext(OpenGLWindowContext *ctx)
 
     /* Destroy GL context */
     if (ctx->gl_context) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_DestroyWindowContext: Destroying GL context %p\n",
-              ctx->gl_context));
         glADestroyContext((GLAContext)ctx->gl_context);
     }
 
@@ -1937,8 +2392,6 @@ static void OpenGL_DestroyWindowContext(OpenGLWindowContext *ctx)
         }
 
         if (!has_shared_contexts) {
-            D(bug("[ZuneRenderer:OpenGL] OpenGL_DestroyWindowContext: No more shared contexts, destroying master\n"));
-
             if (g_opengl_priv->master_context) {
                 glADestroyContext((GLAContext)g_opengl_priv->master_context);
                 g_opengl_priv->master_context = NULL;
@@ -1985,9 +2438,6 @@ static BOOL OpenGL_MakeContextCurrent(OpenGLWindowContext *ctx)
         return TRUE;
     }
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_MakeContextCurrent: Context %p (window %p)\n",
-          ctx->gl_context, ctx->window));
-
     glAMakeCurrent((GLAContext)ctx->gl_context);
 
     if (g_opengl_priv) {
@@ -2024,17 +2474,12 @@ static BOOL OpenGL_MakeContextCurrent(OpenGLWindowContext *ctx)
  */
 void OpenGL_SwapBuffers(void)
 {
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_SwapBuffers\n"));
-
     if (!g_opengl_priv || !g_opengl_priv->gl_context) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_SwapBuffers: No GL context available\n"));
         return;
     }
 
     glFlush();
     glASwapBuffers((GLAContext)g_opengl_priv->gl_context);
-
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_SwapBuffers: Buffers swapped\n"));
 }
 
 /*
@@ -2057,11 +2502,7 @@ void OpenGL_BlitToRastPortDirect(struct RastPort *dst_rp, WORD dst_x, WORD dst_y
     struct TagItem setrast_tags[8];
     int tag_idx = 0;
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitToRastPortDirect: dst=%p (%d,%d) %dx%d\n",
-          dst_rp, dst_x, dst_y, width, height));
-
     if (!g_opengl_priv || !g_opengl_priv->gl_context || !dst_rp) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitToRastPortDirect: Invalid parameters\n"));
         return;
     }
 
@@ -2093,8 +2534,6 @@ void OpenGL_BlitToRastPortDirect(struct RastPort *dst_rp, WORD dst_x, WORD dst_y
     setrast_tags[tag_idx].ti_Tag = TAG_DONE;
     setrast_tags[tag_idx].ti_Data = 0;
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitToRastPortDirect: Calling glASetRast to change target\n"));
-
     /* Change the GL context's visible_rp to the destination RastPort */
     glASetRast((GLAContext)g_opengl_priv->gl_context, setrast_tags);
 
@@ -2103,9 +2542,6 @@ void OpenGL_BlitToRastPortDirect(struct RastPort *dst_rp, WORD dst_x, WORD dst_y
     glASwapBuffers((GLAContext)g_opengl_priv->gl_context);
 
     g_opengl_priv->setrast_calls++;
-
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitToRastPortDirect: Blit complete (setrast_calls=%ld)\n",
-          g_opengl_priv->setrast_calls));
 
     /*
      * Note: After this call, the GL context's visible_rp points to dst_rp.
@@ -2139,160 +2575,67 @@ void OpenGL_BlitFBOToRastPort(struct DrawingBoard *board, struct RastPort *dst_r
 {
     OpenGLFBOData *fbo;
     UBYTE *pixelbuffer;
-    UBYTE *flipped_buffer;
-    ULONG row, src_row, dst_row;
-
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: board=%p src(%d,%d) -> dst(%d,%d) %dx%d\n",
-          board, src_x, src_y, dst_x, dst_y, width, height));
 
     if (!board || !board->backend_data || !dst_rp) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: Invalid parameters\n"));
         return;
     }
 
-    if (!g_fbo_available || !glBindFramebuffer_ptr) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: FBO not available\n"));
-        return;
-    }
-
-    if (!CyberGfxBase) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: CyberGfxBase not available\n"));
+    if (!g_fbo_available || !glBindFramebuffer_ptr || !CyberGfxBase) {
         return;
     }
 
     fbo = (OpenGLFBOData *)board->backend_data;
 
     if (!fbo->valid) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: FBO not valid\n"));
         return;
     }
 
-    /*
-     * CRITICAL: Make the FBO's parent GL context current before any GL operations.
-     * FBOs are tied to the GL context they were created in - we must use that
-     * same context to read from them.
-     */
+    /* Make the FBO's parent GL context current */
     if (fbo->parent_context && fbo->parent_context->gl_context) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: Using FBO's parent context %p\n",
-              fbo->parent_context->gl_context));
         glAMakeCurrent((GLAContext)fbo->parent_context->gl_context);
     } else if (g_opengl_priv && g_opengl_priv->gl_context) {
-        /* Fallback to global context */
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: Using global context %p\n",
-              g_opengl_priv->gl_context));
         glAMakeCurrent((GLAContext)g_opengl_priv->gl_context);
     } else {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: No GL context available\n"));
         return;
     }
 
     /* Clamp dimensions to FBO size */
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: Before clamp: src(%d,%d) size %dx%d, fbo size %dx%d\n",
-          src_x, src_y, width, height, fbo->width, fbo->height));
-
     if (src_x < 0) { dst_x -= src_x; width += src_x; src_x = 0; }
     if (src_y < 0) { dst_y -= src_y; height += src_y; src_y = 0; }
     if (src_x + width > fbo->width) width = fbo->width - src_x;
     if (src_y + height > fbo->height) height = fbo->height - src_y;
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: After clamp: src(%d,%d) size %dx%d\n",
-          src_x, src_y, width, height));
-
     if (width <= 0 || height <= 0) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: Nothing to blit after clamping\n"));
-        return;
-    }
-
-    /* Allocate buffers */
-    {
-        ULONG buffer_size = (ULONG)width * (ULONG)height * 4;
-        APTR avail_mem;
-
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: Allocating buffer %ldx%ldx4 = %ld bytes\n",
-              (LONG)width, (LONG)height, buffer_size));
-
-        /* Check available memory before allocation attempt */
-        avail_mem = (APTR)AvailMem(MEMF_ANY);
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: Available memory: %ld bytes\n", (LONG)avail_mem));
-
-        pixelbuffer = AllocVec(buffer_size, MEMF_PUBLIC | MEMF_CLEAR);
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: AllocVec returned %p\n", pixelbuffer));
-    }
-    if (!pixelbuffer) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: Failed to allocate pixel buffer\n"));
-        return;
-    }
-
-    {
-        ULONG buffer_size = (ULONG)width * (ULONG)height * 4;
-        flipped_buffer = AllocVec(buffer_size, MEMF_PUBLIC | MEMF_CLEAR);
-    }
-    if (!flipped_buffer) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: Failed to allocate flipped buffer\n"));
-        FreeVec(pixelbuffer);
         return;
     }
 
     /* Bind the FBO for reading */
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: Binding FBO %d for reading\n", fbo->fbo_id));
     glBindFramebuffer_ptr(GL_FRAMEBUFFER, fbo->fbo_id);
-
-    /* Ensure GL operations are complete */
     glFlush();
     glFinish();
 
-    /*
-     * Read pixels from FBO
-     * Note: glReadPixels reads from bottom-left, and OpenGL has Y=0 at bottom
-     * We need to flip Y for screen coordinates
-     */
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: Reading pixels from FBO at (%d,%d) size %dx%d\n",
-          src_x, fbo->height - src_y - height, width, height));
-    glReadPixels(src_x, fbo->height - src_y - height, width, height,
-                 GL_RGBA, GL_UNSIGNED_BYTE, pixelbuffer);
+    /* Read pixels from FBO (Y-flipped for screen coordinates) */
+    pixelbuffer = OpenGL_ReadPixelsToBuffer(src_x, fbo->height - src_y - height, width, height, TRUE);
 
-    /* Debug: Check first few pixels */
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: First pixel RGBA: %02x %02x %02x %02x\n",
-          pixelbuffer[0], pixelbuffer[1], pixelbuffer[2], pixelbuffer[3]));
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: Pixel at (100,100) RGBA: %02x %02x %02x %02x\n",
-          pixelbuffer[(100 * width + 100) * 4 + 0],
-          pixelbuffer[(100 * width + 100) * 4 + 1],
-          pixelbuffer[(100 * width + 100) * 4 + 2],
-          pixelbuffer[(100 * width + 100) * 4 + 3]));
-
-    /* Unbind FBO - and invalidate state so next SwitchToTarget re-binds */
+    /* Unbind FBO and invalidate state */
     glBindFramebuffer_ptr(GL_FRAMEBUFFER, 0);
 
-    /* IMPORTANT: Invalidate current target state so next draw operation
-     * will properly re-bind the FBO. Without this, OpenGL_SwitchToDrawingBoard
-     * would skip the bind because it thinks we're already on the right target. */
     if (g_opengl_priv) {
         g_opengl_priv->current_target_type = OPENGL_TARGET_NONE;
         g_opengl_priv->current_board = NULL;
         g_opengl_priv->current_window = NULL;
     }
 
-    /*
-     * Flip the image vertically because:
-     * - OpenGL has Y=0 at bottom
-     * - Screen coordinates have Y=0 at top
-     */
-    for (row = 0; row < height; row++) {
-        src_row = row * width * 4;
-        dst_row = (height - 1 - row) * width * 4;
-        CopyMem(pixelbuffer + src_row, flipped_buffer + dst_row, width * 4);
+    if (!pixelbuffer) {
+        return;
     }
 
     /* Write to destination RastPort */
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: Writing to RastPort at (%d,%d)\n", dst_x, dst_y));
-    WritePixelArray(flipped_buffer, 0, 0, width * 4,
+    WritePixelArray(pixelbuffer, 0, 0, width * 4,
                     dst_rp, dst_x, dst_y,
                     width, height, RECTFMT_RGBA);
 
-    FreeVec(flipped_buffer);
     FreeVec(pixelbuffer);
-
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_BlitFBOToRastPort: Blit complete\n"));
 }
 
 /*
@@ -2311,27 +2654,21 @@ BOOL OpenGL_SyncFBOToBitmap(struct RenderPort *rp)
 
     /* Validate RenderPort */
     if (!rp) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncFBOToBitmap: NULL RenderPort\n"));
         return FALSE;
     }
 
     board = rp->target_board;
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncFBOToBitmap: board=%p\n", board));
-
     /* Validate DrawingBoard */
     if (!board || !board->valid) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncFBOToBitmap: Invalid or NULL board\n"));
         return FALSE;
     }
 
     if (!board->backend_data) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncFBOToBitmap: No backend_data (FBO)\n"));
         return FALSE;
     }
 
     if (!board->rastport || !board->rastport->BitMap) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncFBOToBitmap: No rastport or bitmap\n"));
         return FALSE;
     }
 
@@ -2339,7 +2676,6 @@ BOOL OpenGL_SyncFBOToBitmap(struct RenderPort *rp)
 
     /* Validate FBO */
     if (!fbo->valid) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncFBOToBitmap: FBO not valid\n"));
         return FALSE;
     }
 
@@ -2350,7 +2686,6 @@ BOOL OpenGL_SyncFBOToBitmap(struct RenderPort *rp)
      * when blitting unchanged content).
      */
     if (!fbo->dirty) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncFBOToBitmap: FBO not dirty, skipping sync\n"));
         return TRUE;
     }
 
@@ -2384,28 +2719,21 @@ static BOOL OpenGL_SyncRegionFBOToBitmap(struct RenderPort *rp,
 
     /* Validate RenderPort */
     if (!rp) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncRegionFBOToBitmap: NULL RenderPort\n"));
         return FALSE;
     }
 
     board = rp->target_board;
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncRegionFBOToBitmap: board=%p region=(%d,%d %ux%u)\n",
-          board, x, y, width, height));
-
     /* Validate DrawingBoard */
     if (!board || !board->valid) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncRegionFBOToBitmap: Invalid or NULL board\n"));
         return FALSE;
     }
 
     if (!board->backend_data) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncRegionFBOToBitmap: No backend_data (FBO)\n"));
         return FALSE;
     }
 
     if (!board->rastport || !board->rastport->BitMap) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncRegionFBOToBitmap: No rastport or bitmap\n"));
         return FALSE;
     }
 
@@ -2413,7 +2741,6 @@ static BOOL OpenGL_SyncRegionFBOToBitmap(struct RenderPort *rp,
 
     /* Validate FBO */
     if (!fbo->valid) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncRegionFBOToBitmap: FBO not valid\n"));
         return FALSE;
     }
 
@@ -2421,7 +2748,6 @@ static BOOL OpenGL_SyncRegionFBOToBitmap(struct RenderPort *rp,
      * Only sync if the FBO has been modified since last sync.
      */
     if (!fbo->dirty) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncRegionFBOToBitmap: FBO not dirty, skipping sync\n"));
         return TRUE;
     }
 
@@ -2432,7 +2758,6 @@ static BOOL OpenGL_SyncRegionFBOToBitmap(struct RenderPort *rp,
     if (y + height > board->height) height = board->height - y;
 
     if (width <= 0 || height <= 0) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncRegionFBOToBitmap: Region outside bounds\n"));
         return TRUE;
     }
 
@@ -2461,23 +2786,18 @@ static BOOL OpenGLInitBackend(ZuneBackendContext *ctx)
 {
     OpenGLPrivateData *priv;
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGLInitBackend\n"));
-
     if (!ctx) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGLInitBackend: NULL context\n"));
         return FALSE;
     }
 
     /* Allocate private data */
     priv = AllocVec(sizeof(OpenGLPrivateData), MEMF_PUBLIC | MEMF_CLEAR);
     if (!priv) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGLInitBackend: Failed to allocate private data\n"));
         return FALSE;
     }
 
     /* Check if GL library is available (opened in DetectLibraries) */
     if (!OpenGL_CheckLibrary(priv)) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGLInitBackend: GL library not available\n"));
         FreeVec(priv);
         return FALSE;
     }
@@ -2509,15 +2829,11 @@ static BOOL OpenGLInitBackend(ZuneBackendContext *ctx)
                         BACKEND_CAP_TEXTURES;
     ctx->initialized = TRUE;
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGLInitBackend: Backend initialized successfully\n"));
-    OpenGL_DumpDebugInfo(priv);
-
     return TRUE;
 }
 
 static void OpenGLCleanupBackend(ZuneBackendContext *ctx)
 {
-    D(bug("[ZuneRenderer:OpenGL] OpenGLCleanupBackend\n"));
 
     if (!ctx || !ctx->private_data) {
         return;
@@ -2536,9 +2852,6 @@ static void OpenGLCleanupBackend(ZuneBackendContext *ctx)
         OpenGLWindowContext *ctx_to_destroy = priv->window_contexts;
         priv->window_contexts = ctx_to_destroy->next;
 
-        D(bug("[ZuneRenderer:OpenGL] OpenGLCleanupBackend: Destroying window context %p\n",
-              ctx_to_destroy->gl_context));
-
         if (ctx_to_destroy->gl_context) {
             glADestroyContext((GLAContext)ctx_to_destroy->gl_context);
         }
@@ -2548,8 +2861,6 @@ static void OpenGLCleanupBackend(ZuneBackendContext *ctx)
 
     /* Destroy the master context if it exists */
     if (priv->master_context) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGLCleanupBackend: Destroying master GL context %p\n",
-              priv->master_context));
         glADestroyContext((GLAContext)priv->master_context);
         priv->master_context = NULL;
         priv->master_context_created = FALSE;
@@ -2558,8 +2869,6 @@ static void OpenGLCleanupBackend(ZuneBackendContext *ctx)
 
     /* Destroy the global GL context if it exists (fallback mode) */
     if (priv->gl_context) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGLCleanupBackend: Destroying global GL context %p\n",
-              priv->gl_context));
         glADestroyContext((GLAContext)priv->gl_context);
         priv->gl_context = NULL;
         priv->context_created = FALSE;
@@ -2576,34 +2885,41 @@ static void OpenGLCleanupBackend(ZuneBackendContext *ctx)
     FreeVec(priv);
     ctx->private_data = NULL;
     ctx->initialized = FALSE;
-
-    D(bug("[ZuneRenderer:OpenGL] OpenGLCleanupBackend: Cleanup complete\n"));
 }
+
+/*
+ * Cached availability check - result doesn't change after library init
+ */
+static BOOL g_opengl_available_cached = FALSE;
+static BOOL g_opengl_available_checked = FALSE;
 
 static BOOL OpenGLIsAvailable(void)
 {
-    D(bug("[ZuneRenderer:OpenGL] OpenGLIsAvailable: Checking for gl.library\n"));
+    /* Return cached result if already checked */
+    if (g_opengl_available_checked) {
+        return g_opengl_available_cached;
+    }
 
     /*
      * Check if GLBase was opened in DetectLibraries().
      */
-    if (GLBase) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGLIsAvailable: gl.library v%ld.%ld found\n",
-              GLBase->lib_Version, GLBase->lib_Revision));
-        return TRUE;
-    }
-
-    D(bug("[ZuneRenderer:OpenGL] OpenGLIsAvailable: gl.library not found\n"));
-    return FALSE;
+    g_opengl_available_cached = (GLBase != NULL);
+    g_opengl_available_checked = TRUE;
+    return g_opengl_available_cached;
 }
 
 static BOOL OpenGLIsCompatible(struct RenderPort *rp)
 {
-    D(bug("[ZuneRenderer:OpenGL] OpenGLIsCompatible: RenderPort %p\n", rp));
-
     if (!rp) {
         /* NULL rp means checking general compatibility */
         return OpenGLIsAvailable();
+    }
+
+    D(bug("[ZuneGfx:OpenGL] IsCompatible: rp=%p window=%p target_board=%p\n",
+          rp, rp->window, rp->target_board));
+    if (rp->target_board) {
+        D(bug("[ZuneGfx:OpenGL] IsCompatible: board->parent_window=%p\n",
+              rp->target_board->parent_window));
     }
 
     /*
@@ -2621,25 +2937,15 @@ static BOOL OpenGLIsCompatible(struct RenderPort *rp)
 
     /* Check if RenderPort has a window - required for GL context */
     if (rp->window) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGLIsCompatible: Has window %p - compatible\n",
-              rp->window));
         return TRUE;
     }
 
-    /*
-     * Legacy path: Check for DrawingBoard with parent_window
-     */
+    /* Legacy path: Check for DrawingBoard with parent_window */
     if (rp->target_board && rp->target_board->parent_window) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGLIsCompatible: DrawingBoard has parent_window %p - compatible\n",
-              rp->target_board->parent_window));
         return TRUE;
     }
 
-    /*
-     * No Window means we can't create a GL context.
-     * Fall back to CyberGraphics.
-     */
-    D(bug("[ZuneRenderer:OpenGL] OpenGLIsCompatible: No window - NOT compatible\n"));
+    /* No Window means we can't create a GL context - fall back to CyberGraphics */
     return FALSE;
 }
 
@@ -2686,7 +2992,6 @@ static BOOL OpenGL_EnsureGlobalContext(struct Window *window)
     GLAContext gl_ctx;
 
     if (!g_opengl_priv || !GLBase) {
-        D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: No priv or GLBase\n"));
         return FALSE;
     }
 
@@ -2697,11 +3002,8 @@ static BOOL OpenGL_EnsureGlobalContext(struct Window *window)
 
     /* Need a window to create the initial context */
     if (!window) {
-        D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: No window for initial context\n"));
         return FALSE;
     }
-
-    D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: Creating global GL context for window %p\n", window));
 
     /* Set up tags for context creation */
     tags[tag_idx].ti_Tag = GLA_Window;
@@ -2738,11 +3040,9 @@ static BOOL OpenGL_EnsureGlobalContext(struct Window *window)
     /* Create the ONE global context */
     gl_ctx = glACreateContext(tags);
     if (!gl_ctx) {
-        D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: glACreateContext FAILED!\n"));
+        D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: glACreateContext FAILED\n"));
         return FALSE;
     }
-
-    D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: Global context created: %p\n", gl_ctx));
 
     /* Store in global state */
     g_opengl_priv->gl_context = (APTR)gl_ctx;
@@ -2764,9 +3064,6 @@ static BOOL OpenGL_EnsureGlobalContext(struct Window *window)
         if (g_opengl_priv) {
             g_opengl_priv->has_shaders = TRUE;
         }
-        D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: Shaders initialized\n"));
-    } else {
-        D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: Shaders not available (will use fallback)\n"));
     }
 
     /* Initialize FBO functions now that we have a context */
@@ -2780,8 +3077,6 @@ static BOOL OpenGL_EnsureGlobalContext(struct Window *window)
         GLuint test_fbo = 0, test_tex = 0;
         GLenum test_status;
         BOOL fbo_works = FALSE;
-
-        D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: Testing FBO support with small texture\n"));
 
         /* Clear any pending errors */
         while (glGetError() != GL_NO_ERROR) {}
@@ -2804,12 +3099,7 @@ static BOOL OpenGL_EnsureGlobalContext(struct Window *window)
 
                 if (test_status == GL_FRAMEBUFFER_COMPLETE) {
                     fbo_works = TRUE;
-                    D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: FBO test PASSED\n"));
-                } else {
-                    D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: FBO test FAILED - status 0x%04x\n", test_status));
                 }
-            } else {
-                D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: FBO test FAILED - glTexImage2D error\n"));
             }
 
             /* Cleanup test resources */
@@ -2820,27 +3110,21 @@ static BOOL OpenGL_EnsureGlobalContext(struct Window *window)
 
         if (fbo_works && g_opengl_priv) {
             g_opengl_priv->has_framebuffers = TRUE;
-            D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: FBO support enabled\n"));
+            D(bug("[ZuneGfx:OpenGL] EnsureGlobalContext: FBO test PASSED\n"));
         } else {
             g_fbo_available = FALSE;
             if (g_opengl_priv) {
                 g_opengl_priv->has_framebuffers = FALSE;
             }
-            D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: FBO support DISABLED (test failed)\n"));
+            D(bug("[ZuneGfx:OpenGL] EnsureGlobalContext: FBO test FAILED\n"));
         }
     } else {
-        D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: FBO not available (DrawingBoard will use CyberGfx fallback)\n"));
+        D(bug("[ZuneGfx:OpenGL] EnsureGlobalContext: LoadFBOFunctions returned FALSE\n"));
     }
 
     /* Initialize VBO for efficient quad rendering */
     if (OpenGL_LoadVBOFunctions()) {
-        if (OpenGL_CreateQuadVBO()) {
-            D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: VBO initialized\n"));
-        } else {
-            D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: VBO creation failed\n"));
-        }
-    } else {
-        D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: VBO not available\n"));
+        OpenGL_CreateQuadVBO();
     }
 
     return TRUE;
@@ -2879,7 +3163,6 @@ static BOOL OpenGL_SwitchToWindow(struct RenderPort *rp)
     }
 
     if (!window) {
-        D(bug("[ZuneRenderer:OpenGL] SwitchToWindow: No window available for RenderPort %p\n", rp));
         return FALSE;
     }
 
@@ -2896,7 +3179,6 @@ static BOOL OpenGL_SwitchToWindow(struct RenderPort *rp)
         /* Ensure master context exists */
         if (!g_opengl_priv->master_context_created) {
             if (!OpenGL_CreateMasterContext(window)) {
-                D(bug("[ZuneRenderer:OpenGL] SwitchToWindow: Failed to create master context, using fallback\n"));
                 goto fallback_setrast;
             }
         }
@@ -2906,7 +3188,6 @@ static BOOL OpenGL_SwitchToWindow(struct RenderPort *rp)
         if (!win_ctx) {
             win_ctx = OpenGL_CreateWindowContext(window);
             if (!win_ctx) {
-                D(bug("[ZuneRenderer:OpenGL] SwitchToWindow: Failed to create window context, using fallback\n"));
                 goto fallback_setrast;
             }
         }
@@ -2916,8 +3197,6 @@ static BOOL OpenGL_SwitchToWindow(struct RenderPort *rp)
             /* Check if we need to switch */
             if (g_opengl_priv->current_context != win_ctx ||
                 g_opengl_priv->current_target_type != OPENGL_TARGET_WINDOW) {
-
-                D(bug("[ZuneRenderer:OpenGL] SwitchToWindow: Using shared context for window %p\n", window));
 
                 /* Simply make this window's context current - fast! */
                 glAMakeCurrent((GLAContext)win_ctx->gl_context);
@@ -2935,9 +3214,6 @@ static BOOL OpenGL_SwitchToWindow(struct RenderPort *rp)
                 OpenGL_SetupOrthoProjection(width, height);
 
                 g_opengl_priv->needs_sync = TRUE;
-
-                D(bug("[ZuneRenderer:OpenGL] SwitchToWindow: Shared context switch complete (context_switches=%ld)\n",
-                      g_opengl_priv->context_switches));
             }
             return TRUE;
         }
@@ -2955,7 +3231,6 @@ fallback_setrast:
 
     /* Ensure global context exists (creates it if this is the first window) */
     if (!OpenGL_EnsureGlobalContext(window)) {
-        D(bug("[ZuneRenderer:OpenGL] SwitchToWindow: Failed to ensure global context\n"));
         return FALSE;
     }
 
@@ -2967,9 +3242,6 @@ fallback_setrast:
 
         struct TagItem setrast_tags[6];
         int tag_idx = 0;
-
-        D(bug("[ZuneRenderer:OpenGL] SwitchToWindow: Using glASetRast fallback for window %p (%dx%d)\n",
-              window, width, height));
 
         /* Build tags for glASetRast */
         setrast_tags[tag_idx].ti_Tag = GLA_Window;
@@ -3014,9 +3286,6 @@ fallback_setrast:
 
         /* Mark that we need to sync from RastPort before drawing */
         g_opengl_priv->needs_sync = TRUE;
-
-        D(bug("[ZuneRenderer:OpenGL] SwitchToWindow: glASetRast fallback complete (setrast_calls=%ld)\n",
-              g_opengl_priv->setrast_calls));
     }
 
     return TRUE;
@@ -3051,8 +3320,6 @@ static BOOL OpenGL_SwitchToDrawingBoard(struct RenderPort *rp)
      * - No internal Mesa framebuffer reallocation needed
      */
     if (board->width == 0 || board->height == 0) {
-        D(bug("[ZuneRenderer:OpenGL] SwitchToDrawingBoard: Invalid DrawingBoard dimensions (%dx%d)\n",
-              board->width, board->height));
         return FALSE;
     }
 
@@ -3069,29 +3336,19 @@ static BOOL OpenGL_SwitchToDrawingBoard(struct RenderPort *rp)
         /* First, check if DrawingBoard has a parent_window set */
         if (board->parent_window) {
             window = board->parent_window;
-            D(bug("[ZuneRenderer:OpenGL] SwitchToDrawingBoard: Using board->parent_window %p\n", window));
         }
         /* Otherwise, try to get window from RenderPort's target_rp */
         else if (rp->target_rp && rp->target_rp->Layer && rp->target_rp->Layer->Window) {
             window = (struct Window *)rp->target_rp->Layer->Window;
-            D(bug("[ZuneRenderer:OpenGL] SwitchToDrawingBoard: Using target_rp->Layer->Window %p\n", window));
         }
 
         if (window) {
             /* Create context for the window */
             if (!OpenGL_EnsureGlobalContext(window)) {
-                D(bug("[ZuneRenderer:OpenGL] SwitchToDrawingBoard: Failed to create window context\n"));
                 return FALSE;
             }
         } else {
-            /*
-             * No window available - this is an error in the new architecture.
-             * DrawingBoards must be created via CreateDrawingBoardForRenderPort()
-             * which requires a RenderPort that was created via CreateRenderPortForWindow().
-             * This ensures every DrawingBoard has an associated window for GL context creation.
-             */
-            D(bug("[ZuneRenderer:OpenGL] SwitchToDrawingBoard: ERROR - No window available!\n"));
-            D(bug("[ZuneRenderer:OpenGL] SwitchToDrawingBoard: DrawingBoards require a window (use CreateDrawingBoardForRenderPort)\n"));
+            /* No window available - DrawingBoards require a window for GL context */
             return FALSE;
         }
     }
@@ -3108,7 +3365,7 @@ static BOOL OpenGL_SwitchToDrawingBoard(struct RenderPort *rp)
          * Return FALSE to trigger fallback to CyberGfx/software rendering
          * for DrawingBoard operations. This ensures rendering actually works.
          */
-        D(bug("[ZuneRenderer:OpenGL] SwitchToDrawingBoard: FBO not available, falling back to CyberGfx\n"));
+        D(bug("[ZuneGfx:OpenGL] SwitchToDrawingBoard: FBO not available, fallback to CyberGfx\n"));
         return FALSE;
     }
 
@@ -3117,12 +3374,8 @@ static BOOL OpenGL_SwitchToDrawingBoard(struct RenderPort *rp)
 
     if (!fbo) {
         /* Create FBO for this DrawingBoard */
-        D(bug("[ZuneRenderer:OpenGL] SwitchToDrawingBoard: Creating FBO for board %p (%dx%d)\n",
-              board, board->width, board->height));
-
         fbo = OpenGL_CreateFBO(board->width, board->height);
         if (!fbo) {
-            D(bug("[ZuneRenderer:OpenGL] SwitchToDrawingBoard: Failed to create FBO\n"));
             return FALSE;
         }
 
@@ -3137,21 +3390,14 @@ static BOOL OpenGL_SwitchToDrawingBoard(struct RenderPort *rp)
          * to g_opengl_priv->gl_context.
          */
         fbo->parent_context = g_opengl_priv->current_context;
-
-        D(bug("[ZuneRenderer:OpenGL] SwitchToDrawingBoard: Created FBO %d for board %p (parent_context=%p)\n",
-              fbo->fbo_id, board, fbo->parent_context));
     }
 
     /* Check if we need to switch to this FBO */
     if (g_opengl_priv->current_target_type != OPENGL_TARGET_DRAWINGBOARD ||
         g_opengl_priv->current_board != board) {
 
-        D(bug("[ZuneRenderer:OpenGL] SwitchToDrawingBoard: Binding FBO %d for board %p (%dx%d)\n",
-              fbo->fbo_id, board, board->width, board->height));
-
         /* Bind the FBO - this is much faster than glASetRast! */
         if (!OpenGL_BindFBO(fbo)) {
-            D(bug("[ZuneRenderer:OpenGL] SwitchToDrawingBoard: Failed to bind FBO\n"));
             return FALSE;
         }
 
@@ -3164,9 +3410,6 @@ static BOOL OpenGL_SwitchToDrawingBoard(struct RenderPort *rp)
 
         /* DrawingBoards don't need sync - they start fresh */
         g_opengl_priv->needs_sync = FALSE;
-
-        D(bug("[ZuneRenderer:OpenGL] SwitchToDrawingBoard: Switch complete (fbo_switches=%ld)\n",
-              g_opengl_priv->fbo_switches));
     }
 
     return TRUE;
@@ -3182,24 +3425,16 @@ static BOOL OpenGL_SwitchToDrawingBoard(struct RenderPort *rp)
  */
 static BOOL OpenGL_SwitchToTarget(struct RenderPort *rp)
 {
-    BOOL result;
-
     if (!rp || !g_opengl_priv) {
-        D(bug("[ZuneRenderer:OpenGL] SwitchToTarget: Invalid rp or g_opengl_priv\n"));
         return FALSE;
     }
 
     /* Check if this is a DrawingBoard target */
     if (rp->target_board) {
-        D(bug("[ZuneRenderer:OpenGL] SwitchToTarget: Switching to DrawingBoard %p\n", rp->target_board));
-        result = OpenGL_SwitchToDrawingBoard(rp);
-        D(bug("[ZuneRenderer:OpenGL] SwitchToTarget: SwitchToDrawingBoard returned %d, current_target_type=%d\n",
-              result, g_opengl_priv->current_target_type));
-        return result;
+        return OpenGL_SwitchToDrawingBoard(rp);
     }
 
     /* Otherwise it's a Window-based RastPort */
-    D(bug("[ZuneRenderer:OpenGL] SwitchToTarget: Switching to Window\n"));
     return OpenGL_SwitchToWindow(rp);
 }
 
@@ -3208,7 +3443,6 @@ static BOOL OpenGL_SwitchToTarget(struct RenderPort *rp)
  */
 static void OpenGL_SetupOrthoProjection(UWORD width, UWORD height)
 {
-    D(bug("[ZuneRenderer:OpenGL] Setting up ortho projection %dx%d\n", width, height));
 
     /* Set viewport to full render area */
     glViewport(0, 0, width, height);
@@ -3260,10 +3494,9 @@ static void OpenGL_SyncFromRastPort(struct RenderPort *rp)
     struct RastPort *rastport;
     UWORD width, height;
     UBYTE *pixelbuffer;
+    UBYTE *flipped_buffer;
     WORD x_offset, y_offset;
     GLuint texture;
-    ULONG row, src_row, dst_row;
-    UBYTE *flipped_buffer;
 
     if (!rp || !rp->target_rp || !CyberGfxBase || !g_opengl_priv) {
         return;
@@ -3280,93 +3513,51 @@ static void OpenGL_SyncFromRastPort(struct RenderPort *rp)
     width = window->Width - window->BorderLeft - window->BorderRight;
     height = window->Height - window->BorderTop - window->BorderBottom;
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncFromRastPort: Syncing %dx%d pixels\n", width, height));
-
-    /* Validate dimensions */
     if (width == 0 || height == 0) {
         return;
     }
 
-    /* Check maximum texture size to avoid Mesa errors */
+    /* Check maximum texture size */
     {
         GLint max_texture_size = 0;
         glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_size);
         if (max_texture_size > 0 && ((GLint)width > max_texture_size || (GLint)height > max_texture_size)) {
-            D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncFromRastPort: Size %dx%d exceeds max texture size %d\n",
-                  width, height, max_texture_size));
             return;
         }
     }
 
-    /* Allocate buffer for pixel data (RGBA format, 4 bytes per pixel) */
-    pixelbuffer = AllocVec(width * height * 4, MEMF_ANY);
+    /* Read pixels from RastPort */
+    pixelbuffer = OpenGL_ReadRastPortToBuffer(rastport, x_offset, y_offset, width, height, FALSE);
     if (!pixelbuffer) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncFromRastPort: Failed to allocate pixel buffer\n"));
         return;
     }
 
     /* Allocate buffer for Y-flipped data */
-    flipped_buffer = AllocVec(width * height * 4, MEMF_ANY);
+    flipped_buffer = AllocVec((ULONG)width * height * 4, MEMF_ANY);
     if (!flipped_buffer) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncFromRastPort: Failed to allocate flipped buffer\n"));
         FreeVec(pixelbuffer);
         return;
     }
 
-    /* Read pixels from RastPort in RGBA format (more compatible with GL) */
-    ReadPixelArray(pixelbuffer, 0, 0, width * 4,
-                   rastport, x_offset, y_offset,
-                   width, height, RECTFMT_RGBA);
+    /* Flip vertically for OpenGL */
+    OpenGL_FlipPixelBufferYCopy(pixelbuffer, flipped_buffer, width, height);
 
-    /*
-     * Flip the image vertically because:
-     * - Screen coordinates have Y=0 at top
-     * - OpenGL has Y=0 at bottom
-     * Our ortho projection flips rendering, but textures still need manual flip.
-     */
-    for (row = 0; row < height; row++) {
-        src_row = row * width * 4;
-        dst_row = (height - 1 - row) * width * 4;
-        CopyMem(pixelbuffer + src_row, flipped_buffer + dst_row, width * 4);
-    }
-
-    /* Create a temporary texture to hold the RastPort contents */
-    glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
-
-    /* Set texture parameters for pixel-perfect rendering */
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-
-    /* Upload the pixel data to the texture */
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0,
-                 GL_RGBA, GL_UNSIGNED_BYTE, flipped_buffer);
-
-    /* Draw the texture as a fullscreen quad */
-    glEnable(GL_TEXTURE_2D);
-
-    /* Use white color so texture colors come through unchanged */
-    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-
-    glBegin(GL_QUADS);
-    /* Note: Our ortho projection has Y flipped (0 at top, height at bottom) */
-    glTexCoord2f(0.0f, 1.0f); glVertex2i(0, 0);
-    glTexCoord2f(1.0f, 1.0f); glVertex2i(width, 0);
-    glTexCoord2f(1.0f, 0.0f); glVertex2i(width, height);
-    glTexCoord2f(0.0f, 0.0f); glVertex2i(0, height);
-    glEnd();
-
-    glDisable(GL_TEXTURE_2D);
-
-    /* Clean up the texture */
-    glDeleteTextures(1, &texture);
-
+    /* Upload to texture */
+    texture = OpenGL_UploadTextureFromBuffer(flipped_buffer, width, height);
     FreeVec(flipped_buffer);
     FreeVec(pixelbuffer);
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGL_SyncFromRastPort: Sync complete\n"));
+    if (texture == 0) {
+        return;
+    }
+
+    /* Draw the texture as a fullscreen quad */
+    glEnable(GL_TEXTURE_2D);
+    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+    OpenGL_DrawTexturedQuad(0, 0, width, height, TRUE);
+    glDisable(GL_TEXTURE_2D);
+
+    glDeleteTextures(1, &texture);
 }
 
 /*
@@ -3420,8 +3611,6 @@ static void OpenGL_FlushIfNotBatching(struct RenderPort *rp)
 
 static BOOL OpenGLInitRenderPort(struct RenderPort *rp)
 {
-    D(bug("[ZuneRenderer:OpenGL] OpenGLInitRenderPort: RenderPort %p\n", rp));
-
     if (!rp) {
         return FALSE;
     }
@@ -3438,8 +3627,6 @@ static BOOL OpenGLInitRenderPort(struct RenderPort *rp)
 
 static void OpenGLCleanupRenderPort(struct RenderPort *rp)
 {
-    D(bug("[ZuneRenderer:OpenGL] OpenGLCleanupRenderPort: RenderPort %p\n", rp));
-
     if (!rp) {
         return;
     }
@@ -3484,14 +3671,11 @@ static void OpenGLReleaseColor(struct RenderPort *rp,
 static void OpenGLDrawPixel(struct RenderPort *rp, WORD x, WORD y,
                             struct InternalColor *color, BOOL antialias)
 {
-    D(bug("[ZuneRenderer:OpenGL] OpenGLDrawPixel: (%d,%d)\n", x, y));
-
     if (!rp || !color) {
         return;
     }
 
     if (!OpenGL_SwitchToTarget(rp)) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGLDrawPixel: SwitchToTarget failed, using fallback\n"));
         ZuneFallback_DrawPixel(rp, x, y, color, antialias);
         return;
     }
@@ -3510,15 +3694,11 @@ static void OpenGLDrawLine(struct RenderPort *rp, WORD startX, WORD startY,
                            WORD endX, WORD endY, UWORD width,
                            struct InternalColor *color, BOOL antialias)
 {
-    D(bug("[ZuneRenderer:OpenGL] OpenGLDrawLine: (%d,%d) to (%d,%d) width=%d\n",
-          startX, startY, endX, endY, width));
-
     if (!rp || !color) {
         return;
     }
 
     if (!OpenGL_SwitchToTarget(rp)) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGLDrawLine: SwitchToTarget failed, using fallback\n"));
         ZuneFallback_DrawLine(rp, startX, startY, endX, endY, width, color, antialias);
         return;
     }
@@ -3554,59 +3734,17 @@ static void OpenGLDrawLine(struct RenderPort *rp, WORD startX, WORD startY,
     OpenGL_FlushIfNotBatching(rp);
 }
 
-/*
- * Helper to draw a quarter circle arc (for rounded corners)
- * quadrant: 0=top-right, 1=bottom-right, 2=bottom-left, 3=top-left
- */
-static void OpenGL_DrawQuarterCircle(WORD cx, WORD cy, UWORD radius, int quadrant, BOOL filled)
-{
-    #define CORNER_SEGMENTS 16
-    int i;
-    float angle, angle_start, angle_step;
-
-    /* Each quadrant is 90 degrees (PI/2) */
-    angle_start = quadrant * 3.14159265f / 2.0f;
-    angle_step = (3.14159265f / 2.0f) / CORNER_SEGMENTS;
-
-    if (filled) {
-        glBegin(GL_TRIANGLE_FAN);
-        glVertex2i(cx, cy);  /* Center point */
-        for (i = 0; i <= CORNER_SEGMENTS; i++) {
-            angle = angle_start + i * angle_step;
-            glVertex2f(cx + radius * cosf(angle),
-                      cy - radius * sinf(angle));  /* Y is flipped in screen coords */
-        }
-        glEnd();
-    } else {
-        glBegin(GL_LINE_STRIP);
-        for (i = 0; i <= CORNER_SEGMENTS; i++) {
-            angle = angle_start + i * angle_step;
-            glVertex2f(cx + radius * cosf(angle),
-                      cy - radius * sinf(angle));
-        }
-        glEnd();
-    }
-    #undef CORNER_SEGMENTS
-}
-
 static void OpenGLDrawRectangle(struct RenderPort *rp, WORD x, WORD y,
                                 UWORD width, UWORD height, UBYTE border_width,
                                 UBYTE corner_radius, struct ZuneBrush *fill_brush,
                                 struct InternalColor *border_color, BOOL filled,
                                 BOOL antialias)
 {
-    D(bug("[ZuneRenderer:OpenGL] OpenGLDrawRectangle: (%d,%d) %dx%d filled=%d radius=%d antialias=%d\n",
-          x, y, width, height, filled, corner_radius, antialias));
-    D(bug("[ZuneRenderer:OpenGL] OpenGLDrawRectangle: fill_brush=%p border_color=%p border_width=%d\n",
-          fill_brush, border_color, border_width));
-
     if (!rp) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGLDrawRectangle: rp is NULL, returning\n"));
         return;
     }
 
     if (!OpenGL_SwitchToTarget(rp)) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGLDrawRectangle: SwitchToTarget failed, using fallback\n"));
         ZuneFallback_DrawRectangle(rp, x, y, width, height, border_width, corner_radius,
                                    fill_brush, border_color, filled, antialias);
         return;
@@ -3623,6 +3761,7 @@ static void OpenGLDrawRectangle(struct RenderPort *rp, WORD x, WORD y,
         /* Handle fill */
         if (filled && fill_brush) {
             if (fill_brush->type == ZUNE_BRUSH_TYPE_SOLID) {
+                /* Fast path for solid colors - no texture needed */
                 ULONG color = fill_brush->data.solid.color;
                 glColor4ub(
                     (color >> 16) & 0xFF,
@@ -3653,7 +3792,19 @@ static void OpenGLDrawRectangle(struct RenderPort *rp, WORD x, WORD y,
                     glVertex2i(x, y + height);
                     glEnd();
                 }
-                /* No AA outline needed - straight edges look correct */
+            } else {
+                /* Non-solid brush - convert to texture and draw textured quad */
+                GLuint brush_texture = OpenGL_BrushToTexture(rp, fill_brush, x, y, width, height);
+                if (brush_texture != 0) {
+                    glEnable(GL_TEXTURE_2D);
+                    glBindTexture(GL_TEXTURE_2D, brush_texture);
+                    glColor4ub(255, 255, 255, 255); /* Full brightness, let texture provide color */
+
+                    OpenGL_DrawTexturedQuad(x, y, width, height, FALSE);
+
+                    glDisable(GL_TEXTURE_2D);
+                    glDeleteTextures(1, &brush_texture);
+                }
             }
         }
 
@@ -3689,24 +3840,17 @@ static void OpenGLDrawRectangle(struct RenderPort *rp, WORD x, WORD y,
          *
          * This gives us perfect antialiasing on all edges and corners
          * without needing to tessellate the curves into line segments.
+         *
+         * For non-solid brushes, we use the textured shader variant which
+         * samples fill color from a texture instead of a uniform.
          */
         if (g_shaders_available && g_rounded_rect_program && glUseProgram_ptr) {
-            ULONG fill_color_val = 0;
-            float fill_r = 0, fill_g = 0, fill_b = 0, fill_a = 0;
             float border_r = 0, border_g = 0, border_b = 0, border_a = 0;
-            BOOL has_fill = (filled && fill_brush && fill_brush->type == ZUNE_BRUSH_TYPE_SOLID);
+            BOOL has_fill = (filled && fill_brush);
             BOOL has_border = (border_width > 0 && border_color);
-
-            D(bug("[ZuneRenderer:OpenGL] DrawRectangle: Using shader for rounded rect\n"));
-
-            /* Extract fill color */
-            if (has_fill) {
-                fill_color_val = fill_brush->data.solid.color;
-                fill_r = ((fill_color_val >> 16) & 0xFF) / 255.0f;
-                fill_g = ((fill_color_val >> 8) & 0xFF) / 255.0f;
-                fill_b = (fill_color_val & 0xFF) / 255.0f;
-                fill_a = ((fill_color_val >> 24) & 0xFF) / 255.0f;
-            }
+            BOOL use_textured_shader = (has_fill && fill_brush->type != ZUNE_BRUSH_TYPE_SOLID &&
+                                        g_rounded_rect_textured_program != 0);
+            GLuint brush_texture = 0;
 
             /* Extract border color */
             if (has_border) {
@@ -3716,31 +3860,75 @@ static void OpenGLDrawRectangle(struct RenderPort *rp, WORD x, WORD y,
                 border_a = border_color->a / 255.0f;
             }
 
-            /* Activate shader program */
-            D(bug("[ZuneRenderer:OpenGL] DrawRectangle: Calling glUseProgram(%d)\n", g_rounded_rect_program));
-            glUseProgram_ptr(g_rounded_rect_program);
-            D(bug("[ZuneRenderer:OpenGL] DrawRectangle: glUseProgram done\n"));
+            if (use_textured_shader) {
+                /* Non-solid brush: convert to texture and use textured shader */
+                brush_texture = OpenGL_BrushToTexture(rp, fill_brush, x, y, width, height);
+                if (brush_texture == 0) {
+                    has_fill = FALSE; /* Failed to create texture, skip fill */
+                    use_textured_shader = FALSE;
+                }
+            }
 
-            /* Set uniforms */
-            D(bug("[ZuneRenderer:OpenGL] DrawRectangle: Setting uniforms\n"));
-            if (g_uniform_rect_size >= 0 && glUniform2f_ptr)
-                glUniform2f_ptr(g_uniform_rect_size, (GLfloat)width, (GLfloat)height);
-            if (g_uniform_rect_radius >= 0 && glUniform1f_ptr)
-                glUniform1f_ptr(g_uniform_rect_radius, (GLfloat)corner_radius);
-            if (g_uniform_fill_color >= 0 && glUniform4f_ptr)
-                glUniform4f_ptr(g_uniform_fill_color, fill_r, fill_g, fill_b, fill_a);
-            if (g_uniform_border_color >= 0 && glUniform4f_ptr)
-                glUniform4f_ptr(g_uniform_border_color, border_r, border_g, border_b, border_a);
-            if (g_uniform_border_width >= 0 && glUniform1f_ptr)
-                glUniform1f_ptr(g_uniform_border_width, (GLfloat)border_width);
-            if (g_uniform_has_fill >= 0 && glUniform1f_ptr)
-                glUniform1f_ptr(g_uniform_has_fill, has_fill ? 1.0f : 0.0f);
-            if (g_uniform_has_border >= 0 && glUniform1f_ptr)
-                glUniform1f_ptr(g_uniform_has_border, has_border ? 1.0f : 0.0f);
-            D(bug("[ZuneRenderer:OpenGL] DrawRectangle: Uniforms set\n"));
+            if (use_textured_shader) {
+                /* Use textured shader for non-solid brushes */
+                glUseProgram_ptr(g_rounded_rect_textured_program);
+
+                /* Bind the brush texture */
+                glEnable(GL_TEXTURE_2D);
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, brush_texture);
+
+                /* Set uniforms */
+                if (g_uniform_tex_rect_size >= 0 && glUniform2f_ptr)
+                    glUniform2f_ptr(g_uniform_tex_rect_size, (GLfloat)width, (GLfloat)height);
+                if (g_uniform_tex_rect_radius >= 0 && glUniform1f_ptr)
+                    glUniform1f_ptr(g_uniform_tex_rect_radius, (GLfloat)corner_radius);
+                if (g_uniform_tex_fill_texture >= 0 && glUniform1i_ptr)
+                    glUniform1i_ptr(g_uniform_tex_fill_texture, 0); /* Texture unit 0 */
+                if (g_uniform_tex_border_color >= 0 && glUniform4f_ptr)
+                    glUniform4f_ptr(g_uniform_tex_border_color, border_r, border_g, border_b, border_a);
+                if (g_uniform_tex_border_width >= 0 && glUniform1f_ptr)
+                    glUniform1f_ptr(g_uniform_tex_border_width, (GLfloat)border_width);
+                if (g_uniform_tex_has_fill >= 0 && glUniform1f_ptr)
+                    glUniform1f_ptr(g_uniform_tex_has_fill, has_fill ? 1.0f : 0.0f);
+                if (g_uniform_tex_has_border >= 0 && glUniform1f_ptr)
+                    glUniform1f_ptr(g_uniform_tex_has_border, has_border ? 1.0f : 0.0f);
+            } else {
+                /* Use solid color shader */
+                ULONG fill_color_val = 0;
+                float fill_r = 0, fill_g = 0, fill_b = 0, fill_a = 0;
+
+                /* Extract fill color for solid brush */
+                if (has_fill && fill_brush->type == ZUNE_BRUSH_TYPE_SOLID) {
+                    fill_color_val = fill_brush->data.solid.color;
+                    fill_r = ((fill_color_val >> 16) & 0xFF) / 255.0f;
+                    fill_g = ((fill_color_val >> 8) & 0xFF) / 255.0f;
+                    fill_b = (fill_color_val & 0xFF) / 255.0f;
+                    fill_a = ((fill_color_val >> 24) & 0xFF) / 255.0f;
+                } else {
+                    has_fill = FALSE; /* Non-solid without textured shader = no fill */
+                }
+
+                glUseProgram_ptr(g_rounded_rect_program);
+
+                /* Set uniforms */
+                if (g_uniform_rect_size >= 0 && glUniform2f_ptr)
+                    glUniform2f_ptr(g_uniform_rect_size, (GLfloat)width, (GLfloat)height);
+                if (g_uniform_rect_radius >= 0 && glUniform1f_ptr)
+                    glUniform1f_ptr(g_uniform_rect_radius, (GLfloat)corner_radius);
+                if (g_uniform_fill_color >= 0 && glUniform4f_ptr)
+                    glUniform4f_ptr(g_uniform_fill_color, fill_r, fill_g, fill_b, fill_a);
+                if (g_uniform_border_color >= 0 && glUniform4f_ptr)
+                    glUniform4f_ptr(g_uniform_border_color, border_r, border_g, border_b, border_a);
+                if (g_uniform_border_width >= 0 && glUniform1f_ptr)
+                    glUniform1f_ptr(g_uniform_border_width, (GLfloat)border_width);
+                if (g_uniform_has_fill >= 0 && glUniform1f_ptr)
+                    glUniform1f_ptr(g_uniform_has_fill, has_fill ? 1.0f : 0.0f);
+                if (g_uniform_has_border >= 0 && glUniform1f_ptr)
+                    glUniform1f_ptr(g_uniform_has_border, has_border ? 1.0f : 0.0f);
+            }
 
             /* Draw the quad using VBO if available, otherwise immediate mode */
-            D(bug("[ZuneRenderer:OpenGL] DrawRectangle: Drawing quad (%d,%d)-(%d,%d)\n", x, y, x + width, y + height));
 
             if (g_vbo_available && g_quad_vbo != 0 && glBindBuffer_ptr) {
                 /*
@@ -3771,8 +3959,6 @@ static void OpenGLDrawRectangle(struct RenderPort *rp, WORD x, WORD y,
 
                 glBindBuffer_ptr(GL_ARRAY_BUFFER, 0);
                 glPopMatrix();
-
-                D(bug("[ZuneRenderer:OpenGL] DrawRectangle: Quad drawn via VBO\n"));
             } else {
                 /* Fallback to immediate mode */
                 glBegin(GL_QUADS);
@@ -3781,7 +3967,14 @@ static void OpenGLDrawRectangle(struct RenderPort *rp, WORD x, WORD y,
                 glTexCoord2f(1.0f, 1.0f); glVertex2i(x + width, y + height);
                 glTexCoord2f(0.0f, 1.0f); glVertex2i(x, y + height);
                 glEnd();
-                D(bug("[ZuneRenderer:OpenGL] DrawRectangle: Quad drawn via immediate mode\n"));
+            }
+
+            /* Cleanup */
+            if (use_textured_shader) {
+                glDisable(GL_TEXTURE_2D);
+                if (brush_texture != 0) {
+                    glDeleteTextures(1, &brush_texture);
+                }
             }
 
             /* Deactivate shader */
@@ -3792,8 +3985,6 @@ static void OpenGLDrawRectangle(struct RenderPort *rp, WORD x, WORD y,
              * This is the old implementation for systems without shader support.
              */
             WORD r = corner_radius;
-
-            D(bug("[ZuneRenderer:OpenGL] DrawRectangle: Using geometry fallback for rounded rect\n"));
 
             /* Handle fill */
             if (filled && fill_brush) {
@@ -3982,18 +4173,11 @@ static void OpenGLDrawCircle(struct RenderPort *rp, WORD center_x, WORD center_y
     int i;
     float angle, angle_step;
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGLDrawCircle: center=(%d,%d) radius=%d filled=%d antialias=%d\n",
-          center_x, center_y, radius, filled, antialias));
-    D(bug("[ZuneRenderer:OpenGL] OpenGLDrawCircle: fill_brush=%p border_color=%p border_width=%d\n",
-          fill_brush, border_color, border_width));
-
     if (!rp) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGLDrawCircle: rp is NULL, returning\n"));
         return;
     }
 
     if (!OpenGL_SwitchToTarget(rp)) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGLDrawCircle: SwitchToTarget failed, using fallback\n"));
         ZuneFallback_DrawCircle(rp, center_x, center_y, radius, border_width,
                                 fill_brush, border_color, filled, antialias);
         return;
@@ -4005,11 +4189,9 @@ static void OpenGLDrawCircle(struct RenderPort *rp, WORD center_x, WORD center_y
 
     /* Handle fill */
     if (filled && fill_brush) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGLDrawCircle: drawing fill, brush type=%d\n", fill_brush->type));
         /* For now, only support solid color fills */
         if (fill_brush->type == ZUNE_BRUSH_TYPE_SOLID) {
             ULONG color = fill_brush->data.solid.color;
-            D(bug("[ZuneRenderer:OpenGL] OpenGLDrawCircle: solid color=0x%08lx\n", color));
             glColor4ub(
                 (color >> 16) & 0xFF,  /* R */
                 (color >> 8) & 0xFF,   /* G */
@@ -4087,14 +4269,11 @@ static void OpenGLDrawCircle(struct RenderPort *rp, WORD center_x, WORD center_y
 static void OpenGLClearRenderPort(struct RenderPort *rp,
                                   struct InternalColor *color)
 {
-    D(bug("[ZuneRenderer:OpenGL] OpenGLClearRenderPort\n"));
-
     if (!rp || !color) {
         return;
     }
 
     if (!OpenGL_SwitchToTarget(rp)) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGLClearRenderPort: SwitchToTarget failed, using fallback\n"));
         ZuneFallback_ClearRenderPort(rp, color);
         return;
     }
@@ -4123,8 +4302,6 @@ static void OpenGLClearRenderPort(struct RenderPort *rp,
 
 static APTR OpenGLLockPixels(struct DrawingBoard *board, ULONG *pitch_out)
 {
-    D(bug("[ZuneRenderer:OpenGL] OpenGLLockPixels: Not fully supported\n"));
-
     /*
      * OpenGL doesn't support direct pixel access in the same way.
      * For now, return NULL. Future: could use glReadPixels to read
@@ -4144,7 +4321,6 @@ static void OpenGLUnlockPixels(struct DrawingBoard *board)
 static ULONG OpenGLGetPixel(struct DrawingBoard *board, WORD x, WORD y)
 {
     /* TODO: Implement using glReadPixels */
-    D(bug("[ZuneRenderer:OpenGL] OpenGLGetPixel: Not implemented\n"));
     return 0x00000000;
 }
 
@@ -4152,7 +4328,6 @@ static void OpenGLSetPixel(struct DrawingBoard *board, WORD x, WORD y,
                            struct InternalColor *color)
 {
     /* TODO: Would need to draw a point via the RenderPort */
-    D(bug("[ZuneRenderer:OpenGL] OpenGLSetPixel: Not implemented\n"));
 }
 
 /*****************************************************************************/
@@ -4161,8 +4336,6 @@ static void OpenGLSetPixel(struct DrawingBoard *board, WORD x, WORD y,
 
 static void OpenGLBeginBatch(struct RenderPort *rp)
 {
-    D(bug("[ZuneRenderer:OpenGL] OpenGLBeginBatch\n"));
-
     /*
      * OpenGL naturally batches commands. We could use this to
      * defer glASwapBuffers until EndBatch.
@@ -4174,8 +4347,6 @@ static void OpenGLBeginBatch(struct RenderPort *rp)
 
 static void OpenGLEndBatch(struct RenderPort *rp)
 {
-    D(bug("[ZuneRenderer:OpenGL] OpenGLEndBatch\n"));
-
     if (!rp) {
         return;
     }
@@ -4191,8 +4362,6 @@ static void OpenGLEndBatch(struct RenderPort *rp)
 
 static void OpenGLFlushBatch(struct RenderPort *rp)
 {
-    D(bug("[ZuneRenderer:OpenGL] OpenGLFlushBatch\n"));
-
     if (!rp) {
         return;
     }
@@ -4223,9 +4392,6 @@ static void OpenGLBlitRenderPorts(struct RenderPort *source,
 {
     struct DrawingBoard *src_board, *dst_board;
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGLBlitRenderPorts: src(%d,%d)->dst(%d,%d) %dx%d\n",
-          src_x, src_y, dest_x, dest_y, width, height));
-
     if (!source || !dest) {
         return;
     }
@@ -4247,8 +4413,6 @@ static void OpenGLBlitRenderPorts(struct RenderPort *source,
         OpenGLFBOData *dst_fbo = (OpenGLFBOData *)dst_board->backend_data;
 
         if (src_fbo->valid && dst_fbo->valid) {
-            D(bug("[ZuneRenderer:OpenGL] OpenGLBlitRenderPorts: Using zero-copy FBO-to-FBO blit\n"));
-
             OpenGL_BlitFBOToFBO(src_board, dst_board,
                                 src_x, src_y, dest_x, dest_y, width, height);
             return;
@@ -4263,13 +4427,11 @@ static void OpenGLBlitRenderPorts(struct RenderPort *source,
      * - FBOs are not available
      * - One or both boards don't have valid FBO data
      */
-    D(bug("[ZuneRenderer:OpenGL] OpenGLBlitRenderPorts: Using fallback (no zero-copy)\n"));
 
     /* If source is a DrawingBoard with FBO, sync it to bitmap first */
     if (src_board && src_board->backend_data && g_fbo_available) {
         OpenGLFBOData *src_fbo = (OpenGLFBOData *)src_board->backend_data;
         if (src_fbo->valid && src_fbo->dirty) {
-            D(bug("[ZuneRenderer:OpenGL] OpenGLBlitRenderPorts: Syncing source FBO to bitmap\n"));
             OpenGL_SyncFBOToBitmap(source);
         }
     }
@@ -4284,8 +4446,6 @@ static void OpenGLBlitRenderPorts(struct RenderPort *source,
                           dest_x, dest_y,
                           width, height,
                           0xC0);  /* Copy */
-
-        D(bug("[ZuneRenderer:OpenGL] OpenGLBlitRenderPorts: Fallback blit via BltBitMapRastPort complete\n"));
     }
 }
 
@@ -4298,9 +4458,6 @@ static void OpenGLBlitToScreen(struct RenderPort *source,
     OpenGLFBOData *fbo;
     struct Window *target_window = NULL;
     OpenGLWindowContext *win_ctx = NULL;
-
-    D(bug("[ZuneRenderer:OpenGL] OpenGLBlitToScreen: src(%d,%d) -> dst(%d,%d) %dx%d\n",
-          src_x, src_y, dest_x, dest_y, width, height));
 
     if (!source || !screen_rp) {
         return;
@@ -4339,8 +4496,6 @@ static void OpenGLBlitToScreen(struct RenderPort *source,
             GLuint src_texture = fbo->texture_id;
             GLfloat tex_x1, tex_y1, tex_x2, tex_y2;
             UWORD win_width, win_height;
-
-            D(bug("[ZuneRenderer:OpenGL] OpenGLBlitToScreen: Using GPU-accelerated path\n"));
 
             /* Make window context current */
             glAMakeCurrent((GLAContext)win_ctx->gl_context);
@@ -4402,8 +4557,6 @@ static void OpenGLBlitToScreen(struct RenderPort *source,
 
             /* Swap to make visible */
             glASwapBuffers((GLAContext)win_ctx->gl_context);
-
-            D(bug("[ZuneRenderer:OpenGL] OpenGLBlitToScreen: GPU blit complete (zero-copy)\n"));
             return;
         }
     }
@@ -4425,11 +4578,7 @@ static void OpenGLBlitToScreen(struct RenderPort *source,
 
         fbo = (OpenGLFBOData *)board->backend_data;
 
-        D(bug("[ZuneRenderer:OpenGL] OpenGLBlitToScreen: FBO %d -> RastPort %p (fallback)\n",
-              fbo->fbo_id, screen_rp));
-
         if (!CyberGfxBase) {
-            D(bug("[ZuneRenderer:OpenGL] OpenGLBlitToScreen: CyberGfxBase not available\n"));
             return;
         }
 
@@ -4441,13 +4590,11 @@ static void OpenGLBlitToScreen(struct RenderPort *source,
         /* Allocate buffers */
         pixelbuffer = AllocVec(width * height * 4, MEMF_ANY);
         if (!pixelbuffer) {
-            D(bug("[ZuneRenderer:OpenGL] OpenGLBlitToScreen: Failed to allocate pixel buffer\n"));
             return;
         }
 
         flipped_buffer = AllocVec(width * height * 4, MEMF_ANY);
         if (!flipped_buffer) {
-            D(bug("[ZuneRenderer:OpenGL] OpenGLBlitToScreen: Failed to allocate flipped buffer\n"));
             FreeVec(pixelbuffer);
             return;
         }
@@ -4483,14 +4630,11 @@ static void OpenGLBlitToScreen(struct RenderPort *source,
 
         FreeVec(flipped_buffer);
         FreeVec(pixelbuffer);
-
-        D(bug("[ZuneRenderer:OpenGL] OpenGLBlitToScreen: FBO blit complete (fallback)\n"));
     } else {
         /*
          * No FBO: rendering went directly to window's GL buffer.
          * Just swap buffers to make it visible.
          */
-        D(bug("[ZuneRenderer:OpenGL] OpenGLBlitToScreen: Swap buffers (no FBO)\n"));
         if (g_opengl_priv && g_opengl_priv->gl_context) {
             glASwapBuffers((GLAContext)g_opengl_priv->gl_context);
         }
@@ -4503,9 +4647,6 @@ static void OpenGLBlitToScreen(struct RenderPort *source,
 
 static BOOL OpenGLInitDrawingBoard(struct DrawingBoard *board)
 {
-    D(bug("[ZuneRenderer:OpenGL] OpenGLInitDrawingBoard: %p (%dx%d)\n",
-          board, board ? board->width : 0, board ? board->height : 0));
-
     if (!board) {
         return FALSE;
     }
@@ -4524,15 +4665,11 @@ static BOOL OpenGLInitDrawingBoard(struct DrawingBoard *board)
     board->hardware_surface = TRUE;
     board->backend_data = NULL;
 
-    D(bug("[ZuneRenderer:OpenGL] OpenGLInitDrawingBoard: Initialized (FBO will be created on first use)\n"));
-
     return TRUE;
 }
 
 void OpenGLCleanupDrawingBoard(struct DrawingBoard *board)
 {
-    D(bug("[ZuneRenderer:OpenGL] OpenGLCleanupDrawingBoard: %p\n", board));
-
     if (!board) {
         return;
     }
@@ -4542,8 +4679,6 @@ void OpenGLCleanupDrawingBoard(struct DrawingBoard *board)
      */
     if (board->backend_data) {
         OpenGLFBOData *fbo = (OpenGLFBOData *)board->backend_data;
-
-        D(bug("[ZuneRenderer:OpenGL] OpenGLCleanupDrawingBoard: Destroying FBO %d\n", fbo->fbo_id));
 
         /*
          * We need an active GL context to destroy the FBO.
@@ -4565,6 +4700,4 @@ void OpenGLCleanupDrawingBoard(struct DrawingBoard *board)
         g_opengl_priv->current_board = NULL;
         g_opengl_priv->current_target_type = OPENGL_TARGET_NONE;
     }
-
-    D(bug("[ZuneRenderer:OpenGL] OpenGLCleanupDrawingBoard: Cleanup complete\n"));
 }

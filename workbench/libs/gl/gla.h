@@ -40,7 +40,7 @@ typedef APTR GLAContext;
 #define GLA_Dummy               (TAG_USER + 32)
 
 /*
- * Offsets from rastport layer dimensions. 
+ * Offsets from rastport layer dimensions.
  * Typically GLA_Left = window->BorderLeft, GLA_Top = window->BorderTop
  * Defaults: if rendering to non-GZZ window BorderLeft, BorderTop, in all other
  *           cases 0,0
@@ -72,7 +72,7 @@ typedef APTR GLAContext;
 #define GLA_RGBMode             (GLA_Dummy + 0x0031)
 #define GLA_AlphaFlag           (GLA_Dummy + 0x0032)
 
-/* 
+/*
  * GLA_NoDepth:    don't allocate ZBuffer if GL_TRUE, default is GL_FALSE
  * GLA_NoStencil:  don't allocate StencilBuffer if GL_TRUE, default is GL_FALSE
  * GLA_NoAccum:    don't allocate AccumulationBuffer if GL_TRUE, default is GL_FALSE
@@ -105,7 +105,6 @@ GLAPI GLAProc               GLAPIENTRY glAGetProcAddress(const GLubyte * procnam
 GLAPI GLAContext            GLAPIENTRY glAGetCurrentContext();
 GLAPI void                  GLAPIENTRY glASetRast(GLAContext ctx, struct TagItem *tagList);
 GLAPI void                  GLAPIENTRY glAGetConfig(GLAContext ctx, GLenum pname, GLint* params);
-
 /*
  * Shared context query functions
  */
