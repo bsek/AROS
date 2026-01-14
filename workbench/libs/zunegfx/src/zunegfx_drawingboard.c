@@ -143,7 +143,7 @@ BOOL AllocateDrawingBoardBitmap(struct DrawingBoard *board,
     }
   } else {
     /* Standard graphics.library path */
-    D(bug("ZuneRenderer: Using graphics.library backend\n"));
+    D(bug("ZuneRenderer: Creating graphics.library bitmap\n"));
     board->bitmap =
         AllocBitMap(board->width, board->height, board->depth, BMF_CLEAR, friend_bitmap);
     board->hardware_surface = FALSE;

@@ -249,7 +249,7 @@ static BOOL frame_renderer_background_to_brush(struct MUI_ImageSpec_intern *back
             cached = TRUE;
         } else if (node->o) {
             /* Legacy fallback: create texture from DataTypes object */
-            tex = CreateTextureFromDatatype((APTR)node->o, ZUNE_TEXTURE_WRAPPING);
+            tex = CreateTextureFromDatatype(NULL, (APTR)node->o, ZUNE_TEXTURE_WRAPPING);
             if (tex) {
                 node->texture = tex;
                 tex->ref_count++; /* retain while brush is in use */
@@ -431,9 +431,7 @@ BOOL zune_frame_try_renderer(Object *obj, struct MUI_AreaData *data, const struc
             /* Fallback to direct rendering if buffer allocation failed */
             use_drawbuffer = FALSE;
         }
-    }
-
-    if (!use_drawbuffer) {
+    } else {
         /* When window has no double buffer, the clip region on the layer level
          * interferes with filled rounded rectangle drawing. In that case, only
          * draw the frame outline and let the normal background drawing handle
@@ -458,7 +456,7 @@ BOOL zune_frame_try_renderer(Object *obj, struct MUI_AreaData *data, const struc
             /* If border_width == 0, no frame to draw - return FALSE to use normal path */
             if (border_width == 0) {
                 if (fill_brush_storage.texture) {
-                    DestroyTexture(fill_brush_storage.texture);
+                    DestroyTexture(NULL, fill_brush_storage.texture);
                 }
                 return FALSE;
             }
@@ -466,7 +464,7 @@ BOOL zune_frame_try_renderer(Object *obj, struct MUI_AreaData *data, const struc
     }
 
     if (fill_brush_storage.texture) {
-        DestroyTexture(fill_brush_storage.texture);
+        DestroyTexture(NULL, fill_brush_storage.texture);
         fill_brush_storage.texture = NULL;
     }
 

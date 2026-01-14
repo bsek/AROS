@@ -202,17 +202,29 @@ ULONG CalculateTextureSize(UWORD width, UWORD height, ULONG format) {
     return pitch * height;
 }
 
-static ZuneBackend *SelectTextureBackend(struct ZuneTexture *texture) {
+/*
+ * Get backend for texture operations.
+ * Uses RenderPort's backend if available, otherwise falls back to texture's stored backend.
+ */
+static ZuneBackend *GetTextureBackend(struct RenderPort *rp, struct ZuneTexture *texture) {
     ZuneBackend *backend = NULL;
 
-    if (texture && texture->backend_type)
+    /* Prefer RenderPort's backend - it's already set up */
+    if (rp && rp->backend_type != BACKEND_SOFTWARE &&
+        rp->backend_type != BACKEND_BEST_AVAILABLE) {
+        backend = ZuneFindBackendByType(rp->backend_type);
+        if (backend && BACKEND_HAS_CAP(backend, BACKEND_CAP_TEXTURES))
+            return backend;
+    }
+
+    /* Fall back to texture's assigned backend */
+    if (texture && texture->backend_type &&
+        texture->backend_type != BACKEND_SOFTWARE &&
+        texture->backend_type != BACKEND_BEST_AVAILABLE) {
         backend = ZuneFindBackendByType(texture->backend_type);
-
-    if (!backend)
-        backend = ZuneFindBestBackend(NULL);
-
-    if (backend && BACKEND_HAS_CAP(backend, BACKEND_CAP_TEXTURES))
-        return backend;
+        if (backend && BACKEND_HAS_CAP(backend, BACKEND_CAP_TEXTURES))
+            return backend;
+    }
 
     return NULL;
 }
@@ -442,9 +454,10 @@ void UnlockTexturePixelsInternal(struct ZuneTexture *texture) {
 /*****************************************************************************
 
     NAME */
-AROS_LH5(struct ZuneTexture *, CreateTexture,
+AROS_LH6(struct ZuneTexture *, CreateTexture,
 
          /*  SYNOPSIS */
+         AROS_LHA(struct RenderPort *, rp, A0),
          AROS_LHA(UWORD, width, D0), AROS_LHA(UWORD, height, D1), AROS_LHA(UBYTE, depth, D2), AROS_LHA(ULONG, format, D3), AROS_LHA(ULONG, flags, D4),
 
          /*  LOCATION */
@@ -454,6 +467,7 @@ AROS_LH5(struct ZuneTexture *, CreateTexture,
     Creates a new texture with the specified dimensions and format.
 
 INPUTS
+    rp - RenderPort context (used to select backend, may be NULL)
     width - Texture width in pixels
     height - Texture height in pixels
     depth - Color depth in bits
@@ -479,9 +493,9 @@ SEE ALSO
 
     ENTER_FUNCTION("CreateTexture");
 
-    D(bug("ZuneRenderer: CreateTexture(width=%d, height=%d, depth=%d, "
+    D(bug("ZuneRenderer: CreateTexture(rp=%p, width=%d, height=%d, depth=%d, "
           "format=0x%08x, flags=0x%08x)\n",
-          width, height, depth, format, flags));
+          rp, width, height, depth, format, flags));
 
     if (width == 0 || height == 0) {
         D(bug("ZuneRenderer: Invalid texture dimensions\n"));
@@ -498,7 +512,7 @@ SEE ALSO
 
     AllocateTextureData(texture); /* best-effort for CPU path */
 
-    ZuneBackend *backend = SelectTextureBackend(texture);
+    ZuneBackend *backend = GetTextureBackend(rp, texture);
     if (backend && backend->ops && backend->ops->InitTexture) {
         if (backend->ops->InitTexture(texture)) {
             texture->backend_type = backend->ops->type;
@@ -518,10 +532,11 @@ SEE ALSO
 /*****************************************************************************
 
     NAME */
-AROS_LH7(struct ZuneTexture *, CreateTextureFromData,
+AROS_LH8(struct ZuneTexture *, CreateTextureFromData,
 
          /*  SYNOPSIS */
-         AROS_LHA(APTR, data, A0), AROS_LHA(UWORD, width, D0), AROS_LHA(UWORD, height, D1), AROS_LHA(UBYTE, depth, D2), AROS_LHA(ULONG, format, D3),
+         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(APTR, data, A1), AROS_LHA(UWORD, width, D0), AROS_LHA(UWORD, height, D1), AROS_LHA(UBYTE, depth, D2), AROS_LHA(ULONG, format, D3),
          AROS_LHA(ULONG, pitch, D4), AROS_LHA(ULONG, flags, D5),
 
          /*  LOCATION */
@@ -531,6 +546,7 @@ AROS_LH7(struct ZuneTexture *, CreateTextureFromData,
     Creates a new texture from existing pixel data.
 
 INPUTS
+    rp - RenderPort context (used to select backend, may be NULL)
     data - Pointer to source pixel data
     width - Texture width in pixels
     height - Texture height in pixels
@@ -558,14 +574,14 @@ SEE ALSO
 
     ENTER_FUNCTION("CreateTextureFromData");
 
-    D(bug("ZuneRenderer: CreateTextureFromData(data=%p, width=%d, height=%d, "
+    D(bug("ZuneRenderer: CreateTextureFromData(rp=%p, data=%p, width=%d, height=%d, "
           "depth=%d, format=0x%08x, pitch=%d, flags=0x%08x)\n",
-          data, width, height, depth, format, pitch, flags));
+          rp, data, width, height, depth, format, pitch, flags));
 
     texture = CreateTextureFromDataInternal(data, width, height, depth, format, pitch, flags);
 
     if (texture) {
-        ZuneBackend *backend = SelectTextureBackend(texture);
+        ZuneBackend *backend = GetTextureBackend(rp, texture);
         if (backend && backend->ops && backend->ops->InitTexture) {
             if (backend->ops->InitTexture(texture)) {
                 texture->backend_type = backend->ops->type;
@@ -633,7 +649,7 @@ SEE ALSO
     struct ZuneTexture *texture = CreateTextureFromDataInternal(pixels, board->width, board->height, board->depth, zune_format, pitch, flags);
 
     if (texture) {
-        ZuneBackend *backend = SelectTextureBackend(texture);
+        ZuneBackend *backend = GetTextureBackend(rp, texture);
         if (backend && backend->ops && backend->ops->InitTexture) {
             if (backend->ops->InitTexture(texture)) {
                 texture->backend_type = backend->ops->type;
@@ -655,10 +671,11 @@ SEE ALSO
 /*****************************************************************************
 
     NAME */
-AROS_LH2(struct ZuneTexture *, CreateTextureFromDatatype,
+AROS_LH3(struct ZuneTexture *, CreateTextureFromDatatype,
 
          /*  SYNOPSIS */
-         AROS_LHA(APTR, dt_object, A0), AROS_LHA(ULONG, flags, D0),
+         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(APTR, dt_object, A1), AROS_LHA(ULONG, flags, D0),
 
          /*  LOCATION */
          struct Library *, ZuneGfxBase, 73, zunegfx)
@@ -667,6 +684,7 @@ AROS_LH2(struct ZuneTexture *, CreateTextureFromDatatype,
     Creates a new texture from a datatype object.
 
 INPUTS
+    rp - RenderPort context (used to select backend, may be NULL)
     dt_object - Pointer to a datatype object (e.g. picture.datatype instance)
     flags - Texture creation flags (ZUNE_TEXTURE_*)
 
@@ -684,7 +702,7 @@ SEE ALSO
     struct ZuneTexture *texture = CreateTextureFromDatatypeInternal(dt_object, flags);
 
     if (texture) {
-        ZuneBackend *backend = SelectTextureBackend(texture);
+        ZuneBackend *backend = GetTextureBackend(rp, texture);
         if (backend && backend->ops && backend->ops->InitTexture) {
             if (backend->ops->InitTexture(texture)) {
                 texture->backend_type = backend->ops->type;
@@ -701,11 +719,12 @@ SEE ALSO
 /*****************************************************************************
 
     NAME */
-AROS_LH3(struct ZuneTexture *, CreateTextureFromFile,
+AROS_LH4(struct ZuneTexture *, CreateTextureFromFile,
 
          /*  SYNOPSIS */
-         AROS_LHA(CONST_STRPTR, filename, A0),
-         AROS_LHA(struct Screen *, screen, A1),
+         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(CONST_STRPTR, filename, A1),
+         AROS_LHA(struct Screen *, screen, A2),
          AROS_LHA(ULONG, flags, D0),
 
          /*  LOCATION */
@@ -723,6 +742,7 @@ AROS_LH3(struct ZuneTexture *, CreateTextureFromFile,
     around.
 
 INPUTS
+    rp - RenderPort context (used to select backend, may be NULL)
     filename - Path to the image file to load
     screen - Screen context for color remapping (may be NULL)
     flags - Texture creation flags (ZUNE_TEXTURE_*)
@@ -751,13 +771,14 @@ NOTES
 EXAMPLE
     // Load a background image for tiling
     struct ZuneTexture *bg = CreateTextureFromFile(
+        rp,
         "THEME:backgrounds/window.png",
         screen,
         ZUNE_TEXTURE_WRAPPING);
 
     if (bg) {
         // Use texture...
-        DestroyTexture(bg);
+        DestroyTexture(rp, bg);
     }
 
 SEE ALSO
@@ -776,8 +797,8 @@ SEE ALSO
 
     ENTER_FUNCTION("CreateTextureFromFile");
 
-    // D(bug("ZuneRenderer: CreateTextureFromFile(filename=%s, screen=%p, flags=0x%08x)\n",
-    //       filename ? filename : "(null)", screen, flags));
+    // D(bug("ZuneRenderer: CreateTextureFromFile(rp=%p, filename=%s, screen=%p, flags=0x%08x)\n",
+    //       rp, filename ? filename : "(null)", screen, flags));
 
     if (!filename) {
         D(bug("ZuneRenderer: CreateTextureFromFile - NULL filename\n"));
@@ -814,7 +835,7 @@ SEE ALSO
 
     if (texture) {
         /* Initialize backend if available */
-        ZuneBackend *backend = SelectTextureBackend(texture);
+        ZuneBackend *backend = GetTextureBackend(rp, texture);
         if (backend && backend->ops && backend->ops->InitTexture) {
             if (backend->ops->InitTexture(texture)) {
                 texture->backend_type = backend->ops->type;
@@ -838,10 +859,11 @@ SEE ALSO
 /*****************************************************************************
 
     NAME */
-AROS_LH1(void, DestroyTexture,
+AROS_LH2(void, DestroyTexture,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct ZuneTexture *, texture, A0),
+         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct ZuneTexture *, texture, A1),
 
          /*  LOCATION */
          struct Library *, ZuneGfxBase, 75, zunegfx)
@@ -850,6 +872,7 @@ AROS_LH1(void, DestroyTexture,
     Destroys a texture and frees all associated resources.
 
 INPUTS
+    rp - RenderPort context (used to select backend, may be NULL)
     texture - Texture to destroy (may be NULL)
 
 RESULT
@@ -870,7 +893,7 @@ SEE ALSO
 
     ENTER_FUNCTION("DestroyTexture");
 
-    D(bug("ZuneRenderer: DestroyTexture(texture=%p)\n", texture));
+    D(bug("ZuneRenderer: DestroyTexture(rp=%p, texture=%p)\n", rp, texture));
 
     if (!texture) {
         D(bug("ZuneRenderer: NULL texture, nothing to destroy\n"));
@@ -884,7 +907,7 @@ SEE ALSO
         return;
     }
 
-    ZuneBackend *backend = SelectTextureBackend(texture);
+    ZuneBackend *backend = GetTextureBackend(rp, texture);
     if (backend && backend->ops && backend->ops->CleanupTexture) {
         backend->ops->CleanupTexture(texture);
     }
@@ -920,12 +943,13 @@ SEE ALSO
 /*****************************************************************************
 
     NAME */
-AROS_LH3(BOOL, UpdateTextureData,
+AROS_LH4(BOOL, UpdateTextureData,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct ZuneTexture *, texture, A0),
-         AROS_LHA(APTR, data, A1),
-         AROS_LHA(struct ZuneRect *, rect, A2),
+         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct ZuneTexture *, texture, A1),
+         AROS_LHA(APTR, data, A2),
+         AROS_LHA(struct ZuneRect *, rect, A3),
 
          /*  LOCATION */
          struct Library *, ZuneGfxBase, 77, zunegfx)
@@ -934,6 +958,7 @@ AROS_LH3(BOOL, UpdateTextureData,
     Updates a rectangular region of texture data.
 
 INPUTS
+    rp - RenderPort context (used to select backend, may be NULL)
     texture - Target texture (must not be NULL)
     data - Source pixel data
     rect - Update region rectangle
@@ -956,7 +981,7 @@ SEE ALSO
 
     ENTER_FUNCTION("UpdateTextureData");
 
-    D(bug("ZuneRenderer: UpdateTextureData(texture=%p, data=%p, rect=%p)\n", texture, data, rect));
+    D(bug("ZuneRenderer: UpdateTextureData(rp=%p, texture=%p, data=%p, rect=%p)\n", rp, texture, data, rect));
 
     if (!texture || !data || !rect) {
         D(bug("ZuneRenderer: Invalid parameters\n"));
@@ -968,7 +993,7 @@ SEE ALSO
         return FALSE;
     }
 
-    ZuneBackend *backend = SelectTextureBackend(texture);
+    ZuneBackend *backend = GetTextureBackend(rp, texture);
     if (backend && backend->ops && backend->ops->UpdateTexture) {
         if (backend->ops->UpdateTexture(texture, data, rect->x, rect->y, rect->width, rect->height)) {
             EXIT_FUNCTION("UpdateTextureData");
@@ -1007,10 +1032,12 @@ SEE ALSO
 /*****************************************************************************
 
     NAME */
-AROS_LH2(APTR, LockTexturePixels,
+AROS_LH3(APTR, LockTexturePixels,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct ZuneTexture *, texture, A0), AROS_LHA(ULONG *, pitch, A1),
+         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct ZuneTexture *, texture, A1),
+         AROS_LHA(ULONG *, pitch, A2),
 
          /*  LOCATION */
          struct Library *, ZuneGfxBase, 78, zunegfx)
@@ -1019,6 +1046,7 @@ AROS_LH2(APTR, LockTexturePixels,
     Locks texture pixels for direct access.
 
 INPUTS
+    rp - RenderPort context (used to select backend, may be NULL)
     texture - Texture to lock (must not be NULL)
     pitch - Pointer to store pitch value (may be NULL)
 
@@ -1038,14 +1066,14 @@ SEE ALSO
 
     ENTER_FUNCTION("LockTexturePixels");
 
-    D(bug("ZuneRenderer: LockTexturePixels(texture=%p, pitch=%p)\n", texture, pitch));
+    D(bug("ZuneRenderer: LockTexturePixels(rp=%p, texture=%p, pitch=%p)\n", rp, texture, pitch));
 
     if (!texture) {
         D(bug("ZuneRenderer: Invalid texture\n"));
         return NULL;
     }
 
-    ZuneBackend *backend = SelectTextureBackend(texture);
+    ZuneBackend *backend = GetTextureBackend(rp, texture);
     if (backend && backend->ops && backend->ops->LockTexturePixels) {
         APTR ptr = backend->ops->LockTexturePixels(texture, pitch);
         if (ptr)
@@ -1079,10 +1107,11 @@ SEE ALSO
 /*****************************************************************************
 
     NAME */
-AROS_LH1(void, UnlockTexturePixels,
+AROS_LH2(void, UnlockTexturePixels,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct ZuneTexture *, texture, A0),
+         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct ZuneTexture *, texture, A1),
 
          /*  LOCATION */
          struct Library *, ZuneGfxBase, 79, zunegfx)
@@ -1091,6 +1120,7 @@ AROS_LH1(void, UnlockTexturePixels,
     Unlocks texture pixels previously locked with LockTexturePixels().
 
 INPUTS
+    rp - RenderPort context (used to select backend, may be NULL)
     texture - Texture to unlock (must not be NULL)
 
 RESULT
@@ -1108,9 +1138,9 @@ SEE ALSO
 
     ENTER_FUNCTION("UnlockTexturePixels");
 
-    D(bug("ZuneRenderer: UnlockTexturePixels(texture=%p)\n", texture));
+    D(bug("ZuneRenderer: UnlockTexturePixels(rp=%p, texture=%p)\n", rp, texture));
 
-    ZuneBackend *backend = SelectTextureBackend(texture);
+    ZuneBackend *backend = GetTextureBackend(rp, texture);
     if (backend && backend->ops && backend->ops->UnlockTexturePixels) {
         backend->ops->UnlockTexturePixels(texture);
         D(bug("ZuneRenderer: Texture pixels unlocked (backend)\n"));
@@ -1130,10 +1160,12 @@ SEE ALSO
 /*****************************************************************************
 
     NAME */
-AROS_LH2(ULONG, GetTexturePixel,
+AROS_LH3(ULONG, GetTexturePixel,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct ZuneTexture *, texture, A0), AROS_LHA(struct ZunePoint *, point, A1),
+         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct ZuneTexture *, texture, A1),
+         AROS_LHA(struct ZunePoint *, point, A2),
 
          /*  LOCATION */
          struct Library *, ZuneGfxBase, 80, zunegfx)
@@ -1142,6 +1174,7 @@ AROS_LH2(ULONG, GetTexturePixel,
     Gets the color value of a pixel in the texture.
 
 INPUTS
+    rp - RenderPort context (used to select backend, may be NULL)
     texture - Source texture (must not be NULL)
     point - Pixel coordinates
 
@@ -1172,7 +1205,7 @@ SEE ALSO
         return 0;
     }
 
-    ZuneBackend *backend = SelectTextureBackend(texture);
+    ZuneBackend *backend = GetTextureBackend(rp, texture);
     if (backend && backend->ops && backend->ops->GetTexturePixel) {
         return backend->ops->GetTexturePixel(texture, point->x, point->y);
     }
@@ -1221,10 +1254,13 @@ SEE ALSO
 /*****************************************************************************
 
     NAME */
-AROS_LH3(void, SetTexturePixel,
+AROS_LH4(void, SetTexturePixel,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct ZuneTexture *, texture, A0), AROS_LHA(struct ZunePoint *, point, A1), AROS_LHA(ULONG, color, D0),
+         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct ZuneTexture *, texture, A1),
+         AROS_LHA(struct ZunePoint *, point, A2),
+         AROS_LHA(ULONG, color, D0),
 
          /*  LOCATION */
          struct Library *, ZuneGfxBase, 81, zunegfx)
@@ -1233,6 +1269,7 @@ AROS_LH3(void, SetTexturePixel,
     Sets the color value of a pixel in the texture.
 
 INPUTS
+    rp - RenderPort context (used to select backend, may be NULL)
     texture - Target texture (must not be NULL)
     point - Pixel coordinates
     color - Color value in ARGB format
@@ -1264,7 +1301,7 @@ SEE ALSO
         return;
     }
 
-    ZuneBackend *backend = SelectTextureBackend(texture);
+    ZuneBackend *backend = GetTextureBackend(rp, texture);
     if (backend && backend->ops && backend->ops->SetTexturePixel) {
         backend->ops->SetTexturePixel(texture, point->x, point->y,
                                       &((struct InternalColor){
