@@ -19,8 +19,22 @@ CORE_FILES := \
 
 DRAWING_FILES := \
         src/zunegfx_drawing        \
-        src/zunegfx_antialiasing   \
         src/zunegfx_rectangle
+
+ANTIALIASING_FILES := \
+        src/antialiasing/antialiasing_globals                   \
+        src/antialiasing/zunedrawcircleaa                       \
+        src/antialiasing/zunefillcircleaa                       \
+        src/antialiasing/zunedrawcircleoutlinestyledaa          \
+        src/antialiasing/zunefillcirclestyledaa                 \
+        src/antialiasing/zunesetantialiasingquality             \
+        src/antialiasing/zunegetantialiasingquality             \
+        src/antialiasing/zunefillrectangleroundedaa             \
+        src/antialiasing/zunefillrectangleroundedstyledaa       \
+        src/antialiasing/zunedrawrectangleroundedoutlinestyledaa \
+        src/antialiasing/zunedrawrectangleroundedoutlineaa      \
+        src/antialiasing/zunedrawlineaa                         \
+        src/antialiasing/zunedrawlinestyledaa
 
 BACKEND_FILES := \
         src/backends/backend_manager        \
@@ -48,6 +62,7 @@ ROOT_FILES := \
 FILES := \
         $(CORE_FILES)                   \
         $(DRAWING_FILES)                \
+        $(ANTIALIASING_FILES)           \
         $(BACKEND_FILES)                \
         $(ROOT_FILES)
 
