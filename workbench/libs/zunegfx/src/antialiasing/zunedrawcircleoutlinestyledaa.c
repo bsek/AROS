@@ -8,7 +8,7 @@
 #include <exec/types.h>
 
 #include "../backends/backend_interface.h"
-#include "../include/zunegfx.h"
+#include "../../include/zunegfx.h"
 #include "../zunegfx_intern.h"
 
 #define DEBUG 0

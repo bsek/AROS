@@ -7,7 +7,7 @@
 #include <aros/libcall.h>
 #include <exec/types.h>
 
-#include "../include/zunegfx.h"
+#include "../../include/zunegfx.h"
 #include "../zunegfx_intern.h"
 #include "antialiasing_intern.h"
 
