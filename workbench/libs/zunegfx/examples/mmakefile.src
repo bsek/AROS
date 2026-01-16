@@ -5,7 +5,8 @@ include $(SRCDIR)/config/aros.cfg
 
 FILES  := \
     opengl_test \
-    compositor_test
+    compositor_test \
+    alpha_window_test
 #    rect_demo
 #    texture_from_file_test \
 #    line_drawing_test \

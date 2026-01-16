@@ -106,6 +106,22 @@ BOOL InitializeZuneRenderer(struct IntZuneGfxBase *base) {
   RegisterOpenGLBackend();   /* Highest priority if available */
   RegisterCyberGfxBackend(); /* Medium priority */
 
+  /*
+   * Pre-initialize OpenGL shaders if OpenGL backend is available.
+   * This opens a small backdrop window, creates a GL context, and compiles
+   * shaders. This avoids a delay when the first application window opens.
+   * The pre-init context becomes the master context for context sharing.
+   */
+  if (ZuneIsBackendAvailable(BACKEND_OPENGL)) {
+    extern BOOL OpenGL_PreInitializeShaders(void);
+    D(bug("ZuneRenderer: Pre-initializing OpenGL shaders...\n"));
+    if (OpenGL_PreInitializeShaders()) {
+      D(bug("ZuneRenderer: OpenGL shaders pre-initialized successfully\n"));
+    } else {
+      D(bug("ZuneRenderer: OpenGL shader pre-initialization failed (will retry on first window)\n"));
+    }
+  }
+
   D(bug("ZuneRenderer: Library initialized successfully\n"));
 
   /* Display backend information */
@@ -129,6 +145,12 @@ void CleanupZuneRenderer(struct IntZuneGfxBase *base) {
 
   if (!base)
     return;
+
+  /* Cleanup pre-init resources (window/screen for shader compilation) */
+  {
+    extern void OpenGL_CleanupPreInit(void);
+    OpenGL_CleanupPreInit();
+  }
 
   /* Cleanup backend system first */
   ZuneCleanupBackends();

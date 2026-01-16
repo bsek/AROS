@@ -2,7 +2,7 @@
     Copyright (C) 2025, The AROS Development Team. All rights reserved.
 
     Layer Compositor Test - Alpha Window Compositing
-    
+
     This demo tests the hybrid layer compositor:
     - Opens a normal (opaque) background window
     - Opens an alpha window on top using WA_Alpha
@@ -99,7 +99,7 @@ int main(void) {
     D(bug("[CompositorTest] Press R to refresh\n"));
     D(bug("[CompositorTest] Close either window to exit.\n\n"));
 
-    /* 
+    /*
      * Ensure windows are fully ready before drawing.
      * Process any pending refresh messages first.
      */
@@ -117,8 +117,8 @@ int main(void) {
 
     /* Draw initial content */
     D(bug("[CompositorTest] Drawing initial content...\n"));
-    
-    /* 
+
+    /*
      * Force GL context setup by clearing the board first.
      * This ensures the FBO is created and bound before we draw.
      */
@@ -127,17 +127,17 @@ int main(void) {
     ClearDrawingBoard(bg_rp, ZUNE_BLACK);
     ZuneSync(bg_rp);
     D(bug("[CompositorTest] Background board initialized.\n"));
-    
+
     D(bug("[CompositorTest] Initializing alpha board GL state...\n"));
     ZuneSetTarget(alpha_rp, alpha_board);
     ClearDrawingBoard(alpha_rp, ZUNE_COLOR_ARGB32(0, 0, 0, 0));
     ZuneSync(alpha_rp);
     D(bug("[CompositorTest] Alpha board initialized.\n"));
-    
+
     /* Draw both windows */
     DrawBackgroundWindow();
     DrawAlphaWindow();
-    
+
     /* Composite the alpha window over the background */
     CompositeAlphaWindow();
 
@@ -379,8 +379,6 @@ BOOL InitDemo(void) {
     }
     D(bug("[CompositorTest] Alpha window: %p, Layer: %p\n", alpha_window, alpha_window->WLayer));
 
-    /* Create RenderPort for alpha window - use CyberGfx backend to avoid GL context conflicts */
-    D(bug("[CompositorTest] Creating RenderPort for alpha window (BACKEND_CYBERGFX=%d)...\n", BACKEND_CYBERGFX));
     /* Test: Use OpenGL for both windows to see if shared contexts work */
     alpha_rp = CreateRenderPortForWindow(alpha_window, screen->ViewPort.ColorMap, BACKEND_OPENGL);
     if (!alpha_rp) {
@@ -417,30 +415,30 @@ BOOL InitDemo(void) {
         D(bug("[CompositorTest] WARNING: Cannot create compositor - alpha windows may not work correctly\n"));
     } else {
         D(bug("[CompositorTest] Compositor created: %p\n", compositor));
-        
+
         /* Activate the compositor */
         if (ActivateLayerCompositor(compositor)) {
             D(bug("[CompositorTest] Compositor activated!\n"));
         } else {
             D(bug("[CompositorTest] WARNING: Failed to activate compositor\n"));
         }
-        
+
         /*
          * Register the alpha window with the compositor.
          * This tells the compositor to handle this window specially.
          */
         D(bug("[CompositorTest] Registering alpha window with compositor...\n"));
-        
+
         /* Get the GL context from the RenderPort if available */
         APTR gl_context = NULL;  /* TODO: Get from alpha_rp->backend_data */
-        
+
         struct CompositorWindow *cw = CompositorRegisterWindow(
             compositor,
             alpha_window,
             gl_context,
             alpha_board,
             current_alpha);
-        
+
         if (cw) {
             D(bug("[CompositorTest] Alpha window registered with compositor!\n"));
         } else {
@@ -649,12 +647,12 @@ void CompositeAlphaWindow(void) {
     UBYTE *alpha_pixels = NULL;
     UBYTE *result_pixels = NULL;
     ULONG x, y, i;
-    
+
     if (!alpha_window || !bg_window || !CyberGfxBase || !alpha_board || !bg_board)
         return;
-    
+
     D(bug("[CompositorTest] Compositing alpha window...\n"));
-    
+
     /* Get alpha window screen coordinates (inner area only) */
     inner_left = alpha_window->BorderLeft;
     inner_top = alpha_window->BorderTop;
@@ -662,71 +660,71 @@ void CompositeAlphaWindow(void) {
     alpha_top = alpha_window->TopEdge + inner_top;
     alpha_right = alpha_left + alpha_board->width;
     alpha_bottom = alpha_top + alpha_board->height;
-    
+
     /* Get background window screen coordinates (inner area only) */
     bg_left = bg_window->LeftEdge + bg_window->BorderLeft;
     bg_top = bg_window->TopEdge + bg_window->BorderTop;
     bg_right = bg_left + bg_board->width;
     bg_bottom = bg_top + bg_board->height;
-    
+
     /* Calculate overlap region */
     overlap_left = (alpha_left > bg_left) ? alpha_left : bg_left;
     overlap_top = (alpha_top > bg_top) ? alpha_top : bg_top;
     overlap_right = (alpha_right < bg_right) ? alpha_right : bg_right;
     overlap_bottom = (alpha_bottom < bg_bottom) ? alpha_bottom : bg_bottom;
-    
+
     overlap_width = overlap_right - overlap_left;
     overlap_height = overlap_bottom - overlap_top;
-    
+
     if (overlap_width <= 0 || overlap_height <= 0) {
         D(bug("[CompositorTest] No overlap between windows\n"));
         return;
     }
-    
-    D(bug("[CompositorTest] Overlap region: %dx%d at %d,%d\n", 
+
+    D(bug("[CompositorTest] Overlap region: %dx%d at %d,%d\n",
           overlap_width, overlap_height, overlap_left, overlap_top));
-    
+
     /* Allocate buffers */
     bg_pixels = AllocVec(overlap_width * overlap_height * 4, MEMF_ANY);
     alpha_pixels = AllocVec(overlap_width * overlap_height * 4, MEMF_ANY);
     result_pixels = AllocVec(overlap_width * overlap_height * 4, MEMF_ANY);
-    
+
     if (!bg_pixels || !alpha_pixels || !result_pixels) {
         D(bug("[CompositorTest] Failed to allocate composite buffers\n"));
         goto cleanup;
     }
-    
+
     /* Read background pixels from the background DrawingBoard (not the screen!) */
     {
         /* bg_left/bg_top are now inner area screen coords, so this is simple */
         WORD bg_src_x = overlap_left - bg_left;
         WORD bg_src_y = overlap_top - bg_top;
-        
-        D(bug("[CompositorTest] Reading bg from board at %d,%d size %dx%d\n", 
+
+        D(bug("[CompositorTest] Reading bg from board at %d,%d size %dx%d\n",
               bg_src_x, bg_src_y, overlap_width, overlap_height));
-        
+
         /* Bounds check */
-        if (!bg_board || !bg_board->rastport || 
+        if (!bg_board || !bg_board->rastport ||
             bg_src_x < 0 || bg_src_y < 0 ||
             bg_src_x + overlap_width > bg_board->width ||
             bg_src_y + overlap_height > bg_board->height) {
             D(bug("[CompositorTest] Cannot read from bg_board - out of bounds!\n"));
             goto cleanup;
         }
-        
+
         ReadPixelArray(bg_pixels, 0, 0, overlap_width * 4,
                        bg_board->rastport, bg_src_x, bg_src_y,
                        overlap_width, overlap_height, RECTFMT_ARGB);
     }
-    
+
     /* Read alpha window pixels from its DrawingBoard */
     {
         WORD alpha_src_x = overlap_left - alpha_left;
         WORD alpha_src_y = overlap_top - alpha_top;
-        
+
         D(bug("[CompositorTest] Reading alpha from board at %d,%d size %dx%d\n",
               alpha_src_x, alpha_src_y, overlap_width, overlap_height));
-        
+
         /* Bounds check */
         if (!alpha_board->rastport ||
             alpha_src_x < 0 || alpha_src_y < 0 ||
@@ -735,32 +733,32 @@ void CompositeAlphaWindow(void) {
             D(bug("[CompositorTest] Cannot read from alpha_board - out of bounds!\n"));
             goto cleanup;
         }
-        
+
         ReadPixelArray(alpha_pixels, 0, 0, overlap_width * 4,
                        alpha_board->rastport, alpha_src_x, alpha_src_y,
                        overlap_width, overlap_height, RECTFMT_ARGB);
     }
-    
+
     /* Alpha blend: result = window_alpha * fg + (1 - window_alpha) * bg
      * Use window-level alpha (current_alpha) for the entire window,
      * not per-pixel alpha - this is more efficient and matches
      * traditional window transparency behavior. */
     UWORD alpha = current_alpha;
     UWORD inv_alpha = 255 - alpha;
-    
+
     for (y = 0; y < overlap_height; y++) {
         for (x = 0; x < overlap_width; x++) {
             i = (y * overlap_width + x) * 4;
-            
+
             /* ARGB format: A is first byte, then R, G, B */
             UBYTE fg_r = alpha_pixels[i + 1];
             UBYTE fg_g = alpha_pixels[i + 2];
             UBYTE fg_b = alpha_pixels[i + 3];
-            
+
             UBYTE bg_r = bg_pixels[i + 1];
             UBYTE bg_g = bg_pixels[i + 2];
             UBYTE bg_b = bg_pixels[i + 3];
-            
+
             /* Blend using window-level alpha */
             result_pixels[i + 0] = 255;  /* Result is opaque */
             result_pixels[i + 1] = (fg_r * alpha + bg_r * inv_alpha) / 255;
@@ -768,9 +766,9 @@ void CompositeAlphaWindow(void) {
             result_pixels[i + 3] = (fg_b * alpha + bg_b * inv_alpha) / 255;
         }
     }
-    
+
     /* Write blended result to alpha window's inner area.
-     * The overlap coordinates are in screen space, so we convert to 
+     * The overlap coordinates are in screen space, so we convert to
      * window-relative coordinates for the RastPort. */
     {
         WORD dst_x = overlap_left - alpha_window->LeftEdge;
@@ -778,7 +776,7 @@ void CompositeAlphaWindow(void) {
         WORD src_x = 0, src_y = 0;
         WORD write_width = overlap_width;
         WORD write_height = overlap_height;
-        
+
         /* Clamp to inner area to avoid corrupting window borders/title */
         if (dst_x < alpha_window->BorderLeft) {
             WORD diff = alpha_window->BorderLeft - dst_x;
@@ -792,16 +790,16 @@ void CompositeAlphaWindow(void) {
             dst_y = alpha_window->BorderTop;
             write_height -= diff;
         }
-        
+
         if (write_width > 0 && write_height > 0) {
             WritePixelArray(result_pixels, src_x, src_y, overlap_width * 4,
                             alpha_window->RPort, dst_x, dst_y,
                             write_width, write_height, RECTFMT_ARGB);
         }
     }
-    
+
     D(bug("[CompositorTest] Compositing complete\n"));
-    
+
 cleanup:
     if (bg_pixels) FreeVec(bg_pixels);
     if (alpha_pixels) FreeVec(alpha_pixels);

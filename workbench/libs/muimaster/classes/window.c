@@ -3237,11 +3237,25 @@ static void InstallBackbuffer(struct IClass *cl, Object *obj) {
         D(bug("Created RenderPort for window %p, backend=%ld\n", win, mri->mri_RenderPort->backend_type));
     }
 
-    /* Only install double buffering if enabled both per-window and globally */
-    if (!data->wd_DoubleBuffer || !muiGlobalInfo(obj)->mgi_Prefs->renderer_doublebuffer) {
+    /* Only install double buffering if enabled both per-window and globally.
+     * EXCEPTION: OpenGL backend REQUIRES a DrawingBoard (FBO) because all MUI
+     * drawing goes through mri_RastPort, which must point to the DrawingBoard's
+     * RastPort for the FBO to receive the draw calls. Without a DrawingBoard,
+     * drawing goes to the window's RastPort and the GL framebuffer stays empty.
+     */
+    BOOL opengl_requires_buffer = (mri->mri_RenderPort &&
+                                   mri->mri_RenderPort->backend_type == BACKEND_OPENGL);
+    BOOL use_double_buffer = data->wd_DoubleBuffer &&
+                             muiGlobalInfo(obj)->mgi_Prefs->renderer_doublebuffer;
+
+    if (!use_double_buffer && !opengl_requires_buffer) {
         D(bug("Double buffering disabled for this window\n"));
         mri->mri_BufferDirty = FALSE;
         return;
+    }
+
+    if (opengl_requires_buffer && !use_double_buffer) {
+        D(bug("OpenGL backend requires DrawingBoard - forcing double buffering\n"));
     }
 
     mri->mri_BufferDirty = FALSE;

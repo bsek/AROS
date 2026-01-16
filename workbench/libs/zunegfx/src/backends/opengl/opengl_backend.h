@@ -162,6 +162,28 @@ typedef struct OpenGLPrivateData {
 /*****************************************************************************/
 
 /*
+ * OpenGL_PreInitializeShaders - Pre-initialize shaders during library init
+ *
+ * This function should be called during zunegfx library initialization
+ * when we have a large stack (system startup stack). It creates a window
+ * and GL context (which becomes the master context) and compiles shaders.
+ *
+ * IMPORTANT: The window and GL context are kept alive for the library lifetime
+ * because GL shader objects are bound to the context that created them.
+ *
+ * Returns TRUE if shaders were compiled successfully, FALSE otherwise.
+ */
+BOOL OpenGL_PreInitializeShaders(void);
+
+/*
+ * OpenGL_CleanupPreInit - Cleanup pre-initialization resources
+ *
+ * Called during library expunge to cleanup the master GL context,
+ * window, and screen that were created during shader pre-initialization.
+ */
+void OpenGL_CleanupPreInit(void);
+
+/*
  * OpenGL_GetMasterContext - Get the master GL context for sharing
  *
  * Returns the master GL context that can be passed to other components

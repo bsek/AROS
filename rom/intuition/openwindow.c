@@ -47,6 +47,10 @@ struct OpenWindowActionMsg
     struct Layer                *parentlayer;
     BOOL                             invisible;
     BOOL                             success;
+    /* Layer compositor support */
+    BOOL                             use_alpha;
+    UBYTE                            alpha_value;
+    BOOL                             no_shadow;
 };
 
 static VOID int_openwindow(struct OpenWindowActionMsg *msg,
@@ -548,6 +552,7 @@ moreFlags |= (name); else moreFlags &= ~(name)
                 windowinvisible = tag->ti_Data;
                 break;
 
+#endif
             /* Layer compositor support */
             case WA_Alpha:
                 use_alpha = (BOOL)tag->ti_Data;
@@ -562,7 +567,6 @@ moreFlags |= (name); else moreFlags &= ~(name)
             case WA_NoShadow:
                 no_shadow = (BOOL)tag->ti_Data;
                 break;
-#endif
 
             case WA_Pointer:
             case WA_BusyPointer:
@@ -1086,6 +1090,10 @@ moreFlags |= (name); else moreFlags &= ~(name)
     msg.parentlayer = parentl;
     msg.invisible = windowinvisible;
     msg.success = FALSE;
+    /* Layer compositor support */
+    msg.use_alpha = use_alpha;
+    msg.alpha_value = alpha_value;
+    msg.no_shadow = no_shadow;
 
     DoSyncAction((APTR)int_openwindow, &msg.msg, IntuitionBase);
 
@@ -1273,6 +1281,11 @@ static VOID int_openwindow(struct OpenWindowActionMsg *msg,
     struct Hook   * shapehook = msg->shapehook;
     struct Layer  * parent = msg->parentlayer;
     BOOL            invisible = msg->invisible;
+
+    /* Layer compositor support */
+    BOOL            use_alpha = msg->use_alpha;
+    UBYTE           alpha_value = msg->alpha_value;
+    BOOL            no_shadow = msg->no_shadow;
 
 #ifdef SKINS
     BOOL            installtransphook = FALSE;
