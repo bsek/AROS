@@ -157,4 +157,27 @@ typedef struct OpenGLPrivateData {
 
 } OpenGLPrivateData;
 
+/*****************************************************************************/
+/* Public Functions                                                          */
+/*****************************************************************************/
+
+/*
+ * OpenGL_GetMasterContext - Get the master GL context for sharing
+ *
+ * Returns the master GL context that can be passed to other components
+ * (like LayerCompositor) via GLA_ShareContext to enable resource sharing
+ * between contexts.
+ *
+ * Returns NULL if no master context has been created yet.
+ */
+APTR OpenGL_GetMasterContext(void);
+
+/*
+ * OpenGL_EnsureMasterContext - Ensure master context exists
+ *
+ * Creates the master GL context if it doesn't exist, using the given window.
+ * Returns the master context or NULL on failure.
+ */
+APTR OpenGL_EnsureMasterContext(struct Window *window);
+
 #endif /* OPENGL_BACKEND_H */

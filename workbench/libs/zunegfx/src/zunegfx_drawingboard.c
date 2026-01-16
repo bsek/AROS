@@ -117,14 +117,15 @@ BOOL AllocateDrawingBoardBitmap(struct DrawingBoard *board,
 
     /* Software surface fallback */
     if (!board->bitmap) {
-      if (board->flags & ZUNE_DRAWINGBOARD_LINEARMEM) {
-        /* LINEARMEM flag: Force ARGB32 format for direct pixel access.
-         * This gives us linear memory that can be locked, but loses colormap
-         * inheritance from friend_bitmap. Use this for AA rendering. */
-        D(bug("ZuneRenderer: Allocating LINEARMEM surface (ARGB32, no friend)\n"));
-        board->bitmap = AllocBitMap(board->width, board->height, board->depth,
+      if ((board->flags & ZUNE_DRAWINGBOARD_LINEARMEM) || (board->flags & ZUNE_DRAWINGBOARD_ALPHA)) {
+        /* LINEARMEM or ALPHA flag: Force ARGB32 format for direct pixel access
+         * or alpha channel support. This gives us linear memory that can be 
+         * locked, but loses colormap inheritance from friend_bitmap. */
+        D(bug("ZuneRenderer: Allocating ARGB32 surface (LINEARMEM or ALPHA flag)\n"));
+        board->bitmap = AllocBitMap(board->width, board->height, 32,
                                     BMF_CLEAR | BMF_SPECIALFMT | SHIFT_PIXFMT(PIXFMT_ARGB32),
                                     NULL);
+        board->pixel_format = PIXFMT_ARGB32;
       } else {
         /* Default: Use friend_bitmap to inherit colormap for legacy pen drawing.
          * The bitmap may not support linear memory access (can't be locked),
@@ -140,6 +141,22 @@ BOOL AllocateDrawingBoardBitmap(struct DrawingBoard *board,
     if (board->bitmap) {
       board->pixel_format = GetCyberMapAttr(board->bitmap, CYBRMATTR_PIXFMT);
       D(bug("ZuneRenderer: Pixel format: %u\n", board->pixel_format));
+    }
+  } else if (backend_type == BACKEND_OPENGL) {
+    /*
+     * OpenGL backend requires ARGB32 format to preserve alpha channel.
+     * We cannot use friend_bitmap here because it would inherit the screen's
+     * pixel format (typically 24-bit RGB without alpha), which causes
+     * WritePixelArray to discard the alpha channel when syncing FBO to bitmap.
+     */
+    D(bug("ZuneRenderer: Creating ARGB32 bitmap for OpenGL backend\n"));
+    board->bitmap = AllocBitMap(board->width, board->height, 32,
+                                BMF_CLEAR | BMF_SPECIALFMT | SHIFT_PIXFMT(PIXFMT_ARGB32),
+                                NULL);
+    board->hardware_surface = FALSE;
+    if (board->bitmap) {
+      board->pixel_format = PIXFMT_ARGB32;
+      D(bug("ZuneRenderer: ARGB32 bitmap allocated for OpenGL\n"));
     }
   } else {
     /* Standard graphics.library path */
@@ -413,6 +430,18 @@ NOTES
     depth = GetBitMapAttr(rp->window->RPort->BitMap, BMA_DEPTH);
   } else {
     depth = 32;  /* Default to 32-bit */
+  }
+
+  /*
+   * For OpenGL backend, we MUST use 32-bit depth to preserve alpha channel.
+   * The FBO renders with RGBA, and we need the alpha to survive when syncing
+   * from FBO to bitmap via WritePixelArray. A 24-bit bitmap would discard alpha.
+   *
+   * Also force 32-bit if ZUNE_DRAWINGBOARD_ALPHA flag is set, for compositing.
+   */
+  if ((rp->backend_type == BACKEND_OPENGL || (flags & ZUNE_DRAWINGBOARD_ALPHA)) && depth < 32) {
+    D(bug("ZuneRenderer: Forcing 32-bit depth for alpha support (was %d)\n", depth));
+    depth = 32;
   }
 
   /* Allocate DrawingBoard structure */
@@ -1235,22 +1264,66 @@ SEE ALSO
   /* Sync FBO region to bitmap before presenting */
   {
     ZuneBackend *backend = ZuneGetRenderPortBackend(rp);
+    D(bug("ZuneRenderer: ZunePresent - backend=%p\n", backend));
     if (backend && backend->ops) {
+      D(bug("ZuneRenderer: ZunePresent - backend->ops=%p, name=%s\n", 
+            backend->ops, backend->ops->name ? (const char *)backend->ops->name : "NULL"));
       if (backend->ops->FlushBatch) {
+        D(bug("ZuneRenderer: ZunePresent - calling FlushBatch\n"));
         backend->ops->FlushBatch(rp);
       }
       if (backend->ops->CopyRegionFromDrawingBoard) {
+        D(bug("ZuneRenderer: ZunePresent - calling CopyRegionFromDrawingBoard\n"));
         backend->ops->CopyRegionFromDrawingBoard(rp, src_x, src_y, width, height);
       } else if (backend->ops->CopyFromDrawingBoard) {
+        D(bug("ZuneRenderer: ZunePresent - calling CopyFromDrawingBoard\n"));
         backend->ops->CopyFromDrawingBoard(rp);
+      } else {
+        D(bug("ZuneRenderer: ZunePresent - no sync function available!\n"));
       }
+    } else {
+      D(bug("ZuneRenderer: ZunePresent - no backend available!\n"));
     }
   }
 
   /* Blit from DrawingBoard bitmap to window's RastPort */
+  {
+    struct BitMap *src_bm = rp->target_board->bitmap;
+    struct BitMap *dst_bm = rp->window->RPort->BitMap;
+    ULONG src_depth = GetBitMapAttr(src_bm, BMA_DEPTH);
+    ULONG dst_depth = GetBitMapAttr(dst_bm, BMA_DEPTH);
+    D(bug("ZuneRenderer: ZunePresent - BltBitMapRastPort src_bm=%p (depth=%ld) dst_rp=%p dst_bm=%p (depth=%ld)\n",
+          src_bm, src_depth, rp->window->RPort, dst_bm, dst_depth));
+    
+    /* Verify source bitmap has content before blitting */
+    if (CyberGfxBase && rp->target_board->rastport) {
+        UBYTE verify_src[4];
+        ReadPixelArray(verify_src, 0, 0, 4, rp->target_board->rastport, 
+                       src_x, src_y, 1, 1, RECTFMT_RGBA);
+        D(bug("ZuneRenderer: ZunePresent - src bitmap sample at %d,%d: RGBA = %02x %02x %02x %02x\n",
+              src_x, src_y, verify_src[0], verify_src[1], verify_src[2], verify_src[3]));
+        
+        /* Also check if rastport->BitMap == board->bitmap */
+        D(bug("ZuneRenderer: ZunePresent - board->rastport->BitMap=%p, board->bitmap=%p, match=%s\n",
+              rp->target_board->rastport->BitMap, rp->target_board->bitmap,
+              (rp->target_board->rastport->BitMap == rp->target_board->bitmap) ? "YES" : "NO"));
+    }
+  }
+
   BltBitMapRastPort(rp->target_board->bitmap, src_x, src_y,
                     rp->window->RPort, dst_x, dst_y,
                     width, height, 0xC0);
+  
+  /* Verify destination after blitting */
+  if (CyberGfxBase) {
+      UBYTE verify_dst[4];
+      ReadPixelArray(verify_dst, 0, 0, 4, rp->window->RPort,
+                     dst_x, dst_y, 1, 1, RECTFMT_RGBA);
+      D(bug("ZuneRenderer: ZunePresent - dst window sample at %d,%d: RGBA = %02x %02x %02x %02x\n",
+            dst_x, dst_y, verify_dst[0], verify_dst[1], verify_dst[2], verify_dst[3]));
+  }
+  
+  D(bug("ZuneRenderer: ZunePresent - BltBitMapRastPort completed\n"));
 
   EXIT_FUNCTION("ZunePresent");
 
