@@ -4,7 +4,8 @@
 include $(SRCDIR)/config/aros.cfg
 
 FILES  := \
-    opengl_test
+    opengl_test \
+    compositor_test
 #    rect_demo
 #    texture_from_file_test \
 #    line_drawing_test \
@@ -21,6 +22,6 @@ FILES  := \
 
 %build_progs mmake=workbench-libs-zunegfx-examples \
     files=$(FILES) targetdir=$(AROSDIR)/ \
-    uselibs="zunegfx muimaster mui"
+    uselibs="zunegfx muimaster mui GL"
 
 %common

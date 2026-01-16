@@ -202,15 +202,43 @@ ZuneBackend *ZuneFindBestBackend(struct RenderPort *rp) {
 ZuneBackend *ZuneFindBackendByType(ZuneBackendType type) {
   ZuneBackend *backend;
 
+  D(bug("ZuneFindBackendByType: Looking for type %d\n", type));
+
   ObtainSemaphoreShared(&ZuneBackendSemaphore);
 
   ForeachNode(&ZuneBackendList, backend) {
-    if (backend->ops && backend->ops->type == type && backend->available) {
-      ReleaseSemaphore(&ZuneBackendSemaphore);
-      return backend;
+    D(bug("ZuneFindBackendByType: Checking backend %s (type %d, available=%d)\n",
+          backend->ops ? backend->ops->name : "NULL", 
+          backend->ops ? backend->ops->type : -1,
+          backend->available));
+          
+    if (backend->ops && backend->ops->type == type) {
+      /* 
+       * Re-check availability - the backend might have become available
+       * after initial registration (e.g., GL library opened later).
+       */
+      if (!backend->available && backend->ops->IsAvailable) {
+        D(bug("ZuneFindBackendByType: Re-checking availability for %s\n", backend->ops->name));
+        backend->available = backend->ops->IsAvailable();
+        D(bug("ZuneFindBackendByType: IsAvailable returned %d\n", backend->available));
+        if (backend->available && !backend->context->initialized && backend->ops->InitBackend) {
+          D(bug("ZuneFindBackendByType: Initializing backend %s\n", backend->ops->name));
+          backend->ops->InitBackend(backend->context);
+          backend->context->initialized = TRUE;
+        }
+      }
+      
+      if (backend->available) {
+        D(bug("ZuneFindBackendByType: Found available backend %s\n", backend->ops->name));
+        ReleaseSemaphore(&ZuneBackendSemaphore);
+        return backend;
+      } else {
+        D(bug("ZuneFindBackendByType: Backend %s not available\n", backend->ops->name));
+      }
     }
   }
 
+  D(bug("ZuneFindBackendByType: No backend found for type %d\n", type));
   ReleaseSemaphore(&ZuneBackendSemaphore);
   return NULL;
 }

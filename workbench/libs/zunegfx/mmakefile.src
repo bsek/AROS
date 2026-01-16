@@ -62,6 +62,10 @@ BACKEND_FILES := \
         src/backends/cybergfx/cybergfx_brush_sampler \
         src/backends/opengl/opengl_backend
 
+COMPOSITOR_FILES := \
+        src/compositor/layer_compositor \
+        src/zunegfx_compositor
+
 ROOT_FILES := \
         zunegfx_init
 
@@ -72,6 +76,7 @@ FILES := \
         $(DRAWING_FILES)                \
         $(ANTIALIASING_FILES)           \
         $(BACKEND_FILES)                \
+        $(COMPOSITOR_FILES)             \
         $(ROOT_FILES)
 
 #MM- workbench-libs-zunegfx : linklibs
@@ -89,7 +94,7 @@ INCLUDE_FILES := $(call WILDCARD, include/*.h)
 %build_module mmake=workbench-libs-zunegfx \
   modname=zunegfx modtype=library \
   files="$(FUNCS) $(FILES)" \
-  uselibs="graphics cybergraphics GL"
+  uselibs="graphics cybergraphics layers GL"
 
 # Additional build flags for debugging
 USER_CPPFLAGS := -DDEBUG=1 -DAROS_LITTLE_ENDIAN=1 -mavx2

@@ -323,12 +323,13 @@ RESULT
 
   if (backend_type != BACKEND_BEST_AVAILABLE) {
     backend = ZuneFindBackendByType(backend_type);
+    D(bug("ZuneRenderer: Requested backend type %d, found: %p\n", backend_type, backend));
   } else {
     backend = ZuneFindBestBackend(rp);
   }
 
   if (backend && ZuneBindRenderPortToBackend(rp, backend)) {
-    D(bug("ZuneRenderer: RenderPort bound to %s backend\n", backend->ops->name));
+    D(bug("ZuneRenderer: RenderPort bound to %s backend (type %d)\n", backend->ops->name, backend->ops->type));
 
     /* Determine pixel format */
     if (backend->ops->GetPixelFormat && window->RPort->BitMap) {
@@ -702,4 +703,46 @@ BOOL ValidateRenderPort(struct RenderPort *rp) {
   /* Additional validation may be added here once clipping/batching mature */
 
   return TRUE;
+}
+
+/*****************************************************************************
+
+    NAME */
+AROS_LH0(APTR, ZuneGetMasterGLContext,
+
+         /*  LOCATION */
+         struct Library *, ZuneGfxBase, 104, zunegfx)
+
+/*  FUNCTION
+    Returns the master OpenGL context used by zunegfx for context sharing.
+    This context can be passed to CreateLayerCompositorShared() to ensure
+    the compositor shares the same pipe_screen as zunegfx windows.
+
+INPUTS
+    None
+
+RESULT
+    Pointer to the master GL context, or NULL if not available.
+    The context is only available after at least one OpenGL-based
+    RenderPort has been created and used.
+
+NOTES
+    This function is primarily intended for use by the Layer Compositor
+    to enable shared GL contexts between zunegfx and the compositor.
+    Without shared contexts, the compositor may create a separate
+    pipe_screen which cannot access zunegfx FBO contents.
+
+SEE ALSO
+    CreateLayerCompositorShared()
+
+*****************************************************************************/
+{
+  AROS_LIBFUNC_INIT
+
+  /* OpenGL_GetMasterContext is defined in backends/opengl/opengl_backend.c */
+  extern APTR OpenGL_GetMasterContext(void);
+  
+  return OpenGL_GetMasterContext();
+
+  AROS_LIBFUNC_EXIT
 }

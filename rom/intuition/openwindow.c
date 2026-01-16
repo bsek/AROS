@@ -126,6 +126,11 @@ static VOID int_openwindow(struct OpenWindowActionMsg *msg,
     BOOL                                 driver_init_done = FALSE, have_helpgroup = FALSE;
     BOOL                             do_setwindowpointer = FALSE;
 
+    /* Layer compositor support */
+    BOOL                             use_alpha = FALSE;
+    UBYTE                            alpha_value = 255;  /* Fully opaque by default */
+    BOOL                             no_shadow = FALSE;
+
     ASSERT_VALID_PTR_ROMOK(newWindow);
 
     D(bug("OpenWindow (%p = { Left=%d Top=%d Width=%d Height=%d })\n"
@@ -541,6 +546,21 @@ moreFlags |= (name); else moreFlags &= ~(name)
 
             case WA_Hidden:
                 windowinvisible = tag->ti_Data;
+                break;
+
+            /* Layer compositor support */
+            case WA_Alpha:
+                use_alpha = (BOOL)tag->ti_Data;
+                break;
+
+            case WA_AlphaValue:
+                alpha_value = (UBYTE)tag->ti_Data;
+                if (alpha_value < 255)
+                    use_alpha = TRUE;
+                break;
+
+            case WA_NoShadow:
+                no_shadow = (BOOL)tag->ti_Data;
                 break;
 #endif
 
@@ -1366,6 +1386,10 @@ static VOID int_openwindow(struct OpenWindowActionMsg *msg,
             {LA_WindowPtr, (IPTR)w     },
             {LA_ChildOf  , (IPTR)parent}, /* These two are AROS-specific */
             {LA_Hidden   , invisible   },
+            /* Layer compositor support */
+            {use_alpha ? LA_Alpha : TAG_IGNORE, TRUE},
+            {use_alpha ? LA_AlphaValue : TAG_IGNORE, (IPTR)alpha_value},
+            {no_shadow ? LA_NoShadow : TAG_IGNORE, TRUE},
             {TAG_DONE}
         };
 
@@ -1458,6 +1482,10 @@ static VOID int_openwindow(struct OpenWindowActionMsg *msg,
             {LA_WindowPtr, (IPTR)w     },
             {LA_ChildOf  , (IPTR)parent}, /* These two are AROS-specific */
             {LA_Hidden, invisible   },
+            /* Layer compositor support */
+            {use_alpha ? LA_Alpha : TAG_IGNORE, TRUE},
+            {use_alpha ? LA_AlphaValue : TAG_IGNORE, (IPTR)alpha_value},
+            {no_shadow ? LA_NoShadow : TAG_IGNORE, TRUE},
             {TAG_DONE}
         };
 

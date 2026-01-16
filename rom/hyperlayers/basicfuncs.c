@@ -1086,6 +1086,39 @@ int _ShowPartsOfLayer(struct Layer * l,
 //kprintf("%s called for %p\n",__FUNCTION__,l);
 
   /*
+   * If this layer has alpha transparency AND an external compositor is
+   * registered, delegate display to the compositor. Standard opaque
+   * layers continue through normal layer system for maximum compatibility.
+   *
+   * This hybrid approach allows:
+   * - Standard windows: Normal fast blitting (no compositor overhead)
+   * - Alpha windows: Hardware-accelerated compositing with transparency
+   */
+  if ((IL(l)->il_AlphaFlags & ILAF_ALPHA) &&
+      l->LayerInfo && LIE(l->LayerInfo) && LIE(l->LayerInfo)->lie_CompositorHook)
+  {
+    struct CompositorMsg msg;
+    
+    msg.cm_Method = COMP_SHOWLAYER;
+    msg.cm_Layer = l;
+    msg.cm_Region = show_region;
+    msg.cm_Reserved[0] = NULL;
+    msg.cm_Reserved[1] = NULL;
+    msg.cm_Reserved[2] = NULL;
+    msg.cm_Reserved[3] = NULL;
+    
+    AROS_UFC3NR(void, LIE(l->LayerInfo)->lie_CompositorHook->h_Entry,
+        AROS_UFCA(struct Hook *,         LIE(l->LayerInfo)->lie_CompositorHook, A0),
+        AROS_UFCA(struct Layer_Info *,   l->LayerInfo, A2),
+        AROS_UFCA(struct CompositorMsg *, &msg, A1)
+    );
+    
+    /* Compositor handles the display - still need to update VisibleRegion */
+    OrRegionRegion(show_region, l->VisibleRegion);
+    return TRUE;
+  }
+
+  /*
    * If there is a clipping region then the whole
    * window is currently backed up in l->ClipRect
    * That covers the complete area. I must first

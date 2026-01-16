@@ -684,13 +684,34 @@ static UBYTE *OpenGL_ReadPixelsToBuffer(WORD x, WORD y, UWORD width, UWORD heigh
 {
     UBYTE *buffer;
     ULONG buffer_size = (ULONG)width * height * 4;
+    GLenum gl_error;
+
+    D(bug("[ZuneGfx:OpenGL] ReadPixelsToBuffer: pos=%d,%d size=%dx%d flip=%d\n",
+          x, y, width, height, flip_y));
 
     buffer = AllocVec(buffer_size, MEMF_ANY);
     if (!buffer) {
+        D(bug("[ZuneGfx:OpenGL] ReadPixelsToBuffer: FAILED to allocate %lu bytes\n", buffer_size));
         return NULL;
     }
 
+    /* Clear any pending GL errors */
+    while (glGetError() != GL_NO_ERROR) {}
+
     glReadPixels(x, y, width, height, GL_RGBA, GL_UNSIGNED_BYTE, buffer);
+
+    gl_error = glGetError();
+    if (gl_error != GL_NO_ERROR) {
+        D(bug("[ZuneGfx:OpenGL] ReadPixelsToBuffer: glReadPixels ERROR 0x%04x\n", gl_error));
+    }
+
+    /* Sample first few pixels to verify we got data */
+    D(bug("[ZuneGfx:OpenGL] ReadPixelsToBuffer: first pixel RGBA = %02x %02x %02x %02x\n",
+          buffer[0], buffer[1], buffer[2], buffer[3]));
+    if (buffer_size > 16) {
+        D(bug("[ZuneGfx:OpenGL] ReadPixelsToBuffer: pixel[4] RGBA = %02x %02x %02x %02x\n",
+              buffer[16], buffer[17], buffer[18], buffer[19]));
+    }
 
     if (flip_y) {
         UBYTE *temp = AllocVec(width * 4, MEMF_ANY);
@@ -700,6 +721,7 @@ static UBYTE *OpenGL_ReadPixelsToBuffer(WORD x, WORD y, UWORD width, UWORD heigh
         }
     }
 
+    D(bug("[ZuneGfx:OpenGL] ReadPixelsToBuffer: success, buffer=%p\n", buffer));
     return buffer;
 }
 
@@ -2187,7 +2209,67 @@ static BOOL OpenGL_CreateMasterContext(struct Window *window)
     master_pipe_screen = glAGetPipeScreen(master_ctx);
     g_opengl_priv->shared_contexts_supported = (master_pipe_screen != NULL);
 
+    D(bug("[ZuneGfx:OpenGL] CreateMasterContext: master=%p, pipe_screen=%p, shared_supported=%d\n",
+          master_ctx, master_pipe_screen, g_opengl_priv->shared_contexts_supported));
+
     return TRUE;
+}
+
+/*
+ * OpenGL_GetMasterContext - Get the master GL context for sharing
+ *
+ * Public function - can be called from outside the backend.
+ */
+APTR OpenGL_GetMasterContext(void)
+{
+    D(bug("[ZuneGfx:OpenGL] GetMasterContext: g_opengl_priv=%p\n", g_opengl_priv));
+    
+    if (!g_opengl_priv) {
+        D(bug("[ZuneGfx:OpenGL] GetMasterContext: no g_opengl_priv, returning NULL\n"));
+        return NULL;
+    }
+    
+    D(bug("[ZuneGfx:OpenGL] GetMasterContext: master_context_created=%d, master_context=%p\n",
+          g_opengl_priv->master_context_created, g_opengl_priv->master_context));
+    
+    if (!g_opengl_priv->master_context_created) {
+        D(bug("[ZuneGfx:OpenGL] GetMasterContext: master not created, returning NULL\n"));
+        return NULL;
+    }
+    
+    return g_opengl_priv->master_context;
+}
+
+/*
+ * OpenGL_EnsureMasterContext - Ensure master context exists
+ *
+ * Creates the master GL context if it doesn't exist, using the given window.
+ * Public function - can be called from outside the backend.
+ */
+APTR OpenGL_EnsureMasterContext(struct Window *window)
+{
+    if (!g_opengl_priv) {
+        D(bug("[ZuneGfx:OpenGL] EnsureMasterContext: g_opengl_priv is NULL\n"));
+        return NULL;
+    }
+
+    /* If master context already exists, return it */
+    if (g_opengl_priv->master_context_created && g_opengl_priv->master_context) {
+        return g_opengl_priv->master_context;
+    }
+
+    /* Create master context */
+    if (!window) {
+        D(bug("[ZuneGfx:OpenGL] EnsureMasterContext: window is NULL\n"));
+        return NULL;
+    }
+
+    if (!OpenGL_CreateMasterContext(window)) {
+        D(bug("[ZuneGfx:OpenGL] EnsureMasterContext: CreateMasterContext failed\n"));
+        return NULL;
+    }
+
+    return g_opengl_priv->master_context;
 }
 
 /*
@@ -2576,26 +2658,52 @@ void OpenGL_BlitFBOToRastPort(struct DrawingBoard *board, struct RastPort *dst_r
     OpenGLFBOData *fbo;
     UBYTE *pixelbuffer;
 
+    D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: board=%p, dst_rp=%p, src=%d,%d dst=%d,%d %dx%d\n",
+          board, dst_rp, src_x, src_y, dst_x, dst_y, width, height));
+
     if (!board || !board->backend_data || !dst_rp) {
+        D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: invalid params\n"));
         return;
     }
 
     if (!g_fbo_available || !glBindFramebuffer_ptr || !CyberGfxBase) {
+        D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: FBO not available\n"));
         return;
     }
 
     fbo = (OpenGLFBOData *)board->backend_data;
 
     if (!fbo->valid) {
+        D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: FBO not valid\n"));
         return;
     }
 
-    /* Make the FBO's parent GL context current */
-    if (fbo->parent_context && fbo->parent_context->gl_context) {
-        glAMakeCurrent((GLAContext)fbo->parent_context->gl_context);
-    } else if (g_opengl_priv && g_opengl_priv->gl_context) {
+    D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: fbo_id=%u, fbo size=%dx%d\n",
+          fbo->fbo_id, fbo->width, fbo->height));
+
+    /*
+     * Make the correct GL context current for FBO access.
+     *
+     * FBOs are created under the global context (g_opengl_priv->gl_context),
+     * so we must use the global context for reading FBO content. The parent_context
+     * field was intended for per-window context tracking, but since all contexts
+     * share resources (textures, FBOs) via GLA_ShareContext, we should use the
+     * global context which is guaranteed to have created the FBO.
+     *
+     * First, flush any pending operations in the current context to ensure
+     * FBO content is complete before switching contexts.
+     */
+    glFlush();
+    glFinish();
+    
+    if (g_opengl_priv && g_opengl_priv->gl_context) {
+        D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: using global context (FBO owner)\n"));
         glAMakeCurrent((GLAContext)g_opengl_priv->gl_context);
+    } else if (fbo->parent_context && fbo->parent_context->gl_context) {
+        D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: using parent context (fallback)\n"));
+        glAMakeCurrent((GLAContext)fbo->parent_context->gl_context);
     } else {
+        D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: no GL context!\n"));
         return;
     }
 
@@ -2606,15 +2714,19 @@ void OpenGL_BlitFBOToRastPort(struct DrawingBoard *board, struct RastPort *dst_r
     if (src_y + height > fbo->height) height = fbo->height - src_y;
 
     if (width <= 0 || height <= 0) {
+        D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: invalid dimensions after clamping\n"));
         return;
     }
 
     /* Bind the FBO for reading */
+    D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: binding FBO %u for reading\n", fbo->fbo_id));
     glBindFramebuffer_ptr(GL_FRAMEBUFFER, fbo->fbo_id);
     glFlush();
     glFinish();
 
     /* Read pixels from FBO (Y-flipped for screen coordinates) */
+    D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: reading pixels at %d,%d size %dx%d\n",
+          src_x, fbo->height - src_y - height, width, height));
     pixelbuffer = OpenGL_ReadPixelsToBuffer(src_x, fbo->height - src_y - height, width, height, TRUE);
 
     /* Unbind FBO and invalidate state */
@@ -2627,15 +2739,28 @@ void OpenGL_BlitFBOToRastPort(struct DrawingBoard *board, struct RastPort *dst_r
     }
 
     if (!pixelbuffer) {
+        D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: ReadPixelsToBuffer FAILED!\n"));
         return;
     }
+
+    D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: writing to RastPort at %d,%d\n", dst_x, dst_y));
 
     /* Write to destination RastPort */
     WritePixelArray(pixelbuffer, 0, 0, width * 4,
                     dst_rp, dst_x, dst_y,
                     width, height, RECTFMT_RGBA);
 
+    /* Verify the write by reading back a sample pixel */
+    if (CyberGfxBase && dst_rp->BitMap) {
+        UBYTE verify[4];
+        ReadPixelArray(verify, 0, 0, 4, dst_rp, dst_x, dst_y, 1, 1, RECTFMT_RGBA);
+        D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: verify readback RGBA = %02x %02x %02x %02x\n",
+              verify[0], verify[1], verify[2], verify[3]));
+    }
+
     FreeVec(pixelbuffer);
+    
+    D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: done\n"));
 }
 
 /*
@@ -2717,8 +2842,12 @@ static BOOL OpenGL_SyncRegionFBOToBitmap(struct RenderPort *rp,
     struct DrawingBoard *board;
     OpenGLFBOData *fbo;
 
+    D(bug("[ZuneGfx:OpenGL] SyncRegionFBOToBitmap: rp=%p, region=%d,%d %dx%d\n",
+          rp, x, y, width, height));
+
     /* Validate RenderPort */
     if (!rp) {
+        D(bug("[ZuneGfx:OpenGL] SyncRegionFBOToBitmap: rp is NULL\n"));
         return FALSE;
     }
 
@@ -2726,14 +2855,17 @@ static BOOL OpenGL_SyncRegionFBOToBitmap(struct RenderPort *rp,
 
     /* Validate DrawingBoard */
     if (!board || !board->valid) {
+        D(bug("[ZuneGfx:OpenGL] SyncRegionFBOToBitmap: board invalid (board=%p)\n", board));
         return FALSE;
     }
 
     if (!board->backend_data) {
+        D(bug("[ZuneGfx:OpenGL] SyncRegionFBOToBitmap: no backend_data (FBO not created)\n"));
         return FALSE;
     }
 
     if (!board->rastport || !board->rastport->BitMap) {
+        D(bug("[ZuneGfx:OpenGL] SyncRegionFBOToBitmap: no rastport/bitmap\n"));
         return FALSE;
     }
 
@@ -2741,13 +2873,18 @@ static BOOL OpenGL_SyncRegionFBOToBitmap(struct RenderPort *rp,
 
     /* Validate FBO */
     if (!fbo->valid) {
+        D(bug("[ZuneGfx:OpenGL] SyncRegionFBOToBitmap: FBO not valid\n"));
         return FALSE;
     }
+
+    D(bug("[ZuneGfx:OpenGL] SyncRegionFBOToBitmap: fbo=%p, fbo_id=%u, dirty=%d\n",
+          fbo, fbo->fbo_id, fbo->dirty));
 
     /*
      * Only sync if the FBO has been modified since last sync.
      */
     if (!fbo->dirty) {
+        D(bug("[ZuneGfx:OpenGL] SyncRegionFBOToBitmap: FBO not dirty, skipping sync\n"));
         return TRUE;
     }
 
@@ -2895,7 +3032,18 @@ static BOOL g_opengl_available_checked = FALSE;
 
 static BOOL OpenGLIsAvailable(void)
 {
-    /* Return cached result if already checked */
+    /* 
+     * Always re-check if GLBase became available.
+     * This handles the case where GL library is opened after
+     * initial backend registration.
+     */
+    if (GLBase != NULL) {
+        g_opengl_available_cached = TRUE;
+        g_opengl_available_checked = TRUE;
+        return TRUE;
+    }
+    
+    /* Return cached FALSE result if already checked and still not available */
     if (g_opengl_available_checked) {
         return g_opengl_available_cached;
     }
@@ -2987,9 +3135,10 @@ static ULONG OpenGLGetPixelFormat(struct BitMap *bitmap)
  */
 static BOOL OpenGL_EnsureGlobalContext(struct Window *window)
 {
-    struct TagItem tags[10];
+    struct TagItem tags[12];  /* Extra space for GLA_ShareContext */
     int tag_idx = 0;
     GLAContext gl_ctx;
+    BOOL use_shared_context = FALSE;
 
     if (!g_opengl_priv || !GLBase) {
         return FALSE;
@@ -3003,6 +3152,25 @@ static BOOL OpenGL_EnsureGlobalContext(struct Window *window)
     /* Need a window to create the initial context */
     if (!window) {
         return FALSE;
+    }
+
+    /*
+     * NEW: Create master context first if it doesn't exist.
+     * This enables shared context mode for all subsequent contexts.
+     * The master context is used for resource sharing (textures, FBOs, etc.)
+     */
+    if (!g_opengl_priv->master_context_created) {
+        D(bug("[ZuneGfx:OpenGL] EnsureGlobalContext: Creating master context first\n"));
+        if (OpenGL_CreateMasterContext(window)) {
+            D(bug("[ZuneGfx:OpenGL] EnsureGlobalContext: Master context created, shared_contexts_supported=%d\n",
+                  g_opengl_priv->shared_contexts_supported));
+            use_shared_context = g_opengl_priv->shared_contexts_supported;
+        } else {
+            D(bug("[ZuneGfx:OpenGL] EnsureGlobalContext: Master context creation failed, continuing without sharing\n"));
+        }
+    } else if (g_opengl_priv->shared_contexts_supported && g_opengl_priv->master_context) {
+        /* Master context exists and supports sharing */
+        use_shared_context = TRUE;
     }
 
     /* Set up tags for context creation */
@@ -3034,14 +3202,77 @@ static BOOL OpenGL_EnsureGlobalContext(struct Window *window)
     tags[tag_idx].ti_Data = GL_TRUE;
     tag_idx++;
 
+    /* Add GLA_ShareContext if master context is available */
+    if (use_shared_context) {
+        D(bug("[ZuneGfx:OpenGL] EnsureGlobalContext: Using GLA_ShareContext with master %p\n",
+              g_opengl_priv->master_context));
+        tags[tag_idx].ti_Tag = GLA_ShareContext;
+        tags[tag_idx].ti_Data = (IPTR)g_opengl_priv->master_context;
+        tag_idx++;
+    }
+
     tags[tag_idx].ti_Tag = TAG_DONE;
     tags[tag_idx].ti_Data = 0;
 
-    /* Create the ONE global context */
+    /* Create the global context (with sharing if master context exists) */
     gl_ctx = glACreateContext(tags);
     if (!gl_ctx) {
-        D(bug("[ZuneRenderer:OpenGL] EnsureGlobalContext: glACreateContext FAILED\n"));
-        return FALSE;
+        D(bug("[ZuneGfx:OpenGL] EnsureGlobalContext: glACreateContext FAILED\n"));
+        
+        /* If shared context failed, try again without sharing */
+        if (use_shared_context) {
+            D(bug("[ZuneGfx:OpenGL] EnsureGlobalContext: Retrying without sharing\n"));
+            use_shared_context = FALSE;
+            
+            /* Rebuild tags without GLA_ShareContext */
+            tag_idx = 0;
+            tags[tag_idx].ti_Tag = GLA_Window;
+            tags[tag_idx].ti_Data = (IPTR)window;
+            tag_idx++;
+            tags[tag_idx].ti_Tag = GLA_Left;
+            tags[tag_idx].ti_Data = window->BorderLeft;
+            tag_idx++;
+            tags[tag_idx].ti_Tag = GLA_Top;
+            tags[tag_idx].ti_Data = window->BorderTop;
+            tag_idx++;
+            tags[tag_idx].ti_Tag = GLA_Right;
+            tags[tag_idx].ti_Data = window->BorderRight;
+            tag_idx++;
+            tags[tag_idx].ti_Tag = GLA_Bottom;
+            tags[tag_idx].ti_Data = window->BorderBottom;
+            tag_idx++;
+            tags[tag_idx].ti_Tag = GLA_NoDepth;
+            tags[tag_idx].ti_Data = GL_TRUE;
+            tag_idx++;
+            tags[tag_idx].ti_Tag = GLA_NoStencil;
+            tags[tag_idx].ti_Data = GL_TRUE;
+            tag_idx++;
+            tags[tag_idx].ti_Tag = TAG_DONE;
+            tags[tag_idx].ti_Data = 0;
+            
+            gl_ctx = glACreateContext(tags);
+            if (!gl_ctx) {
+                D(bug("[ZuneGfx:OpenGL] EnsureGlobalContext: glACreateContext FAILED (without sharing)\n"));
+                return FALSE;
+            }
+        } else {
+            return FALSE;
+        }
+    }
+
+    /* Verify sharing worked by comparing pipe_screens */
+    if (use_shared_context) {
+        APTR global_pipe_screen = glAGetPipeScreen(gl_ctx);
+        APTR master_pipe_screen = glAGetPipeScreen((GLAContext)g_opengl_priv->master_context);
+        
+        if (global_pipe_screen && master_pipe_screen && global_pipe_screen == master_pipe_screen) {
+            D(bug("[ZuneGfx:OpenGL] EnsureGlobalContext: Sharing verified - same pipe_screen %p\n",
+                  global_pipe_screen));
+        } else {
+            D(bug("[ZuneGfx:OpenGL] EnsureGlobalContext: WARNING - pipe_screens differ (global=%p, master=%p)\n",
+                  global_pipe_screen, master_pipe_screen));
+            /* Sharing didn't work as expected, but context was created successfully */
+        }
     }
 
     /* Store in global state */
@@ -3055,6 +3286,9 @@ static BOOL OpenGL_EnsureGlobalContext(struct Window *window)
 
     /* Make it current */
     glAMakeCurrent(gl_ctx);
+    
+    D(bug("[ZuneGfx:OpenGL] EnsureGlobalContext: Global context created %p, shared=%d\n",
+          gl_ctx, use_shared_context));
 
     /* Set up initial orthographic projection */
     OpenGL_SetupOrthoProjection(g_opengl_priv->current_width, g_opengl_priv->current_height);
@@ -3174,13 +3408,25 @@ static BOOL OpenGL_SwitchToWindow(struct RenderPort *rp)
      * NEW: Try shared context approach first.
      * Each window gets its own GL context that shares resources with master.
      * This allows safe switching via glAMakeCurrent().
+     *
+     * We try this path if:
+     * 1. Shared contexts are already known to be supported, OR
+     * 2. Master context hasn't been created yet (we'll create it and check)
      */
-    if (g_opengl_priv->shared_contexts_supported) {
+    if (g_opengl_priv->shared_contexts_supported || !g_opengl_priv->master_context_created) {
         /* Ensure master context exists */
         if (!g_opengl_priv->master_context_created) {
+            D(bug("[ZuneGfx:OpenGL] SwitchToWindow: Creating master context for shared context support\n"));
             if (!OpenGL_CreateMasterContext(window)) {
+                D(bug("[ZuneGfx:OpenGL] SwitchToWindow: Master context creation failed\n"));
                 goto fallback_setrast;
             }
+        }
+
+        /* Check if sharing is actually supported after master context creation */
+        if (!g_opengl_priv->shared_contexts_supported) {
+            D(bug("[ZuneGfx:OpenGL] SwitchToWindow: Shared contexts not supported, using fallback\n"));
+            goto fallback_setrast;
         }
 
         /* Find or create window context */

@@ -72,6 +72,13 @@ struct Layer *CreateLayerTagList(struct Layer_Info *li, struct BitMap *bm, LONG 
         win = (APTR)tag->ti_Data;
         break;
 
+    /* Compositor support tags are parsed after layer creation below */
+    case LA_Alpha:
+    case LA_AlphaValue:
+    case LA_NoShadow:
+        /* These are handled after the layer is allocated */
+        break;
+
     }
 
   } /* while((tag = NextTagItem(&tstate))) */
@@ -190,6 +197,44 @@ struct Layer *CreateLayerTagList(struct Layer_Info *li, struct BitMap *bm, LONG 
 
     l->Flags = (WORD) flags;
     l->LayerInfo = li;
+
+    /* Initialize compositor fields with defaults */
+    IL(l)->il_Alpha = 255;  /* Fully opaque by default */
+    IL(l)->il_AlphaFlags = 0;
+    IL(l)->il_CompositorData = NULL;
+
+    /* Parse compositor-related tags */
+    tstate = tagList;
+    while((tag = NextTagItem(&tstate)))
+    {
+      switch (tag->ti_Tag)
+      {
+        case LA_Alpha:
+          if (tag->ti_Data)
+          {
+            IL(l)->il_AlphaFlags |= ILAF_ALPHA;
+            l->Flags |= LAYERF_ALPHA;
+          }
+          break;
+
+        case LA_AlphaValue:
+          IL(l)->il_Alpha = (UBYTE)tag->ti_Data;
+          if (IL(l)->il_Alpha < 255)
+          {
+            IL(l)->il_AlphaFlags |= ILAF_ALPHA;
+            l->Flags |= LAYERF_ALPHA;
+          }
+          break;
+
+        case LA_NoShadow:
+          if (tag->ti_Data)
+          {
+            IL(l)->il_AlphaFlags |= ILAF_NOSHADOW;
+            l->Flags |= LAYERF_NOSHADOW;
+          }
+          break;
+      }
+    }
     
     l->SuperBitMap = superbitmap;
     l->BackFill = hook;
