@@ -1445,30 +1445,47 @@ static GLuint OpenGL_CompileShader(GLenum type, const GLchar *source)
 {
     GLuint shader;
     GLint compiled;
+    char log[512];
+
+    D(bug("[ZuneGfx:OpenGL] CompileShader: type=%s\n", 
+          type == GL_VERTEX_SHADER ? "VERTEX" : "FRAGMENT"));
 
     if (!glCreateShader_ptr || !glShaderSource_ptr || !glCompileShader_ptr) {
+        D(bug("[ZuneGfx:OpenGL] CompileShader: missing function pointers\n"));
         return 0;
     }
 
     shader = glCreateShader_ptr(type);
     if (shader == 0) {
+        D(bug("[ZuneGfx:OpenGL] CompileShader: glCreateShader returned 0\n"));
         return 0;
     }
+    D(bug("[ZuneGfx:OpenGL] CompileShader: shader id=%u\n", shader));
 
     glShaderSource_ptr(shader, 1, &source, NULL);
     glCompileShader_ptr(shader);
 
     /* Check compilation status */
+    compiled = GL_FALSE;
     if (glGetShaderiv_ptr) {
         glGetShaderiv_ptr(shader, GL_COMPILE_STATUS, &compiled);
+        D(bug("[ZuneGfx:OpenGL] CompileShader: compile status=%d\n", compiled));
         if (!compiled) {
+            if (glGetShaderInfoLog_ptr) {
+                log[0] = 0;
+                glGetShaderInfoLog_ptr(shader, sizeof(log), NULL, log);
+                D(bug("[ZuneGfx:OpenGL] CompileShader: compile error: %s\n", log));
+            }
             if (glDeleteShader_ptr) {
                 glDeleteShader_ptr(shader);
             }
             return 0;
         }
+    } else {
+        D(bug("[ZuneGfx:OpenGL] CompileShader: WARNING - cannot check compile status\n"));
     }
 
+    D(bug("[ZuneGfx:OpenGL] CompileShader: success\n"));
     return shader;
 }
 
@@ -1480,28 +1497,40 @@ static GLuint OpenGL_CompileShader(GLenum type, const GLchar *source)
 static BOOL OpenGL_CreateRoundedRectShader(void)
 {
     GLint linked;
+    char log[512];
+
+    D(bug("[ZuneGfx:OpenGL] CreateRoundedRectShader: starting\n"));
 
     if (!glCreateProgram_ptr || !glAttachShader_ptr || !glLinkProgram_ptr) {
+        D(bug("[ZuneGfx:OpenGL] CreateRoundedRectShader: missing function pointers\n"));
         return FALSE;
     }
 
     /* Compile vertex shader */
+    D(bug("[ZuneGfx:OpenGL] CreateRoundedRectShader: compiling vertex shader\n"));
     g_rounded_rect_vs = OpenGL_CompileShader(GL_VERTEX_SHADER, g_rounded_rect_vs_source);
     if (g_rounded_rect_vs == 0) {
+        D(bug("[ZuneGfx:OpenGL] CreateRoundedRectShader: vertex shader compilation FAILED\n"));
         return FALSE;
     }
+    D(bug("[ZuneGfx:OpenGL] CreateRoundedRectShader: vertex shader id=%u\n", g_rounded_rect_vs));
 
     /* Compile fragment shader */
+    D(bug("[ZuneGfx:OpenGL] CreateRoundedRectShader: compiling fragment shader\n"));
     g_rounded_rect_fs = OpenGL_CompileShader(GL_FRAGMENT_SHADER, g_rounded_rect_fs_source);
     if (g_rounded_rect_fs == 0) {
+        D(bug("[ZuneGfx:OpenGL] CreateRoundedRectShader: fragment shader compilation FAILED\n"));
         if (glDeleteShader_ptr) glDeleteShader_ptr(g_rounded_rect_vs);
         g_rounded_rect_vs = 0;
         return FALSE;
     }
+    D(bug("[ZuneGfx:OpenGL] CreateRoundedRectShader: fragment shader id=%u\n", g_rounded_rect_fs));
 
     /* Create and link program */
     g_rounded_rect_program = glCreateProgram_ptr();
+    D(bug("[ZuneGfx:OpenGL] CreateRoundedRectShader: program id=%u\n", g_rounded_rect_program));
     if (g_rounded_rect_program == 0) {
+        D(bug("[ZuneGfx:OpenGL] CreateRoundedRectShader: glCreateProgram FAILED\n"));
         if (glDeleteShader_ptr) {
             glDeleteShader_ptr(g_rounded_rect_vs);
             glDeleteShader_ptr(g_rounded_rect_fs);
@@ -1513,15 +1542,25 @@ static BOOL OpenGL_CreateRoundedRectShader(void)
 
     glAttachShader_ptr(g_rounded_rect_program, g_rounded_rect_vs);
     glAttachShader_ptr(g_rounded_rect_program, g_rounded_rect_fs);
+    D(bug("[ZuneGfx:OpenGL] CreateRoundedRectShader: linking program\n"));
     glLinkProgram_ptr(g_rounded_rect_program);
 
     /* Check link status */
+    linked = GL_FALSE;
     if (glGetProgramiv_ptr) {
         glGetProgramiv_ptr(g_rounded_rect_program, GL_LINK_STATUS, &linked);
+        D(bug("[ZuneGfx:OpenGL] CreateRoundedRectShader: link status=%d\n", linked));
         if (!linked) {
+            if (glGetProgramInfoLog_ptr) {
+                log[0] = 0;
+                glGetProgramInfoLog_ptr(g_rounded_rect_program, sizeof(log), NULL, log);
+                D(bug("[ZuneGfx:OpenGL] CreateRoundedRectShader: link error: %s\n", log));
+            }
             OpenGL_DestroyShaders();
             return FALSE;
         }
+    } else {
+        D(bug("[ZuneGfx:OpenGL] CreateRoundedRectShader: WARNING - cannot check link status\n"));
     }
 
     /* Get uniform locations */
@@ -1654,9 +1693,65 @@ static void OpenGL_DestroyShaders(void)
 #define ZUNEGFX_SHADER_SAFESTACK    (1 << 18)  /* 256KB */
 
 /*
+ * OpenGL_InitShadersInternal - Actually compile and link shaders
+ *
+ * This does the actual shader compilation work. Called either from
+ * OpenGL_InitShaders() if stack is large enough, or from
+ * OpenGL_PreInitializeShaders() during library init.
+ *
+ * REQUIRES: GL context must be current, stack must be >= ZUNEGFX_SHADER_SAFESTACK
+ */
+static BOOL OpenGL_InitShadersInternal(void)
+{
+    const GLubyte *version_str;
+    int major = 0, minor = 0;
+
+    if (g_shaders_available) {
+        return TRUE;
+    }
+
+    /*
+     * Check GL version before attempting to use shaders.
+     * GLSL shaders require OpenGL 2.0 or higher.
+     */
+    version_str = glGetString(GL_VERSION);
+    if (version_str) {
+        D(bug("[ZuneGfx:OpenGL] InitShadersInternal: GL_VERSION=%s\n", version_str));
+        /* Parse version string - format is "major.minor" or "major.minor.release" */
+        sscanf((const char *)version_str, "%d.%d", &major, &minor);
+    } else {
+        D(bug("[ZuneGfx:OpenGL] InitShadersInternal: glGetString(GL_VERSION) failed\n"));
+        return FALSE;
+    }
+
+    /* Require at least OpenGL 2.0 for GLSL shaders */
+    if (major < 2) {
+        D(bug("[ZuneGfx:OpenGL] InitShadersInternal: GL %d.%d < 2.0, no shaders\n", major, minor));
+        return FALSE;
+    }
+
+    /* Load shader function pointers */
+    if (!OpenGL_LoadShaderFunctions()) {
+        D(bug("[ZuneGfx:OpenGL] InitShadersInternal: LoadShaderFunctions failed\n"));
+        return FALSE;
+    }
+
+    /* Create the rounded rectangle shader program */
+    if (!OpenGL_CreateRoundedRectShader()) {
+        D(bug("[ZuneGfx:OpenGL] InitShadersInternal: CreateRoundedRectShader failed\n"));
+        return FALSE;
+    }
+
+    g_shaders_available = TRUE;
+    D(bug("[ZuneGfx:OpenGL] InitShadersInternal: Shaders OK!\n"));
+    return TRUE;
+}
+
+/*
  * OpenGL_InitShaders - Initialize shaders after context creation
  *
  * Call this after the first GL context is created and made current.
+ * Checks stack size and only proceeds if large enough.
  *
  * NOTE: We cannot use NewStackSwap/StackSwap to work around small stacks
  * because Mesa's shader compilation uses posixc.library functions (like fprintf
@@ -1665,8 +1760,6 @@ static void OpenGL_DestroyShaders(void)
  */
 static BOOL OpenGL_InitShaders(void)
 {
-    const GLubyte *version_str;
-    int major = 0, minor = 0;
     struct Task *this_task;
     IPTR stack_size;
 
@@ -1678,6 +1771,10 @@ static BOOL OpenGL_InitShaders(void)
      * Check stack size before attempting shader compilation.
      * Mesa shader compilation (especially with LLVM) requires significant stack.
      * If we don't have enough stack, shader compilation will crash.
+     *
+     * If stack is too small, shaders should have been pre-initialized during
+     * library init via OpenGL_PreInitializeShaders(). If not, we can't compile
+     * shaders safely and must fall back to non-shader rendering.
      */
     this_task = FindTask(NULL);
     if (this_task) {
@@ -1685,46 +1782,13 @@ static BOOL OpenGL_InitShaders(void)
         D(bug("[ZuneGfx:OpenGL] InitShaders: stack=%ld, required=%ld\n",
               (LONG)stack_size, (LONG)ZUNEGFX_SHADER_SAFESTACK));
         if (stack_size < ZUNEGFX_SHADER_SAFESTACK) {
-            D(bug("[ZuneGfx:OpenGL] InitShaders: Stack too small!\n"));
+            D(bug("[ZuneGfx:OpenGL] InitShaders: Stack too small, shaders unavailable\n"));
             return FALSE;
         }
     }
 
-    /*
-     * Check GL version before attempting to use shaders.
-     * GLSL shaders require OpenGL 2.0 or higher.
-     */
-    version_str = glGetString(GL_VERSION);
-    if (version_str) {
-        D(bug("[ZuneGfx:OpenGL] InitShaders: GL_VERSION=%s\n", version_str));
-        /* Parse version string - format is "major.minor" or "major.minor.release" */
-        sscanf((const char *)version_str, "%d.%d", &major, &minor);
-    } else {
-        D(bug("[ZuneGfx:OpenGL] InitShaders: glGetString(GL_VERSION) failed\n"));
-        return FALSE;
-    }
-
-    /* Require at least OpenGL 2.0 for GLSL shaders */
-    if (major < 2) {
-        D(bug("[ZuneGfx:OpenGL] InitShaders: GL %d.%d < 2.0, no shaders\n", major, minor));
-        return FALSE;
-    }
-
-    /* Load shader function pointers */
-    if (!OpenGL_LoadShaderFunctions()) {
-        D(bug("[ZuneGfx:OpenGL] InitShaders: LoadShaderFunctions failed\n"));
-        return FALSE;
-    }
-
-    /* Create the rounded rectangle shader program */
-    if (!OpenGL_CreateRoundedRectShader()) {
-        D(bug("[ZuneGfx:OpenGL] InitShaders: CreateRoundedRectShader failed\n"));
-        return FALSE;
-    }
-
-    g_shaders_available = TRUE;
-    D(bug("[ZuneGfx:OpenGL] InitShaders: Shaders OK!\n"));
-    return TRUE;
+    /* Stack is large enough, compile shaders */
+    return OpenGL_InitShadersInternal();
 }
 
 /*****************************************************************************/
@@ -2212,7 +2276,161 @@ static BOOL OpenGL_CreateMasterContext(struct Window *window)
     D(bug("[ZuneGfx:OpenGL] CreateMasterContext: master=%p, pipe_screen=%p, shared_supported=%d\n",
           master_ctx, master_pipe_screen, g_opengl_priv->shared_contexts_supported));
 
+    /* Load FBO functions now that we have a context */
+    OpenGL_LoadFBOFunctions();
+
+    /*
+     * Initialize shaders now that we have a GL context.
+     * This is deferred from library init to first window creation so we don't
+     * need a hidden backdrop window. The first application window's stack is
+     * typically large enough for Mesa/LLVM shader compilation.
+     *
+     * If the stack is too small, OpenGL_InitShaders will detect it and shaders
+     * will be unavailable (fallback to non-shader rendering).
+     */
+    if (!g_shaders_available) {
+        if (OpenGL_InitShaders()) {
+            g_opengl_priv->has_shaders = TRUE;
+            D(bug("[ZuneGfx:OpenGL] CreateMasterContext: Shaders compiled successfully\n"));
+        } else {
+            D(bug("[ZuneGfx:OpenGL] CreateMasterContext: Shader compilation failed (stack too small?)\n"));
+        }
+    }
+
     return TRUE;
+}
+
+/* Pre-init window/screen for shader compilation */
+static struct Screen *g_preinit_screen = NULL;
+static struct Window *g_preinit_window = NULL;
+
+/*
+ * OpenGL_PreInitializeShaders - Initialize shaders during library init
+ *
+ * Opens a small backdrop window to create a GL context and compile shaders.
+ * This is needed because Mesa/LLVM shader compilation requires a valid GL
+ * context, and we want to do this once during library init rather than
+ * causing a delay when the first application window opens.
+ *
+ * The pre-init window is kept open until OpenGL_CleanupPreInit() is called
+ * during library cleanup, as the GL context must remain valid.
+ */
+BOOL OpenGL_PreInitializeShaders(void)
+{
+    GLAContext preinit_ctx;
+    struct TagItem ctx_tags[4];
+    
+    D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Creating pre-init window for shader compilation\n"));
+    
+    /* Lock the default public screen (Workbench) */
+    g_preinit_screen = LockPubScreen(NULL);
+    if (!g_preinit_screen) {
+        D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Cannot lock public screen\n"));
+        return FALSE;
+    }
+    
+    /* Open a small backdrop window - it will be behind everything */
+    g_preinit_window = OpenWindowTags(NULL,
+        WA_Left, 0,
+        WA_Top, 0,
+        WA_Width, 64,
+        WA_Height, 64,
+        WA_Backdrop, TRUE,
+        WA_Borderless, TRUE,
+        WA_NoCareRefresh, TRUE,
+        WA_PubScreen, (IPTR)g_preinit_screen,
+        TAG_DONE);
+    
+    if (!g_preinit_window) {
+        D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Cannot open pre-init window\n"));
+        UnlockPubScreen(NULL, g_preinit_screen);
+        g_preinit_screen = NULL;
+        return FALSE;
+    }
+    
+    D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Pre-init window opened at %p\n", g_preinit_window));
+    
+    /* Create GL context on this window */
+    ctx_tags[0].ti_Tag = GLA_Window;
+    ctx_tags[0].ti_Data = (IPTR)g_preinit_window;
+    ctx_tags[1].ti_Tag = GLA_DoubleBuf;
+    ctx_tags[1].ti_Data = FALSE;
+    ctx_tags[2].ti_Tag = GLA_NoStencil;
+    ctx_tags[2].ti_Data = TRUE;
+    ctx_tags[3].ti_Tag = TAG_DONE;
+    
+    preinit_ctx = glACreateContext(ctx_tags);
+    if (!preinit_ctx) {
+        D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Cannot create GL context\n"));
+        CloseWindow(g_preinit_window);
+        g_preinit_window = NULL;
+        UnlockPubScreen(NULL, g_preinit_screen);
+        g_preinit_screen = NULL;
+        return FALSE;
+    }
+    
+    /* Make context current */
+    glAMakeCurrent(preinit_ctx);
+    
+    D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: GL context created, compiling shaders...\n"));
+    
+    /* Load FBO functions */
+    OpenGL_LoadFBOFunctions();
+    
+    /* Compile shaders - this is the slow part that benefits from pre-init */
+    if (OpenGL_InitShaders()) {
+        D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Shaders compiled successfully\n"));
+        g_shaders_available = TRUE;
+    } else {
+        D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Shader compilation failed\n"));
+    }
+    
+    /* Store this as the master context */
+    if (g_opengl_priv) {
+        APTR pipe_screen;
+        
+        g_opengl_priv->master_context = preinit_ctx;
+        g_opengl_priv->master_context_created = TRUE;
+        g_opengl_priv->has_shaders = g_shaders_available;
+        
+        /* Check if context sharing is supported by getting pipe_screen */
+        pipe_screen = glAGetPipeScreen(preinit_ctx);
+        g_opengl_priv->shared_contexts_supported = (pipe_screen != NULL);
+        
+        D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Stored as master context, pipe_screen=%p, sharing=%d\n",
+              pipe_screen, g_opengl_priv->shared_contexts_supported));
+    }
+    
+    D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Done\n"));
+    
+    return TRUE;
+}
+
+/*
+ * OpenGL_CleanupPreInit - Clean up pre-init resources
+ *
+ * Called during library cleanup to close the pre-init window and
+ * release the public screen lock.
+ */
+void OpenGL_CleanupPreInit(void)
+{
+    D(bug("[ZuneGfx:OpenGL] CleanupPreInit: Cleaning up pre-init resources\n"));
+    
+    /* Note: We don't destroy the GL context here because it's stored as master_context
+     * and may be in use. It will be cleaned up when the library is expunged.
+     */
+    
+    if (g_preinit_window) {
+        CloseWindow(g_preinit_window);
+        g_preinit_window = NULL;
+        D(bug("[ZuneGfx:OpenGL] CleanupPreInit: Pre-init window closed\n"));
+    }
+    
+    if (g_preinit_screen) {
+        UnlockPubScreen(NULL, g_preinit_screen);
+        g_preinit_screen = NULL;
+        D(bug("[ZuneGfx:OpenGL] CleanupPreInit: Public screen unlocked\n"));
+    }
 }
 
 /*
