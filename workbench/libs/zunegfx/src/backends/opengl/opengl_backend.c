@@ -494,16 +494,21 @@ static void OpenGLCopyFromRastPort(struct RenderPort *rp, struct RastPort *src_r
                                    UWORD width, UWORD height)
 {
     UBYTE *pixelbuffer;
-    UBYTE *flipped_buffer;
     GLuint texture;
 
     if (!rp || !src_rp || !g_opengl_priv || !CyberGfxBase) {
         return;
     }
 
+    D(bug("[ZuneGfx:OpenGL] CopyFromRastPort: ENTER, switching to target\n"));
+    
+    /* OpenGL_SwitchToTarget -> OpenGL_SwitchToDrawingBoard now handles context switching */
     if (!OpenGL_SwitchToTarget(rp)) {
+        D(bug("[ZuneGfx:OpenGL] CopyFromRastPort: SwitchToTarget FAILED\n"));
         return;
     }
+    D(bug("[ZuneGfx:OpenGL] CopyFromRastPort: SwitchToTarget OK, target_type=%d\n",
+          g_opengl_priv->current_target_type));
 
     if (width == 0 || height == 0) {
         return;
@@ -521,40 +526,105 @@ static void OpenGLCopyFromRastPort(struct RenderPort *rp, struct RastPort *src_r
     /* Read pixels from RastPort with alpha forced to opaque */
     pixelbuffer = OpenGL_ReadRastPortToBuffer(src_rp, src_x, src_y, width, height, TRUE);
     if (!pixelbuffer) {
+        D(bug("[ZuneGfx:OpenGL] CopyFromRastPort: ReadRastPortToBuffer FAILED\n"));
         return;
     }
-
-    /* Allocate buffer for Y-flipped data */
-    flipped_buffer = AllocVec((ULONG)width * height * 4, MEMF_ANY);
-    if (!flipped_buffer) {
-        FreeVec(pixelbuffer);
-        return;
+    
+    /* Debug: sample some pixels from the RastPort data */
+    D(bug("[ZuneGfx:OpenGL] CopyFromRastPort: RastPort pixel[0] RGBA = %02x %02x %02x %02x\n",
+          pixelbuffer[0], pixelbuffer[1], pixelbuffer[2], pixelbuffer[3]));
+    /* Sample a pixel that should be in the yellow rect area (around y=150, x=50) */
+    {
+        ULONG offset = (150 * width + 50) * 4;
+        if (offset + 3 < (ULONG)width * height * 4) {
+            D(bug("[ZuneGfx:OpenGL] CopyFromRastPort: RastPort pixel at (50,150) RGBA = %02x %02x %02x %02x\n",
+                  pixelbuffer[offset], pixelbuffer[offset+1], pixelbuffer[offset+2], pixelbuffer[offset+3]));
+        }
     }
 
-    /* Flip vertically for OpenGL texture coordinates */
-    OpenGL_FlipPixelBufferYCopy(pixelbuffer, flipped_buffer, width, height);
-
-    /* Upload to texture */
-    texture = OpenGL_UploadTextureFromBuffer(flipped_buffer, width, height);
-    FreeVec(flipped_buffer);
+    /*
+     * Upload pixel buffer directly to texture WITHOUT flipping.
+     * 
+     * The projection matrix uses glOrtho(0, width, height, 0, -1, 1) which
+     * already flips Y to match screen coordinates. If we also flip the
+     * pixel data, we get double-flipping which puts content at wrong Y.
+     */
+    texture = OpenGL_UploadTextureFromBuffer(pixelbuffer, width, height);
     FreeVec(pixelbuffer);
 
     if (texture == 0) {
+        D(bug("[ZuneGfx:OpenGL] CopyFromRastPort: UploadTextureFromBuffer FAILED\n"));
         return;
     }
+    D(bug("[ZuneGfx:OpenGL] CopyFromRastPort: Texture created, id=%u\n", texture));
 
     /* Draw texture to framebuffer (replace, not blend) */
     glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, texture);  /* Explicitly bind the texture! */
     glDisable(GL_BLEND);
 
     if (glUseProgram_ptr) {
         glUseProgram_ptr(0);
     }
+    
+    D(bug("[ZuneGfx:OpenGL] CopyFromRastPort: GL state: TEXTURE_2D=%d, bound tex=%u\n",
+          glIsEnabled(GL_TEXTURE_2D), texture));
+
+    /*
+     * Ensure correct viewport and projection for the target.
+     * This is critical when drawing the full-size texture to the FBO,
+     * as the projection matrix must match the FBO dimensions.
+     */
+    if (rp->target_board) {
+        struct DrawingBoard *board = rp->target_board;
+        OpenGLFBOData *fbo = (OpenGLFBOData *)board->backend_data;
+        
+        D(bug("[ZuneGfx:OpenGL] CopyFromRastPort: board=%dx%d, texture=%dx%d, dst=%d,%d\n",
+              board->width, board->height, width, height, dst_x, dst_y));
+        
+        /*
+         * Explicitly re-bind the FBO before drawing.
+         * glAMakeCurrent may have reset the framebuffer binding.
+         */
+        if (fbo && fbo->valid && glBindFramebuffer_ptr) {
+            D(bug("[ZuneGfx:OpenGL] CopyFromRastPort: Re-binding FBO %u before draw\n", fbo->fbo_id));
+            glBindFramebuffer_ptr(GL_FRAMEBUFFER, fbo->fbo_id);
+        }
+        
+        glViewport(0, 0, board->width, board->height);
+        glMatrixMode(GL_PROJECTION);
+        glLoadIdentity();
+        glOrtho(0, board->width, board->height, 0, -1, 1);
+        glMatrixMode(GL_MODELVIEW);
+        glLoadIdentity();
+    }
 
     glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+    D(bug("[ZuneGfx:OpenGL] CopyFromRastPort: Drawing textured quad at %d,%d size %dx%d\n",
+          dst_x, dst_y, width, height));
     OpenGL_DrawTexturedQuad(dst_x, dst_y, width, height, FALSE);
-
+    
+    /* Ensure the draw is flushed to the FBO */
     glFlush();
+    glFinish();
+    
+    /* Debug: verify FBO content immediately after draw */
+    {
+        GLint current_fbo = 0;
+        UBYTE test_pixel[4] = {0, 0, 0, 0};
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &current_fbo);
+        D(bug("[ZuneGfx:OpenGL] CopyFromRastPort: After draw, current FBO binding = %d\n", current_fbo));
+        
+        /* Read back a pixel that should be yellow (150, 50 in screen coords) */
+        /* Note: OpenGL Y is flipped, so we need to flip the Y coordinate */
+        if (rp->target_board) {
+            WORD read_y = rp->target_board->height - 150 - 1;
+            glReadPixels(50, read_y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, test_pixel);
+            D(bug("[ZuneGfx:OpenGL] CopyFromRastPort: FBO readback at (50,%d) RGBA = %02x %02x %02x %02x\n",
+                  read_y, test_pixel[0], test_pixel[1], test_pixel[2], test_pixel[3]));
+        }
+    }
+
     glEnable(GL_BLEND);
     glDisable(GL_TEXTURE_2D);
 
@@ -2902,24 +2972,23 @@ void OpenGL_BlitFBOToRastPort(struct DrawingBoard *board, struct RastPort *dst_r
     /*
      * Make the correct GL context current for FBO access.
      *
-     * FBOs are created under the global context (g_opengl_priv->gl_context),
-     * so we must use the global context for reading FBO content. The parent_context
-     * field was intended for per-window context tracking, but since all contexts
-     * share resources (textures, FBOs) via GLA_ShareContext, we should use the
-     * global context which is guaranteed to have created the FBO.
+     * FBOs are NOT shared between GL contexts in Mesa - each context has its
+     * own FBO namespace. The FBO content was rendered in the global context
+     * (g_opengl_priv->gl_context), so we MUST use that same context to read it.
      *
-     * First, flush any pending operations in the current context to ensure
-     * FBO content is complete before switching contexts.
+     * First, flush any pending operations to ensure FBO content is complete.
      */
     glFlush();
     glFinish();
     
     if (g_opengl_priv && g_opengl_priv->gl_context) {
-        D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: using global context (FBO owner)\n"));
-        glAMakeCurrent((GLAContext)g_opengl_priv->gl_context);
-    } else if (fbo->parent_context && fbo->parent_context->gl_context) {
-        D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: using parent context (fallback)\n"));
-        glAMakeCurrent((GLAContext)fbo->parent_context->gl_context);
+        GLAContext current_ctx = glAGetCurrentContext();
+        D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: current ctx=%p, global ctx=%p\n",
+              current_ctx, g_opengl_priv->gl_context));
+        if (current_ctx != (GLAContext)g_opengl_priv->gl_context) {
+            D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: switching to global context for FBO access\n"));
+            glAMakeCurrent((GLAContext)g_opengl_priv->gl_context);
+        }
     } else {
         D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: no GL context!\n"));
         return;
@@ -3773,6 +3842,20 @@ static BOOL OpenGL_SwitchToDrawingBoard(struct RenderPort *rp)
     }
 
     board = rp->target_board;
+    
+    /*
+     * CRITICAL: Ensure the global context is current before any GL operations.
+     * Another application/compositor may have made a different context current.
+     * FBOs are per-context, so we MUST use the same context that created the FBO.
+     */
+    if (g_opengl_priv->context_created && g_opengl_priv->gl_context) {
+        GLAContext current_ctx = glAGetCurrentContext();
+        if (current_ctx != (GLAContext)g_opengl_priv->gl_context) {
+            D(bug("[ZuneGfx:OpenGL] SwitchToDrawingBoard: Wrong context active (%p), switching to global (%p)\n",
+                  current_ctx, g_opengl_priv->gl_context));
+            glAMakeCurrent((GLAContext)g_opengl_priv->gl_context);
+        }
+    }
 
     /*
      * FBO-based DrawingBoard switching
@@ -3860,8 +3943,12 @@ static BOOL OpenGL_SwitchToDrawingBoard(struct RenderPort *rp)
     if (g_opengl_priv->current_target_type != OPENGL_TARGET_DRAWINGBOARD ||
         g_opengl_priv->current_board != board) {
 
+        D(bug("[ZuneGfx:OpenGL] SwitchToDrawingBoard: Binding FBO %u (was target_type=%d)\n",
+              fbo->fbo_id, g_opengl_priv->current_target_type));
+
         /* Bind the FBO - this is much faster than glASetRast! */
         if (!OpenGL_BindFBO(fbo)) {
+            D(bug("[ZuneGfx:OpenGL] SwitchToDrawingBoard: BindFBO FAILED\n"));
             return FALSE;
         }
 
@@ -3874,6 +3961,23 @@ static BOOL OpenGL_SwitchToDrawingBoard(struct RenderPort *rp)
 
         /* DrawingBoards don't need sync - they start fresh */
         g_opengl_priv->needs_sync = FALSE;
+    } else {
+        D(bug("[ZuneGfx:OpenGL] SwitchToDrawingBoard: Already on same board, just reset projection\n"));
+        /*
+         * Already on the same DrawingBoard - FBO is already bound.
+         * However, we must ensure viewport and projection are correct,
+         * as they may have been modified by other GL operations
+         * (e.g., ZuneReload's texture drawing or window resize).
+         *
+         * This is a lightweight operation compared to full FBO binding,
+         * but ensures rendering uses correct coordinate system.
+         */
+        glViewport(0, 0, fbo->width, fbo->height);
+        glMatrixMode(GL_PROJECTION);
+        glLoadIdentity();
+        glOrtho(0, fbo->width, fbo->height, 0, -1, 1);
+        glMatrixMode(GL_MODELVIEW);
+        glLoadIdentity();
     }
 
     return TRUE;
