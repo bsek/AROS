@@ -60,7 +60,7 @@ void CybergfxDrawRectangleToRasterPort(struct RenderPort *renderport,
      * This works correctly for both window RastPorts and off-screen DrawingBoards
      * since it uses the pre-converted ARGB value instead of pen index */
     if (fill_brush->type == ZUNE_BRUSH_TYPE_SOLID || fill_brush->type == ZUNE_BRUSH_TYPE_PEN) {
-      ULONG argb = fill_brush->internal.color->original_pixel;
+      ULONG argb = fill_brush->internal.color.original_pixel;
       D(bug("CybergfxDrawRectangleToRasterPort: Using FillPixelArray with ARGB=0x%08lx\n", argb));
       FillPixelArray(rp, x, y, width, height, argb);
     } else {

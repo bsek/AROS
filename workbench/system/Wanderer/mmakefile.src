@@ -30,6 +30,7 @@ FILES := main \
 
 #MM  workbench-system-wanderer-app : \
 #MM  workbench-libs-muimaster-includes \
+#MM  workbench-libs-zunegfx \
 #MM  workbench-system-wanderer-env \
 #MM  workbench-system-wanderer-catalogs \
 #MM  workbench-system-wanderer-classes

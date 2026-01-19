@@ -1094,10 +1094,17 @@ int _ShowPartsOfLayer(struct Layer * l,
    * - Standard windows: Normal fast blitting (no compositor overhead)
    * - Alpha windows: Hardware-accelerated compositing with transparency
    */
+  kprintf("[hyperlayers] _ShowPartsOfLayer: layer=%p AlphaFlags=0x%02x LayerInfo=%p\n", 
+          l, IL(l)->il_AlphaFlags, l->LayerInfo);
+  if (l->LayerInfo && LIE(l->LayerInfo))
+    kprintf("[hyperlayers] _ShowPartsOfLayer: CompositorHook=%p\n", LIE(l->LayerInfo)->lie_CompositorHook);
+  
   if ((IL(l)->il_AlphaFlags & ILAF_ALPHA) &&
       l->LayerInfo && LIE(l->LayerInfo) && LIE(l->LayerInfo)->lie_CompositorHook)
   {
     struct CompositorMsg msg;
+    
+    kprintf("[hyperlayers] CALLING COMPOSITOR HOOK for alpha layer %p!\n", l);
     
     msg.cm_Method = COMP_SHOWLAYER;
     msg.cm_Layer = l;
@@ -1113,9 +1120,11 @@ int _ShowPartsOfLayer(struct Layer * l,
         AROS_UFCA(struct CompositorMsg *, &msg, A1)
     );
     
-    /* Compositor handles the display - still need to update VisibleRegion */
-    OrRegionRegion(show_region, l->VisibleRegion);
-    return TRUE;
+    /* 
+     * Don't return early - continue with normal cliprect handling.
+     * The compositor is notified, but we still need standard layer
+     * system to maintain cliprects for z-order changes to work.
+     */
   }
 
   /*
@@ -1165,6 +1174,42 @@ int _ShowLayer(struct Layer * l, struct LayersBase *LayersBase)
   struct ClipRect * prevcr = NULL;
   struct BitMap * bm = l->rp->BitMap;
   int invisible = FALSE;
+
+  kprintf("[hyperlayers] _ShowLayer: layer=%p AlphaFlags=0x%02x LayerInfo=%p\n", l, IL(l)->il_AlphaFlags, l->LayerInfo);
+  if (l->LayerInfo) {
+    kprintf("[hyperlayers] _ShowLayer: LayerInfo_extra=%p\n", l->LayerInfo->LayerInfo_extra);
+    if (LIE(l->LayerInfo)) {
+      kprintf("[hyperlayers] _ShowLayer: CompositorHook=%p\n", LIE(l->LayerInfo)->lie_CompositorHook);
+    }
+  }
+
+  /*
+   * If this is an alpha layer and a compositor is active, delegate to compositor.
+   * The compositor will handle the blending when the layer content is ready.
+   */
+  if ((IL(l)->il_AlphaFlags & ILAF_ALPHA) &&
+      l->LayerInfo && LIE(l->LayerInfo) && LIE(l->LayerInfo)->lie_CompositorHook)
+  {
+    struct CompositorMsg msg;
+    
+    kprintf("[hyperlayers] _ShowLayer: CALLING COMPOSITOR HOOK for new alpha layer %p!\n", l);
+    
+    msg.cm_Method = COMP_CREATELAYER;
+    msg.cm_Layer = l;
+    msg.cm_Region = l->VisibleRegion;
+    msg.cm_Reserved[0] = NULL;
+    msg.cm_Reserved[1] = NULL;
+    msg.cm_Reserved[2] = NULL;
+    msg.cm_Reserved[3] = NULL;
+    
+    AROS_UFC3NR(void, LIE(l->LayerInfo)->lie_CompositorHook->h_Entry,
+        AROS_UFCA(struct Hook *,         LIE(l->LayerInfo)->lie_CompositorHook, A0),
+        AROS_UFCA(struct Layer_Info *,   l->LayerInfo, A2),
+        AROS_UFCA(struct CompositorMsg *, &msg, A1)
+    );
+    
+    /* Still need to create cliprects for the layer system */
+  }
 
   r = AndRegionRegionND(l->shape, l->VisibleRegion);
   AndRegionRegion(l->parent->shape, r);

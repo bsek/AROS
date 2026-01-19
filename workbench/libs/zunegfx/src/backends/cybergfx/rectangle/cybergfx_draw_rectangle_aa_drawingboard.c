@@ -35,11 +35,11 @@ static void cybergfx_init_fill_state(struct ZuneBrush *brush, BOOL draw_fill, cy
     state->enabled = TRUE;
     state->brush = brush;
 
-    if ((brush->type == ZUNE_BRUSH_TYPE_SOLID || brush->type == ZUNE_BRUSH_TYPE_PEN) && brush->internal.color) {
+    if (brush->type == ZUNE_BRUSH_TYPE_SOLID || brush->type == ZUNE_BRUSH_TYPE_PEN) {
         state->solid = TRUE;
-        state->solid_r = brush->internal.color->r;
-        state->solid_g = brush->internal.color->g;
-        state->solid_b = brush->internal.color->b;
+        state->solid_r = brush->internal.color.r;
+        state->solid_g = brush->internal.color.g;
+        state->solid_b = brush->internal.color.b;
     }
 }
 
@@ -72,7 +72,7 @@ static void cybergfx_sample_fill_block(const cybergfx_fill_state *state, WORD re
 
 static BOOL cybergfx_prefill_solid_core_board(struct DrawingBoard *board, const cybergfx_fill_state *state, BOOL hasBorder,
                                               const cybergfx_aa_rect_params *params, int *out_min_x, int *out_max_x, int *out_min_y, int *out_max_y) {
-    if (!state->solid || !state->brush || !state->brush->internal.color) {
+    if (!state->solid || !state->brush || !state->brush->internal.valid) {
         return FALSE;
     }
 
@@ -144,9 +144,9 @@ void CybergfxAARectangleDrawingBoard(struct DrawingBoard *board, UWORD x, UWORD 
     }
 
     /* Debug fill brush RGB values if available */
-    if (fill_brush && fill_brush->internal.valid && fill_brush->internal.color) {
-        D(bug("Fill brush RGBA: (%d, %d, %d, %d)\n", (int)fill_brush->internal.color->r, (int)fill_brush->internal.color->g,
-              (int)fill_brush->internal.color->b, (int)fill_brush->internal.color->a));
+    if (fill_brush && fill_brush->internal.valid) {
+        D(bug("Fill brush RGBA: (%d, %d, %d, %d)\n", (int)fill_brush->internal.color.r, (int)fill_brush->internal.color.g,
+              (int)fill_brush->internal.color.b, (int)fill_brush->internal.color.a));
     } else if (fill_brush) {
         D(bug("Fill brush present but no valid color information\n"));
     } else {

@@ -34,6 +34,10 @@
 
 #include <proto/alib.h>
 
+/* Layer compositor support */
+#include <proto/zunegfx.h>
+struct Library *ZuneGfxBase = NULL;
+
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
@@ -107,6 +111,9 @@ struct Wanderer_DATA
     struct MUI_InputHandlerNode         wd_NotifyIHN;
 
     BOOL                                wd_Option_BackDropMode;
+
+    /* Layer compositor for hardware-accelerated transparency */
+    struct LayerCompositor              *wd_Compositor;
 };
 
 const UBYTE     wand_titlestr[] = WANDERERSTR;
@@ -3368,6 +3375,22 @@ IPTR Wanderer__OM_DISPOSE(Class *CLASS, Object *self, Msg message)
 {
     SETUP_WANDERER_INST_DATA;
 
+    /* Cleanup layer compositor */
+    if (data->wd_Compositor)
+    {
+        DeactivateLayerCompositor(data->wd_Compositor);
+        DestroyLayerCompositor(data->wd_Compositor);
+        data->wd_Compositor = NULL;
+D(bug("[Wanderer] %s: Layer compositor destroyed\n", __func__));
+    }
+
+    /* Close zunegfx.library */
+    if (ZuneGfxBase)
+    {
+        CloseLibrary(ZuneGfxBase);
+        ZuneGfxBase = NULL;
+    }
+
     if (data->wd_CommandPort)
     {
         /* InputHandler's have only been added if the creation
@@ -3955,6 +3978,46 @@ D(bug("[Wanderer] %s: Couldn't lock screen!\n", __func__));
         return NULL;
     }
 D(bug("[Wanderer] %s: Using Screen @ %p\n", __func__, data->wd_Screen));
+
+    /* Initialize layer compositor for hardware-accelerated transparency */
+    if (data->wd_Compositor == NULL && isWorkbenchWindow)
+    {
+        /* Open zunegfx.library if not already open */
+        if (ZuneGfxBase == NULL)
+        {
+            ZuneGfxBase = OpenLibrary("zunegfx.library", 0);
+D(bug("[Wanderer] %s: zunegfx.library @ %p\n", __func__, ZuneGfxBase));
+        }
+        
+        if (ZuneGfxBase != NULL)
+        {
+            APTR masterCtx = ZuneGetMasterGLContext();
+D(bug("[Wanderer] %s: Master GL context @ %p\n", __func__, masterCtx));
+            
+            if (masterCtx)
+                data->wd_Compositor = CreateLayerCompositorShared(data->wd_Screen, masterCtx);
+            else
+                data->wd_Compositor = CreateLayerCompositor(data->wd_Screen);
+            
+            if (data->wd_Compositor)
+            {
+                if (ActivateLayerCompositor(data->wd_Compositor))
+                {
+D(bug("[Wanderer] %s: Layer compositor activated!\n", __func__));
+                }
+                else
+                {
+D(bug("[Wanderer] %s: Failed to activate layer compositor\n", __func__));
+                    DestroyLayerCompositor(data->wd_Compositor);
+                    data->wd_Compositor = NULL;
+                }
+            }
+            else
+            {
+D(bug("[Wanderer] %s: Failed to create layer compositor\n", __func__));
+            }
+        }
+    }
 
     _NewWandDrawerMenu__menustrip = Wanderer__Func_CreateWandererIntuitionMenu (isWorkbenchWindow, useBackdrop);
 
