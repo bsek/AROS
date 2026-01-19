@@ -178,7 +178,7 @@ struct ZuneBrush {
   struct {
     BOOL valid; /* TRUE if cache data is valid and up-to-date */
 
-    struct InternalColor *color;
+    struct InternalColor color;  /* Inline color cache (no allocation needed) */
 
     /* Cached data for LINEAR_GRADIENT - incremental calculation */
     struct {

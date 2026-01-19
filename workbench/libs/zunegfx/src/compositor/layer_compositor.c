@@ -76,10 +76,12 @@ struct IntLayer
 #define ILAF_NOSHADOW        (1 << 1)
 #define ILAF_COMPOSITEDIRTY  (1 << 2)
 
-/* Access LayerInfo_extra */
+/* Access LayerInfo_extra - must match rom/hyperlayers/layers_intern.h exactly */
+#include <setjmp.h>
+
 struct LayerInfo_extra
 {
-    UBYTE           lie_JumpBuf[256];
+    jmp_buf         lie_JumpBuf;
     struct MinList  lie_ResourceList;
     UBYTE           lie_pad[4];
     struct Hook    *lie_CompositorHook;
@@ -110,6 +112,10 @@ struct CompositorMsg
 #define COMP_DIRTYLAYER     4
 #define COMP_CREATELAYER    5
 #define COMP_DELETELAYER    6
+
+/* Forward declarations */
+void CompositorDrawLayerBorder(struct LayerCompositor *comp, struct Layer *layer);
+void CompositorBlendLayerAlpha(struct LayerCompositor *comp, struct Layer *layer);
 
 /*
  * Shader sources
@@ -191,10 +197,28 @@ AROS_UFH3(void, CompositorHookFunc,
             }
             break;
             
-        case COMP_DIRTYLAYER:
-            /* Content changed - mark for re-read */
+        case COMP_MOVELAYER:
+            /*
+             * Layer was moved or resized. For alpha layers, we need to 
+             * re-blend the content at the new position.
+             */
             if (msg->cm_Layer)
             {
+                bug("[LayerCompositor] COMP_MOVELAYER: Alpha-blending layer %p at new position\n", msg->cm_Layer);
+                CompositorBlendLayerAlpha(comp, msg->cm_Layer);
+            }
+            break;
+            
+        case COMP_DIRTYLAYER:
+            /*
+             * Content changed - this is called AFTER window content has been
+             * rendered to the layer. Now we alpha-blend it to the screen.
+             */
+            if (msg->cm_Layer)
+            {
+                bug("[LayerCompositor] COMP_DIRTYLAYER: Alpha-blending layer %p\n", msg->cm_Layer);
+                CompositorBlendLayerAlpha(comp, msg->cm_Layer);
+                
                 struct Window *win = (struct Window *)IL(msg->cm_Layer)->window;
                 if (win)
                 {
@@ -212,6 +236,18 @@ AROS_UFH3(void, CompositorHookFunc,
                 struct Window *win = (struct Window *)IL(msg->cm_Layer)->window;
                 if (win)
                     CompositorUnregisterWindowInternal(comp, win);
+            }
+            break;
+            
+        case COMP_CREATELAYER:
+            /*
+             * New alpha layer created - alpha-blend it.
+             * This is called from _ShowLayer when a new alpha layer is created.
+             */
+            if (msg->cm_Layer)
+            {
+                bug("[LayerCompositor] COMP_CREATELAYER: Alpha-blending new layer %p\n", msg->cm_Layer);
+                CompositorBlendLayerAlpha(comp, msg->cm_Layer);
             }
             break;
     }
@@ -585,6 +621,9 @@ BOOL ActivateLayerCompositorInternal(struct LayerCompositor *comp)
     if (comp->lc_Active)
         return TRUE;
     
+    bug("[LayerCompositor] Activating: screen=%p LayerInfo=%p\n", comp->lc_Screen, comp->lc_LayerInfo);
+    bug("[LayerCompositor] LayerInfo_extra=%p\n", comp->lc_LayerInfo->LayerInfo_extra);
+    
     if (!comp->lc_LayerInfo->LayerInfo_extra)
     {
         D(bug("[LayerCompositor] No LayerInfo_extra!\n"));
@@ -595,6 +634,9 @@ BOOL ActivateLayerCompositorInternal(struct LayerCompositor *comp)
     LIE(comp->lc_LayerInfo)->lie_CompositorHook = &comp->lc_Hook;
     LIE(comp->lc_LayerInfo)->lie_CompositorData = comp;
     UnlockLayerInfo(comp->lc_LayerInfo);
+    
+    bug("[LayerCompositor] Hook installed at %p, LayerInfo_extra=%p\n", 
+        &comp->lc_Hook, comp->lc_LayerInfo->LayerInfo_extra);
     
     comp->lc_Active = TRUE;
     
@@ -860,96 +902,347 @@ void CompositorDrawShadow(struct LayerCompositor *comp,
 }
 
 /*
+ * CompositorBlendLayerAlpha - Alpha-blend a layer's content to the screen using OpenGL
+ *
+ * This uses OpenGL for hardware-accelerated alpha blending:
+ * 1. Read window content from RastPort into a texture
+ * 2. Draw a textured quad with alpha blending enabled
+ * 3. The result is composited directly to the screen via GL context
+ *
+ * Only blends within the layer's VisibleRegion to respect z-order.
+ * The alpha value comes from the layer's il_Alpha field (0-255).
+ */
+void CompositorBlendLayerAlpha(struct LayerCompositor *comp, struct Layer *layer)
+{
+    struct Window *win;
+    struct RegionRectangle *rr;
+    UBYTE *pixel_buffer = NULL;
+    UBYTE alpha;
+    GLuint texture = 0;
+    
+    if (!comp || !layer || !CyberGfxBase)
+        return;
+    
+    /* Check if layer has any visible area */
+    if (!layer->VisibleRegion || !layer->VisibleRegion->RegionRectangle)
+    {
+        bug("[LayerCompositor] BlendAlpha: Layer %p has no visible region\n", layer);
+        return;
+    }
+    
+    /* Get the window from the layer */
+    win = (struct Window *)IL(layer)->window;
+    if (!win || !win->RPort || !win->RPort->BitMap)
+    {
+        bug("[LayerCompositor] BlendAlpha: Layer %p has no valid window\n", layer);
+        return;
+    }
+    
+    /* Get alpha value from layer (default to semi-transparent if not set) */
+    alpha = IL(layer)->il_Alpha;
+    if (alpha == 0)
+        alpha = 200;  /* Default semi-transparent */
+    
+    bug("[LayerCompositor] BlendAlpha: Layer %p, Window %p, Alpha=%d\n", 
+        layer, win, alpha);
+    bug("[LayerCompositor] BlendAlpha: Layer bounds (%d,%d)-(%d,%d)\n",
+        layer->bounds.MinX, layer->bounds.MinY,
+        layer->bounds.MaxX, layer->bounds.MaxY);
+    
+    /* Check if we have a valid GL context */
+    if (!comp->lc_ContextValid || !comp->lc_GLContext)
+    {
+        bug("[LayerCompositor] BlendAlpha: No valid GL context, falling back to software\n");
+        /* Fallback to software blending */
+        goto software_fallback;
+    }
+    
+    /* Make compositor's GL context current */
+    glAMakeCurrent((GLAContext)comp->lc_GLContext);
+    
+    /* Setup GL state for alpha blending */
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable(GL_TEXTURE_2D);
+    
+    /* Iterate through all visible rectangles and blend each one */
+    rr = layer->VisibleRegion->RegionRectangle;
+    while (rr)
+    {
+        /* RegionRectangle bounds are relative to Region bounds */
+        WORD vx1 = layer->VisibleRegion->bounds.MinX + rr->bounds.MinX;
+        WORD vy1 = layer->VisibleRegion->bounds.MinY + rr->bounds.MinY;
+        WORD vx2 = layer->VisibleRegion->bounds.MinX + rr->bounds.MaxX;
+        WORD vy2 = layer->VisibleRegion->bounds.MinY + rr->bounds.MaxY;
+        WORD width = vx2 - vx1 + 1;
+        WORD height = vy2 - vy1 + 1;
+        
+        /* Source coordinates in window's content area */
+        WORD src_x = vx1 - layer->bounds.MinX;
+        WORD src_y = vy1 - layer->bounds.MinY;
+        GLfloat alpha_f = alpha / 255.0f;
+        
+        bug("[LayerCompositor] BlendAlpha: Visible rect (%d,%d)-(%d,%d), src=(%d,%d)\n",
+            vx1, vy1, vx2, vy2, src_x, src_y);
+        
+        /* Allocate buffer for this rectangle */
+        pixel_buffer = AllocVec(width * height * 4, MEMF_ANY);
+        if (pixel_buffer)
+        {
+            /* Read pixels from window's RastPort (RGBA format for OpenGL) */
+            ReadPixelArray(pixel_buffer, 0, 0, width * 4,
+                          win->RPort, src_x, src_y,
+                          width, height, RECTFMT_RGBA);
+            
+            /* Create texture from pixel data */
+            glGenTextures(1, &texture);
+            glBindTexture(GL_TEXTURE_2D, texture);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0,
+                        GL_RGBA, GL_UNSIGNED_BYTE, pixel_buffer);
+            
+            /* Draw textured quad with alpha */
+            glColor4f(1.0f, 1.0f, 1.0f, alpha_f);
+            
+            glBegin(GL_QUADS);
+                /* Bottom-left */
+                glTexCoord2f(0.0f, 1.0f);
+                glVertex2i(vx1, vy2 + 1);
+                /* Bottom-right */
+                glTexCoord2f(1.0f, 1.0f);
+                glVertex2i(vx2 + 1, vy2 + 1);
+                /* Top-right */
+                glTexCoord2f(1.0f, 0.0f);
+                glVertex2i(vx2 + 1, vy1);
+                /* Top-left */
+                glTexCoord2f(0.0f, 0.0f);
+                glVertex2i(vx1, vy1);
+            glEnd();
+            
+            /* Cleanup texture */
+            glDeleteTextures(1, &texture);
+            texture = 0;
+            
+            FreeVec(pixel_buffer);
+            pixel_buffer = NULL;
+        }
+        
+        rr = rr->Next;
+    }
+    
+    /* Flush GL commands */
+    glFlush();
+    
+    /* Swap buffers to make visible (if double-buffered) */
+    glASwapBuffers((GLAContext)comp->lc_GLContext);
+    
+    return;
+
+software_fallback:
+    /* Software fallback using WritePixelArrayAlpha */
+    rr = layer->VisibleRegion->RegionRectangle;
+    while (rr)
+    {
+        WORD vx1 = layer->VisibleRegion->bounds.MinX + rr->bounds.MinX;
+        WORD vy1 = layer->VisibleRegion->bounds.MinY + rr->bounds.MinY;
+        WORD vx2 = layer->VisibleRegion->bounds.MinX + rr->bounds.MaxX;
+        WORD vy2 = layer->VisibleRegion->bounds.MinY + rr->bounds.MaxY;
+        WORD width = vx2 - vx1 + 1;
+        WORD height = vy2 - vy1 + 1;
+        WORD src_x = vx1 - layer->bounds.MinX;
+        WORD src_y = vy1 - layer->bounds.MinY;
+        
+        pixel_buffer = AllocVec(width * height * 4, MEMF_ANY);
+        if (pixel_buffer)
+        {
+            LONG i;
+            
+            ReadPixelArray(pixel_buffer, 0, 0, width * 4,
+                          win->RPort, src_x, src_y,
+                          width, height, RECTFMT_ARGB);
+            
+            for (i = 0; i < width * height; i++)
+            {
+                ULONG pixel_alpha = pixel_buffer[i * 4];
+                pixel_buffer[i * 4] = (pixel_alpha * alpha) / 255;
+            }
+            
+            WritePixelArrayAlpha(pixel_buffer, 0, 0, width * 4,
+                                &comp->lc_Screen->RastPort,
+                                vx1, vy1, width, height, 0xFFFFFFFF);
+            
+            FreeVec(pixel_buffer);
+        }
+        
+        rr = rr->Next;
+    }
+}
+
+/*
+ * CompositorDrawLayerBorder - Draw a red border inside a layer
+ *
+ * This is used to visually verify that the compositor hook is being called.
+ * Takes a Layer pointer directly (doesn't need a registered CompositorWindow).
+ * Border is drawn INSIDE the layer bounds so it moves with the window.
+ * 
+ * IMPORTANT: Only draws within the layer's VisibleRegion to respect z-order.
+ * If another window is in front, those areas won't be drawn over.
+ */
+void CompositorDrawLayerBorder(struct LayerCompositor *comp, struct Layer *layer)
+{
+    WORD x1, y1, x2, y2;
+    WORD bw = 4;  /* Border width */
+    struct RegionRectangle *rr;
+    
+    if (!comp || !layer)
+        return;
+    
+    /* Check if layer has any visible area */
+    if (!layer->VisibleRegion || !layer->VisibleRegion->RegionRectangle)
+    {
+        bug("[LayerCompositor] Layer %p has no visible region - skipping border\n", layer);
+        return;
+    }
+    
+    x1 = layer->bounds.MinX;
+    y1 = layer->bounds.MinY;
+    x2 = layer->bounds.MaxX;
+    y2 = layer->bounds.MaxY;
+    
+    bug("[LayerCompositor] Drawing RED BORDER inside layer %p at (%d,%d)-(%d,%d)\n",
+          layer, x1, y1, x2, y2);
+    bug("[LayerCompositor] VisibleRegion bounds: (%d,%d)-(%d,%d)\n",
+          layer->VisibleRegion->bounds.MinX, layer->VisibleRegion->bounds.MinY,
+          layer->VisibleRegion->bounds.MaxX, layer->VisibleRegion->bounds.MaxY);
+    
+    /*
+     * Draw a bright red border INSIDE the layer bounds using CyberGraphics.
+     * Only draw within each visible rectangle to respect z-order.
+     */
+    if (CyberGfxBase && comp->lc_Screen)
+    {
+        struct RastPort rp;
+        ULONG red = 0x00FF0000;  /* ARGB red */
+        
+        InitRastPort(&rp);
+        rp.BitMap = comp->lc_Screen->RastPort.BitMap;
+        
+        /* Iterate through all visible rectangles */
+        rr = layer->VisibleRegion->RegionRectangle;
+        while (rr)
+        {
+            /* RegionRectangle bounds are relative to Region bounds */
+            WORD vx1 = layer->VisibleRegion->bounds.MinX + rr->bounds.MinX;
+            WORD vy1 = layer->VisibleRegion->bounds.MinY + rr->bounds.MinY;
+            WORD vx2 = layer->VisibleRegion->bounds.MinX + rr->bounds.MaxX;
+            WORD vy2 = layer->VisibleRegion->bounds.MinY + rr->bounds.MaxY;
+            
+            bug("[LayerCompositor]   Visible rect: (%d,%d)-(%d,%d)\n", vx1, vy1, vx2, vy2);
+            
+            /* Draw border parts that intersect with this visible rect */
+            
+            /* Top border - clip to visible rect */
+            if (vy1 <= y1 + bw - 1 && vy2 >= y1)
+            {
+                WORD ty1 = (y1 > vy1) ? y1 : vy1;
+                WORD ty2 = (y1 + bw - 1 < vy2) ? y1 + bw - 1 : vy2;
+                WORD tx1 = (x1 > vx1) ? x1 : vx1;
+                WORD tx2 = (x2 < vx2) ? x2 : vx2;
+                if (tx1 <= tx2 && ty1 <= ty2)
+                    FillPixelArray(&rp, tx1, ty1, tx2 - tx1 + 1, ty2 - ty1 + 1, red);
+            }
+            
+            /* Bottom border - clip to visible rect */
+            if (vy2 >= y2 - bw + 1 && vy1 <= y2)
+            {
+                WORD ty1 = (y2 - bw + 1 > vy1) ? y2 - bw + 1 : vy1;
+                WORD ty2 = (y2 < vy2) ? y2 : vy2;
+                WORD tx1 = (x1 > vx1) ? x1 : vx1;
+                WORD tx2 = (x2 < vx2) ? x2 : vx2;
+                if (tx1 <= tx2 && ty1 <= ty2)
+                    FillPixelArray(&rp, tx1, ty1, tx2 - tx1 + 1, ty2 - ty1 + 1, red);
+            }
+            
+            /* Left border - clip to visible rect (exclude corners already drawn) */
+            if (vx1 <= x1 + bw - 1 && vx2 >= x1)
+            {
+                WORD ty1 = (y1 + bw > vy1) ? y1 + bw : vy1;
+                WORD ty2 = (y2 - bw < vy2) ? y2 - bw : vy2;
+                WORD tx1 = (x1 > vx1) ? x1 : vx1;
+                WORD tx2 = (x1 + bw - 1 < vx2) ? x1 + bw - 1 : vx2;
+                if (tx1 <= tx2 && ty1 <= ty2)
+                    FillPixelArray(&rp, tx1, ty1, tx2 - tx1 + 1, ty2 - ty1 + 1, red);
+            }
+            
+            /* Right border - clip to visible rect (exclude corners already drawn) */
+            if (vx2 >= x2 - bw + 1 && vx1 <= x2)
+            {
+                WORD ty1 = (y1 + bw > vy1) ? y1 + bw : vy1;
+                WORD ty2 = (y2 - bw < vy2) ? y2 - bw : vy2;
+                WORD tx1 = (x2 - bw + 1 > vx1) ? x2 - bw + 1 : vx1;
+                WORD tx2 = (x2 < vx2) ? x2 : vx2;
+                if (tx1 <= tx2 && ty1 <= ty2)
+                    FillPixelArray(&rp, tx1, ty1, tx2 - tx1 + 1, ty2 - ty1 + 1, red);
+            }
+            
+            rr = rr->Next;
+        }
+    }
+}
+
+/*
  * CompositorDrawWindow - Draw a composited window with alpha
+ *
+ * For now, just draws a bright red border around the window to verify
+ * that the compositor hook is being called correctly.
  */
 void CompositorDrawWindow(struct LayerCompositor *comp,
                            struct CompositorWindow *cw)
 {
-    ULONG texID;
-    GLfloat alpha;
     WORD x1, y1, x2, y2;
+    WORD bw = 4;  /* Border width */
     
-    if (!comp || !cw || !comp->lc_ContextValid)
+    if (!comp || !cw)
         return;
     
     if (!cw->cw_Window || !cw->cw_Layer)
         return;
     
-    glAMakeCurrent((GLAContext)comp->lc_GLContext);
-    
-    /* Bind to screen (FBO 0) */
-    if (comp->lc_glBindFramebuffer)
-        ((PFNGLBINDFRAMEBUFFERPROC)comp->lc_glBindFramebuffer)(GL_FRAMEBUFFER, 0);
-    
-    /* Setup viewport for screen */
-    glViewport(0, 0, comp->lc_Width, comp->lc_Height);
-    
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    glOrtho(0, comp->lc_Width, comp->lc_Height, 0, -1, 1);
-    
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
-    
-    /* Draw shadow first (behind window) */
-    CompositorDrawShadow(comp, cw);
-    
-    /* Get texture for window content */
-    texID = CompositorGetWindowTexture(comp, cw);
-    if (texID == 0)
-    {
-        D(bug("[LayerCompositor] No texture for window %p\n", cw->cw_Window));
-        return;
-    }
-    
-    alpha = cw->cw_Alpha / 255.0f;
-    
     x1 = cw->cw_Layer->bounds.MinX;
     y1 = cw->cw_Layer->bounds.MinY;
-    x2 = cw->cw_Layer->bounds.MaxX + 1;
-    y2 = cw->cw_Layer->bounds.MaxY + 1;
+    x2 = cw->cw_Layer->bounds.MaxX;
+    y2 = cw->cw_Layer->bounds.MaxY;
     
-    D(bug("[LayerCompositor] Drawing window %p at (%d,%d)-(%d,%d) alpha=%.2f\n",
-          cw->cw_Window, x1, y1, x2, y2, alpha));
+    D(bug("[LayerCompositor] Drawing RED BORDER around window %p at (%d,%d)-(%d,%d)\n",
+          cw->cw_Window, x1, y1, x2, y2));
     
-    /* Use shader if available */
-    if (comp->lc_ShadersValid)
+    /*
+     * Draw a bright red border using CyberGraphics directly to the screen bitmap.
+     * This bypasses OpenGL entirely to verify the hook is being called.
+     */
+    if (CyberGfxBase && comp->lc_Screen)
     {
-        ((PFNGLUSEPROGRAMPROC)comp->lc_glUseProgram)(comp->lc_CompositeShader);
+        struct RastPort rp;
+        ULONG red = 0x00FF0000;  /* ARGB red */
         
-        if (comp->lc_UniTexture >= 0)
-            ((PFNGLUNIFORM1IPROC)comp->lc_glUniform1i)(comp->lc_UniTexture, 0);
-        if (comp->lc_UniAlpha >= 0)
-            ((PFNGLUNIFORM1FPROC)comp->lc_glUniform1f)(comp->lc_UniAlpha, alpha);
+        InitRastPort(&rp);
+        rp.BitMap = comp->lc_Screen->RastPort.BitMap;
         
-        glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+        /* Top border */
+        FillPixelArray(&rp, x1, y1, x2 - x1 + 1, bw, red);
+        
+        /* Bottom border */
+        FillPixelArray(&rp, x1, y2 - bw + 1, x2 - x1 + 1, bw, red);
+        
+        /* Left border */
+        FillPixelArray(&rp, x1, y1, bw, y2 - y1 + 1, red);
+        
+        /* Right border */
+        FillPixelArray(&rp, x2 - bw + 1, y1, bw, y2 - y1 + 1, red);
     }
-    else
-    {
-        if (comp->lc_glUseProgram)
-            ((PFNGLUSEPROGRAMPROC)comp->lc_glUseProgram)(0);
-        
-        glColor4f(1.0f, 1.0f, 1.0f, alpha);
-    }
-    
-    /* Draw textured quad */
-    glEnable(GL_TEXTURE_2D);
-    glBindTexture(GL_TEXTURE_2D, texID);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    
-    glBegin(GL_QUADS);
-    glTexCoord2f(0.0f, 0.0f); glVertex2i(x1, y1);
-    glTexCoord2f(1.0f, 0.0f); glVertex2i(x2, y1);
-    glTexCoord2f(1.0f, 1.0f); glVertex2i(x2, y2);
-    glTexCoord2f(0.0f, 1.0f); glVertex2i(x1, y2);
-    glEnd();
-    
-    glDisable(GL_TEXTURE_2D);
-    
-    /* Flush to ensure it's visible */
-    glFlush();
-    glASwapBuffers((GLAContext)comp->lc_GLContext);
 }
 
 /*

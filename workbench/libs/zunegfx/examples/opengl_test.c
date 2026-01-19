@@ -37,6 +37,7 @@ struct Screen *screen = NULL;
 struct Window *window = NULL;
 struct DrawingBoard *board = NULL;
 struct RenderPort *render_port = NULL;
+struct LayerCompositor *compositor = NULL;
 
 BOOL InitDemo(void);
 void CleanupDemo(void);
@@ -121,18 +122,35 @@ BOOL InitDemo(void) {
         return FALSE;
     }
 
+    /* Create and activate layer compositor for this screen */
+    printf("Creating layer compositor...\n");
+    compositor = CreateLayerCompositor(screen);
+    if (compositor) {
+        if (ActivateLayerCompositor(compositor)) {
+            printf("Layer compositor ACTIVATED\n");
+        } else {
+            printf("WARNING: Failed to activate compositor\n");
+            DestroyLayerCompositor(compositor);
+            compositor = NULL;
+        }
+    } else {
+        printf("WARNING: Failed to create compositor\n");
+    }
+
     window = OpenWindowTags(NULL,
         WA_CustomScreen, (IPTR)screen,
         WA_Left, 50,
         WA_Top, 50,
         WA_Width, DEMO_WIDTH,
         WA_Height, DEMO_HEIGHT,
-        WA_Title, (IPTR)"Minimal OpenGL Test",
+        WA_Title, (IPTR)"Minimal OpenGL Test (Alpha Window)",
         WA_DragBar, TRUE,
         WA_CloseGadget, TRUE,
         WA_DepthGadget, TRUE,
         WA_Activate, TRUE,
         WA_SimpleRefresh, TRUE,
+        WA_Alpha, TRUE,           /* Enable compositor for this window */
+        WA_AlphaValue, 200,       /* Slightly transparent (255=opaque) */
         WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_VANILLAKEY | IDCMP_REFRESHWINDOW,
         TAG_DONE);
 
@@ -175,6 +193,11 @@ void CleanupDemo(void) {
     if (window) {
         CloseWindow(window);
         window = NULL;
+    }
+    if (compositor) {
+        DeactivateLayerCompositor(compositor);
+        DestroyLayerCompositor(compositor);
+        compositor = NULL;
     }
     if (screen) {
         UnlockPubScreen(NULL, screen);

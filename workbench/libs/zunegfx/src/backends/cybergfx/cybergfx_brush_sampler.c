@@ -116,19 +116,10 @@ void PrepareBrushForRendering(struct RenderPort *rp, struct ZuneBrush *brush, WO
     D(bug("PrepareBrushForRendering: Processing brush type %s\n",
           brush->type == ZUNE_BRUSH_TYPE_SOLID ? "SOLID" : "PEN"));
 
-    /* Allocate memory for internal color if not already allocated */
-    if (!brush->internal.color) {
-      brush->internal.color = AllocMem(sizeof(struct InternalColor), MEMF_PUBLIC | MEMF_CLEAR);
-      if (!brush->internal.color) {
-        brush->internal.valid = FALSE;
-        break;
-      }
-      D(bug("PrepareBrushForRendering: Memory allocated at %p\n", brush->internal.color));
-    }
+    /* Use inline color struct - no allocation needed */
+    D(bug("PrepareBrushForRendering: Calling ZuneBrushToInternalColor with rp=%p, brush=%p, color=%p\n", rp, brush, &brush->internal.color));
 
-    D(bug("PrepareBrushForRendering: Calling ZuneBrushToInternalColor with rp=%p, brush=%p, color=%p\n", rp, brush, brush->internal.color));
-
-    if (!ZuneBrushToInternalColor(rp, brush, brush->internal.color)) {
+    if (!ZuneBrushToInternalColor(rp, brush, &brush->internal.color)) {
       brush->internal.valid = FALSE;
     }
     break;
@@ -288,10 +279,10 @@ void SampleBrush(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
   case ZUNE_BRUSH_TYPE_SOLID:
   case ZUNE_BRUSH_TYPE_PEN: {
     /* Use stored ARGB components directly - they're already in correct format */
-    *a = brush->internal.color->a;
-    *r = brush->internal.color->r;
-    *g = brush->internal.color->g;
-    *b = brush->internal.color->b;
+    *a = brush->internal.color.a;
+    *r = brush->internal.color.r;
+    *g = brush->internal.color.g;
+    *b = brush->internal.color.b;
     break;
   }
 
@@ -425,7 +416,7 @@ void SampleBrushBatch4(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
   case ZUNE_BRUSH_TYPE_SOLID:
   case ZUNE_BRUSH_TYPE_PEN: {
     /* All pixels get same color */
-    ULONG color = brush->internal.color->original_pixel;
+    ULONG color = brush->internal.color.original_pixel;
     UBYTE sa = ZUNE_GET_ALPHA(color);
     UBYTE sr = ZUNE_GET_RED(color);
     UBYTE sg = ZUNE_GET_GREEN(color);
@@ -509,11 +500,7 @@ void CleanupBrushInternalState(struct ZuneBrush *brush) {
     return;
   }
 
-  /* Free allocated internal color memory */
-  if (brush->internal.color) {
-    FreeMem(brush->internal.color, sizeof(struct InternalColor));
-    brush->internal.color = NULL;
-  }
+  /* internal.color is now inline, no need to free */
 
   /* Free pre-rasterized gradient cache */
   if (brush->internal.linear_cache.rasterized_pixels) {
@@ -544,7 +531,7 @@ void SampleBrushBatch8(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
   case ZUNE_BRUSH_TYPE_SOLID:
   case ZUNE_BRUSH_TYPE_PEN: {
     /* All pixels get same color */
-    ULONG color = brush->internal.color->original_pixel;
+    ULONG color = brush->internal.color.original_pixel;
     UBYTE sa = ZUNE_GET_ALPHA(color);
     UBYTE sr = ZUNE_GET_RED(color);
     UBYTE sg = ZUNE_GET_GREEN(color);
