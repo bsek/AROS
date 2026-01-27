@@ -1,0 +1,22 @@
+{
+  "name": "AROS Development",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "..",
+    "options": ["--platform=linux/amd64"]
+  },
+  "runArgs": ["--platform=linux/amd64"],
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+  "customizations": {},
+  "mounts": [
+    "source=aros-build,target=/home/vscode/build,type=volume"
+  ],
+  "postCreateCommand": "cd $AROS_BUILD && [ ! -f Makefile ] && $AROS_SOURCE/configure --target=linux-x86_64 --with-toolchain=gnu --with-serial-debug --enable-debug=all --with-gcc-version=15.2.0 --with-binutils-version=2.40 || echo 'Already configured'",
+  "remoteUser": "vscode",
+  "containerEnv": {
+    "AROS_SOURCE": "/workspaces/AROS",
+    "AROS_BUILD": "/home/vscode/build"
+  }
+}

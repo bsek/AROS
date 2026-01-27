@@ -1,0 +1,26 @@
+services:
+  aros-dev:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+      platforms:
+        - linux/amd64
+    platform: linux/amd64
+    volumes:
+      - ..:/workspaces/AROS:cached
+      - aros-build:/home/vscode/build
+      - aros-ccache:/home/vscode/.ccache
+    environment:
+      - AROS_SOURCE=/workspaces/AROS
+      - AROS_BUILD=/home/vscode/build
+      - CCACHE_DIR=/home/vscode/.ccache
+      - PATH=/usr/lib/ccache:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    user: vscode
+    working_dir: /workspaces/AROS
+    # stdin_open: true
+    # tty: true
+    command: tail -f /dev/null
+
+volumes:
+  aros-build:
+  aros-ccache:
