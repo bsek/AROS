@@ -1748,11 +1748,6 @@ static const char THIS_FILE[] = __FILE__;
         DEBUG_OPENSCREEN(dprintf("OpenScreen: init layers\n"));
 #ifdef __AROS__ /* AROS: We have no compositing layers */
         InitLayers(&screen->Screen.LayerInfo);
-        /* Allocate LayerInfo_extra for compositor hook support.
-         * FattenLayerInfo() allocates the extended structure that holds
-         * lie_CompositorHook for hardware-accelerated alpha compositing.
-         */
-        FattenLayerInfo(&screen->Screen.LayerInfo);
 #else
         if (((struct Library *)LayersBase)->lib_Version >= 52 && compositing &&
             screen->IMonitorNode->Compositing)

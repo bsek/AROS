@@ -47,10 +47,6 @@ struct OpenWindowActionMsg
     struct Layer                *parentlayer;
     BOOL                             invisible;
     BOOL                             success;
-    /* Layer compositor support */
-    BOOL                             use_alpha;
-    UBYTE                            alpha_value;
-    BOOL                             no_shadow;
 };
 
 static VOID int_openwindow(struct OpenWindowActionMsg *msg,
@@ -129,11 +125,6 @@ static VOID int_openwindow(struct OpenWindowActionMsg *msg,
     ULONG                            windowinvisible = FALSE;
     BOOL                                 driver_init_done = FALSE, have_helpgroup = FALSE;
     BOOL                             do_setwindowpointer = FALSE;
-
-    /* Layer compositor support */
-    BOOL                             use_alpha = FALSE;
-    UBYTE                            alpha_value = 255;  /* Fully opaque by default */
-    BOOL                             no_shadow = FALSE;
 
     ASSERT_VALID_PTR_ROMOK(newWindow);
 
@@ -551,22 +542,7 @@ moreFlags |= (name); else moreFlags &= ~(name)
             case WA_Hidden:
                 windowinvisible = tag->ti_Data;
                 break;
-
 #endif
-            /* Layer compositor support */
-            case WA_Alpha:
-                use_alpha = (BOOL)tag->ti_Data;
-                break;
-
-            case WA_AlphaValue:
-                alpha_value = (UBYTE)tag->ti_Data;
-                if (alpha_value < 255)
-                    use_alpha = TRUE;
-                break;
-
-            case WA_NoShadow:
-                no_shadow = (BOOL)tag->ti_Data;
-                break;
 
             case WA_Pointer:
             case WA_BusyPointer:
@@ -1090,10 +1066,6 @@ moreFlags |= (name); else moreFlags &= ~(name)
     msg.parentlayer = parentl;
     msg.invisible = windowinvisible;
     msg.success = FALSE;
-    /* Layer compositor support */
-    msg.use_alpha = use_alpha;
-    msg.alpha_value = alpha_value;
-    msg.no_shadow = no_shadow;
 
     DoSyncAction((APTR)int_openwindow, &msg.msg, IntuitionBase);
 
@@ -1282,11 +1254,6 @@ static VOID int_openwindow(struct OpenWindowActionMsg *msg,
     struct Layer  * parent = msg->parentlayer;
     BOOL            invisible = msg->invisible;
 
-    /* Layer compositor support */
-    BOOL            use_alpha = msg->use_alpha;
-    UBYTE           alpha_value = msg->alpha_value;
-    BOOL            no_shadow = msg->no_shadow;
-
 #ifdef SKINS
     BOOL            installtransphook = FALSE;
     BOOL            notransphook = TRUE;
@@ -1399,10 +1366,6 @@ static VOID int_openwindow(struct OpenWindowActionMsg *msg,
             {LA_WindowPtr, (IPTR)w     },
             {LA_ChildOf  , (IPTR)parent}, /* These two are AROS-specific */
             {LA_Hidden   , invisible   },
-            /* Layer compositor support */
-            {use_alpha ? LA_Alpha : TAG_IGNORE, TRUE},
-            {use_alpha ? LA_AlphaValue : TAG_IGNORE, (IPTR)alpha_value},
-            {no_shadow ? LA_NoShadow : TAG_IGNORE, TRUE},
             {TAG_DONE}
         };
 
@@ -1495,10 +1458,6 @@ static VOID int_openwindow(struct OpenWindowActionMsg *msg,
             {LA_WindowPtr, (IPTR)w     },
             {LA_ChildOf  , (IPTR)parent}, /* These two are AROS-specific */
             {LA_Hidden, invisible   },
-            /* Layer compositor support */
-            {use_alpha ? LA_Alpha : TAG_IGNORE, TRUE},
-            {use_alpha ? LA_AlphaValue : TAG_IGNORE, (IPTR)alpha_value},
-            {no_shadow ? LA_NoShadow : TAG_IGNORE, TRUE},
             {TAG_DONE}
         };
 

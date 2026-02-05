@@ -44,23 +44,9 @@ struct IntLayer
     IPTR	    window;	/* This is passed to shape hook. Comes from Intuition. */
     ULONG	    intflags;
     struct RastPort rp;		/* lay.rp */
-
-    /* Compositor support */
-    UBYTE           il_Alpha;          /* Global alpha 0-255, 255=opaque (default) */
-    UBYTE           il_AlphaFlags;     /* LAYERF_ALPHA, LAYERF_NOSHADOW, etc. */
-    UBYTE           il_Pad[2];         /* Padding for alignment */
-    APTR            il_CompositorData; /* Compositor-private per-layer data */
 };
 
 #define IL(x) ((struct IntLayer *)(x))
-
-/* Access LayerInfo_extra from Layer_Info */
-#define LIE(li) ((struct LayerInfo_extra *)((li)->LayerInfo_extra))
-
-/* Alpha flags for il_AlphaFlags */
-#define ILAF_ALPHA           (1 << 0)  /* Layer has per-pixel alpha or global alpha < 255 */
-#define ILAF_NOSHADOW        (1 << 1)  /* Compositor should not draw shadow for this layer */
-#define ILAF_COMPOSITEDIRTY  (1 << 2)  /* Layer content changed, needs recomposite */
 
 /* Standard layer priorities */
 #define ROOTPRIORITY		0
@@ -79,28 +65,7 @@ struct LayerInfo_extra
 #endif
     struct MinList lie_ResourceList;
     UBYTE          lie_pad[4];
-
-    /* Compositor support */
-    struct Hook   *lie_CompositorHook; /* External compositor callback, NULL if none */
-    APTR           lie_CompositorData; /* Compositor-private data for this Layer_Info */
 };
-
-/* Compositor hook message */
-struct CompositorMsg
-{
-    ULONG           cm_Method;   /* COMP_SHOWLAYER, COMP_HIDELAYER, etc. */
-    struct Layer   *cm_Layer;    /* Layer being affected */
-    struct Region  *cm_Region;   /* Region affected (may be NULL) */
-    APTR            cm_Reserved[4]; /* Reserved for future use */
-};
-
-/* Compositor hook methods */
-#define COMP_SHOWLAYER      1    /* Layer (part) becoming visible */
-#define COMP_HIDELAYER      2    /* Layer (part) becoming hidden */
-#define COMP_MOVELAYER      3    /* Layer moved or resized */
-#define COMP_DIRTYLAYER     4    /* Layer content changed */
-#define COMP_CREATELAYER    5    /* New layer created */
-#define COMP_DELETELAYER    6    /* Layer being deleted */
 
 /*
  * These are special types of ResData resources. If layers finds one of

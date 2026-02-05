@@ -691,11 +691,6 @@ struct ExtNewWindow
 #define WA_Parent   	     (WA_Dummy + 101)
 #define WA_Behind   	     (WA_Dummy + 103)
 
-/* AROS Layer Compositor support */
-#define WA_Alpha             (WA_Dummy + 110)  /* BOOL - window uses alpha compositing */
-#define WA_AlphaValue        (WA_Dummy + 111)  /* UBYTE - global alpha 0-255, 255=opaque */
-#define WA_NoShadow          (WA_Dummy + 112)  /* BOOL - compositor should not draw shadow */
-
 /* Flags */
 #define WFLG_SIZEGADGET     (1L<<0)
 #define WFLG_DRAGBAR	    (1L<<1)

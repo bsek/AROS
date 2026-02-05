@@ -34,14 +34,4 @@
 #define LA_Behind	(LA_AROS + 3)
 #define LA_ChildOf	(LA_AROS + 4)
 
-/* AROS Layer Compositor support */
-#define LA_Alpha        (LA_AROS + 10)  /* BOOL - layer uses alpha compositing */
-#define LA_AlphaValue   (LA_AROS + 11)  /* UBYTE - global alpha 0-255, 255=opaque */
-#define LA_NoShadow     (LA_AROS + 12)  /* BOOL - compositor should not draw shadow */
-
-/* Layer flags for compositing (used in Layer->Flags) */
-#define LAYERF_ALPHA           (1 << 11)  /* Layer has alpha channel or uses transparency */
-#define LAYERF_NOSHADOW        (1 << 12)  /* Compositor should not draw shadow for this layer */
-#define LAYERF_COMPOSITEDIRTY  (1 << 13)  /* Layer content changed, needs recomposite */
-
 #endif /* GRAPHICS_LAYERSEXT_H */
