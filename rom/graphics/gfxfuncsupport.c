@@ -4,69 +4,20 @@
 
 /****************************************************************************************/
 #include <aros/debug.h>
-#include <aros/asmcall.h>
 
 #include <cybergraphx/cybergraphics.h>
 #include <graphics/rpattr.h>
-#include <utility/hooks.h>
 #include <proto/layers.h>
 #include <proto/exec.h>
 #include <proto/graphics.h>
 #include <proto/oop.h>
 #include <clib/macros.h>
-#include <setjmp.h>
 
 #include "graphics_intern.h"
 #include "objcache.h"
 #include "intregions.h"
 #include "gfxfuncsupport.h"
 #include "graphics_driver.h"
-
-/*
- * Layer compositor support - access internal layer structures
- * Must match rom/hyperlayers/layers_intern.h exactly
- */
-struct IntLayer_gfx
-{
-    struct Layer    lay;
-    struct Hook    *shapehook;
-    IPTR            window;
-    ULONG           intflags;
-    struct RastPort rp;
-    
-    /* Compositor support */
-    UBYTE           il_Alpha;
-    UBYTE           il_AlphaFlags;
-    UBYTE           il_Pad[2];
-    APTR            il_CompositorData;
-};
-
-#define IL_GFX(x) ((struct IntLayer_gfx *)(x))
-
-/* Alpha flags */
-#define ILAF_ALPHA_GFX           (1 << 0)
-
-struct LayerInfo_extra_gfx
-{
-    jmp_buf         lie_JumpBuf;
-    struct MinList  lie_ResourceList;
-    UBYTE           lie_pad[4];
-    struct Hook    *lie_CompositorHook;
-    APTR            lie_CompositorData;
-};
-
-#define LIE_GFX(li) ((struct LayerInfo_extra_gfx *)((li)->LayerInfo_extra))
-
-/* Compositor message */
-struct CompositorMsg_gfx
-{
-    ULONG           cm_Method;
-    struct Layer   *cm_Layer;
-    struct Region  *cm_Region;
-    APTR            cm_Reserved[4];
-};
-
-#define COMP_DIRTYLAYER_GFX     4
 
 #define DEBUG_PLANARBM(x) DB2(x)
 
@@ -249,46 +200,6 @@ ULONG do_render_with_gc(struct RastPort *rp, Point *src, struct Rectangle *rr,
         } /* for (each cliprect in the layer) */
 
         UnlockLayerRom(L);
-        
-        /*
-         * If this is an alpha layer and compositor is active, notify it
-         * that content has been rendered. The compositor can then blend
-         * the layer content over the screen with alpha transparency.
-         */
-        bug("[graphics] do_render_with_gc: layer=%p pixwritten=%ld AlphaFlags=0x%02x\n", 
-            L, pixwritten, IL_GFX(L)->il_AlphaFlags);
-        if (L->LayerInfo) {
-            bug("[graphics] do_render_with_gc: LayerInfo=%p LayerInfo_extra=%p\n",
-                L->LayerInfo, L->LayerInfo->LayerInfo_extra);
-            if (LIE_GFX(L->LayerInfo)) {
-                bug("[graphics] do_render_with_gc: CompositorHook=%p\n",
-                    LIE_GFX(L->LayerInfo)->lie_CompositorHook);
-            }
-        }
-        
-        if (pixwritten > 0 &&
-            (IL_GFX(L)->il_AlphaFlags & ILAF_ALPHA_GFX) &&
-            L->LayerInfo && LIE_GFX(L->LayerInfo) && 
-            LIE_GFX(L->LayerInfo)->lie_CompositorHook)
-        {
-            struct CompositorMsg_gfx msg;
-            
-            bug("[graphics] do_render_with_gc: CALLING compositor DIRTYLAYER for alpha layer %p\n", L);
-            
-            msg.cm_Method = COMP_DIRTYLAYER_GFX;
-            msg.cm_Layer = L;
-            msg.cm_Region = NULL;
-            msg.cm_Reserved[0] = NULL;
-            msg.cm_Reserved[1] = NULL;
-            msg.cm_Reserved[2] = NULL;
-            msg.cm_Reserved[3] = NULL;
-            
-            AROS_UFC3NR(void, LIE_GFX(L->LayerInfo)->lie_CompositorHook->h_Entry,
-                AROS_UFCA(struct Hook *,            LIE_GFX(L->LayerInfo)->lie_CompositorHook, A0),
-                AROS_UFCA(struct Layer_Info *,     L->LayerInfo, A2),
-                AROS_UFCA(struct CompositorMsg_gfx *, &msg, A1)
-            );
-        }
     } /* if (rp->Layer) */
 
     return pixwritten;

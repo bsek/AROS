@@ -433,53 +433,6 @@ kprintf("\t\t%s: SHOWING parts of the layers behind the layer to be moved!\n",
   if (clipregion)
     _InternalInstallClipRegion(l, clipregion, 0, 0, LayersBase);
 
-  /*
-   * For alpha layers, we need to trigger a full refresh after moving.
-   * Alpha windows must re-render their content to blend with the new background.
-   * Add the entire visible area to DamageList to trigger IDCMP_REFRESHWINDOW.
-   */
-  if ((IL(l)->il_AlphaFlags & ILAF_ALPHA) && (dx || dy))
-  {
-    struct Rectangle damage_rect;
-    
-    kprintf("[hyperlayers] MoveSizeLayer: Adding full damage for alpha layer %p to trigger refresh\n", l);
-    
-    /* Damage rect is in layer-relative coordinates (0,0 based) */
-    damage_rect.MinX = 0;
-    damage_rect.MinY = 0;
-    damage_rect.MaxX = l->bounds.MaxX - l->bounds.MinX;
-    damage_rect.MaxY = l->bounds.MaxY - l->bounds.MinY;
-    
-    OrRectRegion(l->DamageList, &damage_rect);
-    l->Flags |= LAYERREFRESH;
-  }
-  
-  /*
-   * Notify compositor if this is an alpha layer.
-   * The compositor may need to re-composite the window at its new position.
-   */
-  if ((IL(l)->il_AlphaFlags & ILAF_ALPHA) &&
-      l->LayerInfo && LIE(l->LayerInfo) && LIE(l->LayerInfo)->lie_CompositorHook)
-  {
-    struct CompositorMsg msg;
-    
-    kprintf("[hyperlayers] MoveSizeLayer: CALLING COMPOSITOR for alpha layer %p (dx=%ld, dy=%ld)\n", l, dx, dy);
-    
-    msg.cm_Method = COMP_MOVELAYER;
-    msg.cm_Layer = l;
-    msg.cm_Region = l->VisibleRegion;
-    msg.cm_Reserved[0] = NULL;
-    msg.cm_Reserved[1] = NULL;
-    msg.cm_Reserved[2] = NULL;
-    msg.cm_Reserved[3] = NULL;
-    
-    AROS_UFC3NR(void, LIE(l->LayerInfo)->lie_CompositorHook->h_Entry,
-        AROS_UFCA(struct Hook *,         LIE(l->LayerInfo)->lie_CompositorHook, A0),
-        AROS_UFCA(struct Layer_Info *,   l->LayerInfo, A2),
-        AROS_UFCA(struct CompositorMsg *, &msg, A1)
-    );
-  }
-
   UnlockLayers(l->LayerInfo);
 
   return TRUE;

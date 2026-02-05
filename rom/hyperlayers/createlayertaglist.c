@@ -2,7 +2,6 @@
     Copyright (C) 1995-2011, The AROS Development Team. All rights reserved.
 */
 
-#include <aros/debug.h>
 #include <aros/libcall.h>
 #include <graphics/clip.h>
 #include <graphics/layers.h>
@@ -211,23 +210,19 @@ struct Layer *CreateLayerTagList(struct Layer_Info *li, struct BitMap *bm, LONG 
       switch (tag->ti_Tag)
       {
         case LA_Alpha:
-          kprintf("[hyperlayers] LA_Alpha tag received, value=%ld\n", tag->ti_Data);
           if (tag->ti_Data)
           {
             IL(l)->il_AlphaFlags |= ILAF_ALPHA;
             l->Flags |= LAYERF_ALPHA;
-            kprintf("[hyperlayers] ILAF_ALPHA flag SET on layer %p\n", l);
           }
           break;
 
         case LA_AlphaValue:
-          kprintf("[hyperlayers] LA_AlphaValue tag received, value=%ld\n", tag->ti_Data);
           IL(l)->il_Alpha = (UBYTE)tag->ti_Data;
           if (IL(l)->il_Alpha < 255)
           {
             IL(l)->il_AlphaFlags |= ILAF_ALPHA;
             l->Flags |= LAYERF_ALPHA;
-            kprintf("[hyperlayers] ILAF_ALPHA flag SET (alpha<255) on layer %p\n", l);
           }
           break;
 
@@ -240,8 +235,6 @@ struct Layer *CreateLayerTagList(struct Layer_Info *li, struct BitMap *bm, LONG 
           break;
       }
     }
-    
-    kprintf("[hyperlayers] CreateLayerTagList: layer %p AlphaFlags=0x%02x\n", l, IL(l)->il_AlphaFlags);
     
     l->SuperBitMap = superbitmap;
     l->BackFill = hook;

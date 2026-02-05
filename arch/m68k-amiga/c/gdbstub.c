@@ -322,8 +322,9 @@ int   count;
 /* a bus error has occurred, perform a longjmp
    to return execution and allow handling of the error */
 
-void handle_buserror()
+void handle_buserror(int sigval)
 {
+  (void)sigval; /* unused */
   longjmp(remcomEnv,1);
 }
 

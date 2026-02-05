@@ -1,12 +1,147 @@
-# Konkrete Endringer i Eksisterende Compositor
+# Konkrete Endringer i Eksisterende HIDD Compositor
 
 Dette dokumentet beskriver de faktiske kodeendringene som trengs i `workbench/devs/monitors/Compositor/` for å støtte GPU-akselerert rendering.
 
 ---
 
-## 1. Oversikt: Eksisterende vs Ny Arkitektur
+## 1. Eksisterende HIDD Compositor Arkitektur
 
-### Eksisterende Compositor (i dag)
+### 1.1 Filstruktur
+
+```
+workbench/devs/monitors/Compositor/
+├── include/
+│   └── compositor.h          # Offentlig HIDD interface
+├── compositor_intern.h       # Interne strukturer
+├── compositor_class.c        # Hovedimplementasjon
+├── compositor_startup.c      # Initialisering
+├── displaymode.c             # Modus-håndtering
+└── mmakefile.src             # Build-konfigurasjon
+```
+
+### 1.2 Eksisterende StackBitMapNode
+
+```c
+struct StackBitMapNode
+{
+    struct MinNode  n;
+    OOP_Object      *bm;              /* HIDD BitMap objekt */
+    struct Region   *screenregion;   /* Synlig region på skjerm */
+    SIPTR           leftedge;        /* X-offset */
+    SIPTR           topedge;         /* Y-offset */
+    IPTR            sbmflags;        /* Flagg (COMPF_ALPHA, STACKNODEF_VISIBLE, etc.) */
+    struct Hook     *prealphacomphook; /* Hook før alpha-compositing */
+};
+
+/* sbmflags bits */
+#define STACKNODEB_VISIBLE       16
+#define STACKNODEF_VISIBLE       (1 << STACKNODEB_VISIBLE)
+#define STACKNODEB_DISPLAYABLE   17
+#define STACKNODEF_DISPLAYABLE   (1 << STACKNODEB_DISPLAYABLE)
+```
+
+### 1.3 Eksisterende HIDDCompositorData
+
+```c
+struct HIDDCompositorData
+{
+    struct GfxBase              *GraphicsBase;
+    struct IntuitionBase        *IntuitionBase;
+
+    ULONG                       capabilities;    /* COMPF_ABOVE, COMPF_BELOW, COMPF_ALPHA, etc. */
+    ULONG                       flags;           /* COMPSTATEF_HASALPHA, COMPSTATEF_DEEPLUT */
+
+    /* Bitmaps */
+    OOP_Object                  *displaybitmap;  /* Composited resultat som vises */
+    OOP_Object                  *intermedbitmap; /* Mellom-bitmap for alpha-blending */
+    OOP_Object                  *screenbitmap;   /* Resultat av HIDD_Gfx_Show() */
+    OOP_Object                  *topbitmap;      /* Øverste bitmap i stakken */
+
+    struct Rectangle            displayrect;     /* Dimensjoner av synlig modus */
+    struct Region               *alpharegion;    /* Region som krever alpha-blending */
+
+    struct MinList              bitmapstack;     /* Liste av StackBitMapNode (z-order) */
+    struct SignalSemaphore      semaphore;
+
+    struct Hook                 *backfillhook;   /* Hook for bakgrunnsfylling */
+
+    OOP_Object                  *gfx;            /* GFX driver objekt */
+    OOP_Object                  *fb;             /* Framebuffer bitmap (hvis tilgjengelig) */
+    OOP_Object                  *gc;             /* GC objekt for tegneoperasjoner */
+
+    ULONG                       displayid;
+    HIDDT_ModeID                displaymode;     /* ModeID av synlig modus */
+    UBYTE                       displaydepth;
+
+    struct Hook                 defaultbackfill;
+    BOOL                        modeschanged;
+};
+
+/* Eksisterende flagg */
+#define COMPSTATEB_HASALPHA     0
+#define COMPSTATEF_HASALPHA     (1 << COMPSTATEB_HASALPHA)
+#define COMPSTATEB_DEEPLUT      1
+#define COMPSTATEF_DEEPLUT      (1 << COMPSTATEB_DEEPLUT)
+```
+
+### 1.4 Eksisterende Metoder
+
+| Metode | Beskrivelse |
+|--------|-------------|
+| `BitMapStackChanged` | Kalles når skjerm-stakken endres (ny skjerm, z-order endring) |
+| `BitMapRectChanged` | Kalles når en region av en bitmap er endret |
+| `BitMapPositionChange` | Kalles når en bitmap flyttes (drag/scroll) |
+| `BitMapValidate` | Validerer om en bitmap kan composites |
+| `BitMapEnable` | Aktiverer compositing for en bitmap |
+
+### 1.5 Eksisterende Rendering-funksjoner
+
+```c
+/* Tegner én bitmap - CPU-basert */
+static inline void HIDDCompositorRedrawBitmap(
+    struct HIDDCompositorData *compdata,
+    OOP_Object *renderTarget,
+    struct StackBitMapNode *n,
+    struct Rectangle *rect)
+{
+    if (!(n->sbmflags & COMPF_ALPHA)) {
+        /* Vanlig blit */
+        HIDD_Gfx_CopyBox(compdata->gfx, n->bm, ...);
+    } else {
+        /* Alpha-blending via CPU */
+        HIDD_BM_ObtainDirectAccess(n->bm, &baseaddress, ...);
+        HIDD_BM_PutAlphaImage(renderTarget, compdata->gfx, baseaddress, ...);
+        HIDD_BM_ReleaseDirectAccess(n->bm);
+    }
+}
+
+/* Tegner alle synlige regioner */
+static VOID HIDDCompositorRedrawVisibleRegions(
+    struct HIDDCompositorData *compdata,
+    struct Rectangle *drawrect);
+
+/* Tegner alpha-regioner (bakfra og frem) */
+static VOID HIDDCompositorRedrawAlphaRegions(
+    struct HIDDCompositorData *compdata,
+    struct Rectangle *drawrect);
+```
+
+### 1.6 Eksisterende Alpha-støtte
+
+Compositoren har allerede grunnleggende alpha-støtte:
+
+- **COMPF_ALPHA** flagg på StackBitMapNode og Screen
+- **COMPSTATEF_HASALPHA** flagg på compositor
+- **intermedbitmap** for å samle alpha-blending før final blit
+- **HIDD_BM_PutAlphaImage()** for CPU-basert alpha-blending
+- **prealphacomphook** for pre-processing før alpha (f.eks. bakgrunns-sampling)
+- **alpharegion** for å tracke hvilke områder som trenger alpha-blending
+
+---
+
+## 2. Oversikt: Eksisterende vs Ny Arkitektur
+
+### Eksisterende Compositor (CPU-basert)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -28,8 +163,8 @@ Dette dokumentet beskriver de faktiske kodeendringene som trengs i `workbench/de
 │  HIDDCompositorData                                         │
 │                                                             │
 │  displaybitmap ──► HIDD BitMap (uendret for kompatibilitet) │
-│  gpu_output_fbo ──► OpenGL FBO (NY)                         │
-│  gpu_context ──► GL-kontekst (NY)                           │
+│  gpu.output_fbo ──► OpenGL FBO (NY)                         │
+│  gpu.gl_context ──► GL-kontekst (NY)                        │
 │  bitmapstack ──► Liste av StackBitMapNode (utvidet)         │
 │                                                             │
 │  Rendering: OpenGL shaders for blending + skygger           │
@@ -39,26 +174,14 @@ Dette dokumentet beskriver de faktiske kodeendringene som trengs i `workbench/de
 
 ---
 
-## 2. Endringer i compositor_intern.h
+## 3. Endringer i compositor_intern.h
 
-### 2.1 Utvidet StackBitMapNode
+### 3.1 Utvidet StackBitMapNode
 
 ```c
-// EKSISTERENDE struktur:
 struct StackBitMapNode
 {
-    struct MinNode  n;
-    OOP_Object      *bm;
-    struct Region   *screenregion;
-    SIPTR           leftedge;
-    SIPTR           topedge;
-    IPTR            sbmflags;
-    struct Hook     *prealphacomphook;
-};
-
-// UTVIDET struktur (nye felter markert med /* NY */):
-struct StackBitMapNode
-{
+    /* Eksisterende felter - UENDRET */
     struct MinNode  n;
     OOP_Object      *bm;
     struct Region   *screenregion;
@@ -70,21 +193,41 @@ struct StackBitMapNode
     /* NY: GPU-rendering støtte */
     struct {
         ULONG       texture_id;         /* Cachet GPU-tekstur */
-        BOOL        is_gpu_native;      /* TRUE hvis DrawingBoard/FBO */
+        BOOL        is_gpu_native;      /* TRUE hvis zunegfx DrawingBoard/FBO */
         APTR        pipe_resource;      /* Gallium ressurs (zero-copy) */
-        struct Rectangle dirty_rect;    /* Dirty region for upload */
-        BOOL        needs_upload;       /* TRUE hvis bitmap endret */
+        struct Rectangle dirty_rect;    /* Dirty region for inkrementell upload */
+        BOOL        needs_upload;       /* TRUE hvis bitmap er endret */
     } gpu;
 };
 ```
 
-### 2.2 Utvidet HIDDCompositorData
+### 3.2 Utvidet HIDDCompositorData
 
 ```c
-// EKSISTERENDE felter beholdes, NYE felter legges til:
 struct HIDDCompositorData
 {
-    /* ... alle eksisterende felter uendret ... */
+    /* Eksisterende felter - UENDRET */
+    struct GfxBase              *GraphicsBase;
+    struct IntuitionBase        *IntuitionBase;
+    ULONG                       capabilities;
+    ULONG                       flags;
+    OOP_Object                  *displaybitmap;
+    OOP_Object                  *intermedbitmap;
+    OOP_Object                  *screenbitmap;
+    OOP_Object                  *topbitmap;
+    struct Rectangle            displayrect;
+    struct Region               *alpharegion;
+    struct MinList              bitmapstack;
+    struct SignalSemaphore      semaphore;
+    struct Hook                 *backfillhook;
+    OOP_Object                  *gfx;
+    OOP_Object                  *fb;
+    OOP_Object                  *gc;
+    ULONG                       displayid;
+    HIDDT_ModeID                displaymode;
+    UBYTE                       displaydepth;
+    struct Hook                 defaultbackfill;
+    BOOL                        modeschanged;
     
     /* NY: GPU-akselerering */
     struct {
@@ -101,6 +244,7 @@ struct HIDDCompositorData
         /* Uniforms */
         LONG        u_texture;
         LONG        u_alpha;
+        LONG        u_screen_size;
         LONG        u_window_pos;
         LONG        u_window_size;
         LONG        u_shadow_color;
@@ -108,6 +252,7 @@ struct HIDDCompositorData
         
         /* Geometri */
         ULONG       quad_vbo;           /* Vertex buffer for quads */
+        ULONG       quad_vao;           /* Vertex array object */
     } gpu;
     
     /* NY: Gallium integrasjon */
@@ -121,9 +266,9 @@ struct HIDDCompositorData
 
 ---
 
-## 3. Endringer i compositor_class.c
+## 4. Endringer i compositor_class.c
 
-### 3.1 Ny funksjon: GPU-initialisering
+### 4.1 Ny funksjon: GPU-initialisering
 
 ```c
 /* NY FUNKSJON - Legg til etter CompositorParseConfig() */
@@ -160,14 +305,17 @@ static BOOL InitGPUCompositor(struct HIDDCompositorData *compdata)
         compdata->gpu.composite_shader, "u_texture");
     compdata->gpu.u_alpha = glGetUniformLocation(
         compdata->gpu.composite_shader, "u_alpha");
-    /* ... etc ... */
+    compdata->gpu.u_screen_size = glGetUniformLocation(
+        compdata->gpu.composite_shader, "u_screen_size");
+    /* ... etc for andre uniforms ... */
     
-    /* Opprett quad VBO */
-    CreateQuadVBO(&compdata->gpu.quad_vbo);
+    /* Opprett quad VBO/VAO */
+    CreateQuadGeometry(&compdata->gpu.quad_vbo, &compdata->gpu.quad_vao);
     
     compdata->gpu.available = TRUE;
     compdata->flags |= COMPSTATEF_GPUACCEL;
     
+    D(bug("[Compositor] GPU acceleration initialized\n"));
     return TRUE;
 }
 
@@ -186,8 +334,11 @@ static void CleanupGPUCompositor(struct HIDDCompositorData *compdata)
             glDeleteProgram(compdata->gpu.shadow_shader);
         if (compdata->gpu.quad_vbo)
             glDeleteBuffers(1, &compdata->gpu.quad_vbo);
+        if (compdata->gpu.quad_vao)
+            glDeleteVertexArrays(1, &compdata->gpu.quad_vao);
             
         glADestroyContext(compdata->gpu.gl_context);
+        compdata->gpu.gl_context = NULL;
     }
     
     compdata->gpu.available = FALSE;
@@ -195,7 +346,7 @@ static void CleanupGPUCompositor(struct HIDDCompositorData *compdata)
 }
 ```
 
-### 3.2 Endring i Root_New
+### 4.2 Endring i Root_New
 
 ```c
 OOP_Object *METHOD(Compositor, Root, New)
@@ -206,17 +357,17 @@ OOP_Object *METHOD(Compositor, Root, New)
     {
         /* NY: Prøv å initialisere GPU-akselerering */
         if (!InitGPUCompositor(compdata)) {
-            D(bug("[Compositor] GPU acceleration not available, using software\n"));
+            D(bug("[Compositor] GPU acceleration not available, using software fallback\n"));
         }
         
         return o;
     }
     
-    /* ... */
+    /* ... feilhåndtering ... */
 }
 ```
 
-### 3.3 Endring i Root_Dispose
+### 4.3 Endring i Root_Dispose
 
 ```c
 void METHOD(Compositor, Root, Dispose)
@@ -230,7 +381,7 @@ void METHOD(Compositor, Root, Dispose)
 }
 ```
 
-### 3.4 NY funksjon: GPU-basert RedrawBitmap
+### 4.4 NY funksjon: GPU-basert RedrawBitmap
 
 ```c
 /* NY FUNKSJON - GPU-versjon av HIDDCompositorRedrawBitmap */
@@ -242,6 +393,11 @@ static void GPUCompositorRedrawBitmap(struct HIDDCompositorData *compdata,
     /* Sørg for at vi har en gyldig GPU-tekstur */
     if (n->gpu.texture_id == 0) {
         glGenTextures(1, &n->gpu.texture_id);
+        glBindTexture(GL_TEXTURE_2D, n->gpu.texture_id);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         n->gpu.needs_upload = TRUE;
     }
     
@@ -254,23 +410,27 @@ static void GPUCompositorRedrawBitmap(struct HIDDCompositorData *compdata,
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, n->gpu.texture_id);
     
-    /* Sett uniforms */
+    /* Bruk composite shader */
     glUseProgram(compdata->gpu.composite_shader);
     glUniform1i(compdata->gpu.u_texture, 0);
+    glUniform2f(compdata->gpu.u_screen_size, 
+                compdata->displayrect.MaxX - compdata->displayrect.MinX + 1,
+                compdata->displayrect.MaxY - compdata->displayrect.MinY + 1);
     
     /* Beregn alpha */
     float alpha = 1.0f;
     if (n->sbmflags & COMPF_ALPHA) {
-        /* Hent alpha fra bitmap attributter eller bruk default */
-        alpha = 1.0f;  /* TODO: Hent faktisk alpha */
+        /* TODO: Hent faktisk alpha fra Screen-attributter */
+        alpha = 0.9f;
     }
     glUniform1f(compdata->gpu.u_alpha, alpha);
     
-    /* Tegn quad */
+    /* Tegn teksturert quad */
     DrawTexturedQuad(compdata, 
                      rect->MinX, rect->MinY,
                      rect->MaxX - rect->MinX + 1,
-                     rect->MaxY - rect->MinY + 1);
+                     rect->MaxY - rect->MinY + 1,
+                     n->leftedge, n->topedge);
 }
 
 static void UploadBitmapToTexture(struct HIDDCompositorData *compdata,
@@ -290,7 +450,7 @@ static void UploadBitmapToTexture(struct HIDDCompositorData *compdata,
     
     glBindTexture(GL_TEXTURE_2D, n->gpu.texture_id);
     
-    /* Første gang: alloker tekstur */
+    /* Sjekk om dette er første upload eller inkrementell */
     if (n->gpu.dirty_rect.MinX > n->gpu.dirty_rect.MaxX) {
         /* Full upload */
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 
@@ -319,7 +479,7 @@ static void UploadBitmapToTexture(struct HIDDCompositorData *compdata,
 }
 ```
 
-### 3.5 Endring i HIDDCompositorRedrawVisibleRegions
+### 4.5 Endring i HIDDCompositorRedrawVisibleRegions
 
 ```c
 static VOID HIDDCompositorRedrawVisibleRegions(struct HIDDCompositorData *compdata, 
@@ -339,17 +499,17 @@ static VOID GPUCompositorRedrawVisibleRegions(struct HIDDCompositorData *compdat
                                                struct Rectangle *drawrect)
 {
     struct StackBitMapNode *n;
+    ULONG screen_width = compdata->displayrect.MaxX - compdata->displayrect.MinX + 1;
+    ULONG screen_height = compdata->displayrect.MaxY - compdata->displayrect.MinY + 1;
     
     glAMakeCurrent(compdata->gpu.gl_context);
     
     /* Bind output FBO */
     glBindFramebuffer(GL_FRAMEBUFFER, compdata->gpu.output_fbo);
-    glViewport(0, 0, 
-               compdata->displayrect.MaxX - compdata->displayrect.MinX + 1,
-               compdata->displayrect.MaxY - compdata->displayrect.MinY + 1);
+    glViewport(0, 0, screen_width, screen_height);
     
     /* Clear med bakgrunnsfarge */
-    glClearColor(0.5f, 0.5f, 0.5f, 1.0f);  /* TODO: Bruk faktisk bakgrunn */
+    glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     
     /* Enable blending */
@@ -377,7 +537,7 @@ static VOID GPUCompositorRedrawVisibleRegions(struct HIDDCompositorData *compdat
             if (!drawrect || AndRectRect(drawrect, &rect, &rect))
             {
                 /* Tegn skygge først (hvis aktivert) */
-                if (ShouldDrawShadow(n)) {
+                if (ShouldDrawShadow(compdata, n)) {
                     GPUDrawWindowShadow(compdata, n, &rect);
                 }
                 
@@ -394,16 +554,30 @@ static VOID GPUCompositorRedrawVisibleRegions(struct HIDDCompositorData *compdat
     /* Overfør resultat til skjerm */
     GPUCompositorPresent(compdata, drawrect);
 }
+
+static BOOL ShouldDrawShadow(struct HIDDCompositorData *compdata, 
+                              struct StackBitMapNode *n)
+{
+    /* Tegn skygge kun for vinduer som ikke dekker hele skjermen */
+    if (n == (struct StackBitMapNode *)compdata->bitmapstack.mlh_Head)
+        return FALSE;  /* Ingen skygge for bakgrunns-skjerm */
+    
+    /* TODO: Sjekk om skygger er aktivert i preferanser */
+    return TRUE;
+}
 ```
 
-### 3.6 NY funksjon: Present til skjerm
+### 4.6 NY funksjon: Present til skjerm
 
 ```c
 /* NY FUNKSJON */
 static void GPUCompositorPresent(struct HIDDCompositorData *compdata,
                                   struct Rectangle *drawrect)
 {
-    /* Metode 1: Zero-copy via Gallium (best) */
+    ULONG width = compdata->displayrect.MaxX - compdata->displayrect.MinX + 1;
+    ULONG height = compdata->displayrect.MaxY - compdata->displayrect.MinY + 1;
+    
+    /* Metode 1: Zero-copy via Gallium (best ytelse) */
     if (compdata->galliumHidd && compdata->gpu.output_pipe_res) {
         struct pHidd_Gallium_DisplayResource msg = {
             .mID = OOP_GetMethodID(IID_Hidd_Gallium, moHidd_Gallium_DisplayResource),
@@ -413,10 +587,8 @@ static void GPUCompositorPresent(struct HIDDCompositorData *compdata,
             .bitmap = NULL,  /* Direkte til display */
             .dstx = drawrect ? drawrect->MinX : 0,
             .dsty = drawrect ? drawrect->MinY : 0,
-            .width = drawrect ? (drawrect->MaxX - drawrect->MinX + 1) 
-                              : (compdata->displayrect.MaxX - compdata->displayrect.MinX + 1),
-            .height = drawrect ? (drawrect->MaxY - drawrect->MinY + 1)
-                               : (compdata->displayrect.MaxY - compdata->displayrect.MinY + 1)
+            .width = drawrect ? (drawrect->MaxX - drawrect->MinX + 1) : width,
+            .height = drawrect ? (drawrect->MaxY - drawrect->MinY + 1) : height
         };
         OOP_DoMethod(compdata->galliumHidd, (OOP_Msg)&msg);
         return;
@@ -425,15 +597,12 @@ static void GPUCompositorPresent(struct HIDDCompositorData *compdata,
     /* Metode 2: Les tilbake til CPU bitmap (fallback) */
     if (compdata->displaybitmap) {
         UBYTE *baseaddress;
-        ULONG width, height, banksize, memsize;
+        ULONG bm_width, bm_height, banksize, memsize;
         
         if (HIDD_BM_ObtainDirectAccess(compdata->displaybitmap, 
-                                        &baseaddress, &width, &height, 
+                                        &baseaddress, &bm_width, &bm_height, 
                                         &banksize, &memsize))
         {
-            IPTR modulo;
-            OOP_GetAttr(compdata->displaybitmap, aHidd_BitMap_BytesPerRow, &modulo);
-            
             glBindFramebuffer(GL_FRAMEBUFFER, compdata->gpu.output_fbo);
             glReadPixels(0, 0, width, height, 
                          GL_BGRA, GL_UNSIGNED_BYTE, baseaddress);
@@ -441,14 +610,13 @@ static void GPUCompositorPresent(struct HIDDCompositorData *compdata,
             HIDD_BM_ReleaseDirectAccess(compdata->displaybitmap);
             
             /* Oppdater skjerm via HIDD */
-            HIDD_BM_UpdateRect(compdata->displaybitmap,
-                               0, 0, width, height);
+            HIDD_BM_UpdateRect(compdata->displaybitmap, 0, 0, width, height);
         }
     }
 }
 ```
 
-### 3.7 NY funksjon: Skygge-rendering
+### 4.7 NY funksjon: Skygge-rendering
 
 ```c
 /* NY FUNKSJON */
@@ -456,7 +624,20 @@ static void GPUDrawWindowShadow(struct HIDDCompositorData *compdata,
                                  struct StackBitMapNode *n,
                                  struct Rectangle *rect)
 {
+    IPTR bm_width, bm_height;
+    OOP_GetAttr(n->bm, aHidd_BitMap_Width, &bm_width);
+    OOP_GetAttr(n->bm, aHidd_BitMap_Height, &bm_height);
+    
     glUseProgram(compdata->gpu.shadow_shader);
+    
+    /* Skjermstørrelse */
+    glUniform2f(compdata->gpu.u_screen_size,
+                compdata->displayrect.MaxX - compdata->displayrect.MinX + 1,
+                compdata->displayrect.MaxY - compdata->displayrect.MinY + 1);
+    
+    /* Vindusposisjon og størrelse */
+    glUniform2f(compdata->gpu.u_window_pos, (float)n->leftedge, (float)n->topedge);
+    glUniform2f(compdata->gpu.u_window_size, (float)bm_width, (float)bm_height);
     
     /* Skygge-offset (nedover og til høyre) */
     glUniform2f(compdata->gpu.u_shadow_offset, 8.0f, 8.0f);
@@ -464,16 +645,7 @@ static void GPUDrawWindowShadow(struct HIDDCompositorData *compdata,
     /* Skygge-farge (halvtransparent svart) */
     glUniform4f(compdata->gpu.u_shadow_color, 0.0f, 0.0f, 0.0f, 0.4f);
     
-    /* Vindusstørrelse for SDF-beregning */
-    IPTR bm_width, bm_height;
-    OOP_GetAttr(n->bm, aHidd_BitMap_Width, &bm_width);
-    OOP_GetAttr(n->bm, aHidd_BitMap_Height, &bm_height);
-    glUniform2f(compdata->gpu.u_window_size, (float)bm_width, (float)bm_height);
-    
-    /* Vindusposisjon */
-    glUniform2f(compdata->gpu.u_window_pos, (float)n->leftedge, (float)n->topedge);
-    
-    /* Tegn skygge-quad (litt større enn vinduet) */
+    /* Tegn skygge-quad (litt større enn vinduet for blur) */
     DrawShadowQuad(compdata,
                    n->leftedge - 16, n->topedge - 16,
                    bm_width + 32, bm_height + 32);
@@ -482,9 +654,9 @@ static void GPUDrawWindowShadow(struct HIDDCompositorData *compdata,
 
 ---
 
-## 4. Endring i StackBitMapNode-allokering
+## 5. Endring i StackBitMapNode-allokering
 
-### 4.1 I BitMapStackChanged
+### 5.1 I BitMapStackChanged
 
 ```c
 OOP_Object *METHOD(Compositor, Hidd_Compositor, BitMapStackChanged)
@@ -494,9 +666,14 @@ OOP_Object *METHOD(Compositor, Hidd_Compositor, BitMapStackChanged)
     for (vpdata = msg->data; vpdata; vpdata = vpdata->Next)
     {
         n = AllocMem(sizeof(struct StackBitMapNode), MEMF_ANY | MEMF_CLEAR);
-        if (!n) { /* ... */ }
+        if (!n) { /* ... feilhåndtering ... */ }
         
-        /* ... eksisterende felt-initialisering ... */
+        /* Eksisterende felt-initialisering */
+        n->bm = vpdata->Bitmap;
+        n->sbmflags = STACKNODEF_DISPLAYABLE;
+        n->leftedge = vpdata->vpe->ViewPort->DxOffset;
+        n->topedge = vpdata->vpe->ViewPort->DyOffset;
+        n->screenregion = NewRegion();
         
         /* NY: Initialiser GPU-felter */
         n->gpu.texture_id = 0;
@@ -506,23 +683,56 @@ OOP_Object *METHOD(Compositor, Hidd_Compositor, BitMapStackChanged)
         n->gpu.dirty_rect.MinX = 0x7FFF;  /* Tom rect */
         n->gpu.dirty_rect.MaxX = 0;
         
-        /* NY: Sjekk om dette er en GPU-native bitmap (zunegfx) */
-        APTR pipe_res = NULL;
-        OOP_GetAttr(n->bm, aHidd_BitMap_PipeResource, (IPTR*)&pipe_res);
-        if (pipe_res) {
-            n->gpu.is_gpu_native = TRUE;
-            n->gpu.pipe_resource = pipe_res;
-            n->gpu.needs_upload = FALSE;  /* Zero-copy! */
+        /* NY: Sjekk om dette er en GPU-native bitmap (zunegfx DrawingBoard) */
+        if (compdata->flags & COMPSTATEF_GPUACCEL) {
+            APTR pipe_res = NULL;
+            OOP_GetAttr(n->bm, aHidd_BitMap_PipeResource, (IPTR*)&pipe_res);
+            if (pipe_res) {
+                n->gpu.is_gpu_native = TRUE;
+                n->gpu.pipe_resource = pipe_res;
+                n->gpu.needs_upload = FALSE;  /* Zero-copy! */
+            }
         }
         
         AddTail((struct List *)&compdata->bitmapstack, (struct Node *)n);
     }
     
-    /* ... */
+    /* ... resten av eksisterende kode ... */
 }
 ```
 
-### 4.2 Frigjøring av GPU-teksturer
+### 5.2 I BitMapRectChanged - Dirty Tracking
+
+```c
+VOID METHOD(Compositor, Hidd_Compositor, BitMapRectChanged)
+{
+    /* ... eksisterende kode ... */
+    
+    n = HIDDCompositorFindBitMapStackNode(compdata, msg->bm);
+    if (n && (n->sbmflags & STACKNODEF_VISIBLE))
+    {
+        /* NY: Oppdater dirty rect for GPU-modus */
+        if ((compdata->flags & COMPSTATEF_GPUACCEL) && !n->gpu.is_gpu_native)
+        {
+            /* Utvid dirty rect til å inkludere endret område */
+            if (msg->x < n->gpu.dirty_rect.MinX)
+                n->gpu.dirty_rect.MinX = msg->x;
+            if (msg->y < n->gpu.dirty_rect.MinY)
+                n->gpu.dirty_rect.MinY = msg->y;
+            if (msg->x + msg->width - 1 > n->gpu.dirty_rect.MaxX)
+                n->gpu.dirty_rect.MaxX = msg->x + msg->width - 1;
+            if (msg->y + msg->height - 1 > n->gpu.dirty_rect.MaxY)
+                n->gpu.dirty_rect.MaxY = msg->y + msg->height - 1;
+            
+            n->gpu.needs_upload = TRUE;
+        }
+        
+        /* ... eksisterende redraw-kode ... */
+    }
+}
+```
+
+### 5.3 Frigjøring av GPU-teksturer
 
 ```c
 static VOID HIDDCompositorPurgeBitMapStack(struct HIDDCompositorData *compdata)
@@ -549,12 +759,18 @@ static VOID HIDDCompositorPurgeBitMapStack(struct HIDDCompositorData *compdata)
 
 ---
 
-## 5. Ny fil: gpu_shaders.c
+## 6. Ny fil: gpu_shaders.c
 
 ```c
 /* workbench/devs/monitors/Compositor/gpu_shaders.c */
 
+#include <GL/gl.h>
+
+/*
+ * Composite Shader - Tegner teksturert quad med alpha
+ */
 static const char *composite_vertex_src = 
+    "#version 120\n"
     "attribute vec2 a_position;\n"
     "attribute vec2 a_texcoord;\n"
     "varying vec2 v_texcoord;\n"
@@ -566,7 +782,7 @@ static const char *composite_vertex_src =
     "}\n";
 
 static const char *composite_fragment_src =
-    "precision mediump float;\n"
+    "#version 120\n"
     "varying vec2 v_texcoord;\n"
     "uniform sampler2D u_texture;\n"
     "uniform float u_alpha;\n"
@@ -575,7 +791,11 @@ static const char *composite_fragment_src =
     "    gl_FragColor = vec4(color.rgb, color.a * u_alpha);\n"
     "}\n";
 
+/*
+ * Shadow Shader - Tegner myk skygge med SDF (Signed Distance Field)
+ */
 static const char *shadow_vertex_src =
+    "#version 120\n"
     "attribute vec2 a_position;\n"
     "uniform vec2 u_screen_size;\n"
     "uniform vec2 u_window_pos;\n"
@@ -591,20 +811,77 @@ static const char *shadow_vertex_src =
     "}\n";
 
 static const char *shadow_fragment_src =
-    "precision mediump float;\n"
+    "#version 120\n"
     "varying vec2 v_local_pos;\n"
     "uniform vec2 u_window_size;\n"
     "uniform vec4 u_shadow_color;\n"
+    "\n"
     "float roundedBoxSDF(vec2 p, vec2 size, float radius) {\n"
     "    vec2 q = abs(p) - size + vec2(radius);\n"
     "    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - radius;\n"
     "}\n"
+    "\n"
     "void main() {\n"
     "    vec2 center = u_window_size * 0.5;\n"
     "    float dist = roundedBoxSDF(v_local_pos - center, center, 8.0);\n"
     "    float shadow = 1.0 - smoothstep(-16.0, 16.0, dist);\n"
     "    gl_FragColor = vec4(u_shadow_color.rgb, u_shadow_color.a * shadow);\n"
     "}\n";
+
+/*
+ * Shader kompilering
+ */
+static ULONG CompileShader(GLenum type, const char *source)
+{
+    ULONG shader = glCreateShader(type);
+    GLint status;
+    
+    glShaderSource(shader, 1, &source, NULL);
+    glCompileShader(shader);
+    
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
+    if (!status) {
+        char log[512];
+        glGetShaderInfoLog(shader, 512, NULL, log);
+        D(bug("[Compositor] Shader compile error: %s\n", log));
+        glDeleteShader(shader);
+        return 0;
+    }
+    
+    return shader;
+}
+
+static ULONG CompileShaderProgram(const char *vert_src, const char *frag_src)
+{
+    ULONG vert = CompileShader(GL_VERTEX_SHADER, vert_src);
+    ULONG frag = CompileShader(GL_FRAGMENT_SHADER, frag_src);
+    GLint status;
+    
+    if (!vert || !frag) {
+        if (vert) glDeleteShader(vert);
+        if (frag) glDeleteShader(frag);
+        return 0;
+    }
+    
+    ULONG prog = glCreateProgram();
+    glAttachShader(prog, vert);
+    glAttachShader(prog, frag);
+    glLinkProgram(prog);
+    
+    glGetProgramiv(prog, GL_LINK_STATUS, &status);
+    if (!status) {
+        char log[512];
+        glGetProgramInfoLog(prog, 512, NULL, log);
+        D(bug("[Compositor] Shader link error: %s\n", log));
+        glDeleteProgram(prog);
+        prog = 0;
+    }
+    
+    glDeleteShader(vert);
+    glDeleteShader(frag);
+    
+    return prog;
+}
 
 ULONG CompileCompositeShader(void)
 {
@@ -616,67 +893,115 @@ ULONG CompileShadowShader(void)
     return CompileShaderProgram(shadow_vertex_src, shadow_fragment_src);
 }
 
-static ULONG CompileShaderProgram(const char *vert_src, const char *frag_src)
+/*
+ * Quad geometri
+ */
+void CreateQuadGeometry(ULONG *vbo, ULONG *vao)
 {
-    ULONG vert = glCreateShader(GL_VERTEX_SHADER);
-    ULONG frag = glCreateShader(GL_FRAGMENT_SHADER);
-    ULONG prog = glCreateProgram();
+    static const float quad_vertices[] = {
+        /* pos.x, pos.y, tex.u, tex.v */
+        0.0f, 0.0f, 0.0f, 0.0f,
+        1.0f, 0.0f, 1.0f, 0.0f,
+        1.0f, 1.0f, 1.0f, 1.0f,
+        0.0f, 1.0f, 0.0f, 1.0f,
+    };
     
-    glShaderSource(vert, 1, &vert_src, NULL);
-    glCompileShader(vert);
+    glGenBuffers(1, vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, *vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(quad_vertices), quad_vertices, GL_STATIC_DRAW);
     
-    glShaderSource(frag, 1, &frag_src, NULL);
-    glCompileShader(frag);
+    glGenVertexArrays(1, vao);
+    glBindVertexArray(*vao);
     
-    glAttachShader(prog, vert);
-    glAttachShader(prog, frag);
-    glLinkProgram(prog);
+    glEnableVertexAttribArray(0);  /* a_position */
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
     
-    glDeleteShader(vert);
-    glDeleteShader(frag);
+    glEnableVertexAttribArray(1);  /* a_texcoord */
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
     
-    return prog;
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+}
+
+void DrawTexturedQuad(struct HIDDCompositorData *compdata,
+                      WORD x, WORD y, WORD width, WORD height,
+                      WORD src_x, WORD src_y)
+{
+    /* TODO: Implementer faktisk quad-tegning med transformasjoner */
+    glBindVertexArray(compdata->gpu.quad_vao);
+    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+    glBindVertexArray(0);
+}
+
+void DrawShadowQuad(struct HIDDCompositorData *compdata,
+                    WORD x, WORD y, WORD width, WORD height)
+{
+    glBindVertexArray(compdata->gpu.quad_vao);
+    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+    glBindVertexArray(0);
 }
 ```
 
 ---
 
-## 6. Endringer i mmakefile.src
+## 7. Endringer i mmakefile.src
 
 ```makefile
-# Legg til nye filer
+#MM workbench-devs-monitors-Compositor : \
+#MM     kernel-hidd-gfx-includes \
+#MM     includes-copy \
+#MM     workbench-libs-mesa    # NY: For OpenGL støtte
+
 FILES := compositor_class compositor_startup displaymode gpu_shaders
 
-# Legg til GL-avhengigheter
-USER_LDFLAGS := -lGL
+USER_CPPFLAGS := -DUSE_FAST_HIDD_BM
+
+# NY: OpenGL includes og linking
 USER_INCLUDES := -I$(AROS_INCLUDES)/GL
+USER_LDFLAGS := -lGL
+
+%build_prog mmake=workbench-devs-monitors-Compositor \
+    targetdir=$(AROS_DEVS)/Monitors files=$(FILES) \
+    uselibs="hiddstubs oop"
 ```
 
 ---
 
-## 7. Oppsummering av Endringer
+## 8. Oppsummering av Endringer
 
 | Fil | Type Endring | Beskrivelse |
 |-----|--------------|-------------|
-| `compositor_intern.h` | Utvidelse | Nye GPU-felter i strukturer |
-| `compositor_class.c` | Endring | GPU-init, nye render-funksjoner |
-| `gpu_shaders.c` | Ny fil | Shader-kode og kompilering |
-| `mmakefile.src` | Endring | Nye filer og GL-linking |
+| `compositor_intern.h` | Utvidelse | GPU-felter i StackBitMapNode og HIDDCompositorData |
+| `compositor_class.c` | Endring | GPU-init, GPU-rendering funksjoner, dirty tracking |
+| `gpu_shaders.c` | **Ny fil** | Shader-kode og kompilering |
+| `mmakefile.src` | Endring | Ny fil, Mesa-avhengighet, GL-linking |
 
 ### Antall Linjer (estimat)
 
-| Endring | Linjer |
-|---------|--------|
-| Nye strukturfelter | ~30 |
+| Komponent | Linjer |
+|-----------|--------|
+| Nye strukturfelter (`compositor_intern.h`) | ~35 |
 | GPU-init/cleanup | ~80 |
-| GPU-rendering | ~150 |
-| Shader-kompilering | ~100 |
-| Present-funksjon | ~50 |
-| **Totalt** | **~410 linjer ny kode** |
+| GPU-rendering funksjoner | ~180 |
+| Dirty tracking | ~30 |
+| gpu_shaders.c | ~200 |
+| **Totalt** | **~525 linjer ny kode** |
 
 ### Bakoverkompatibilitet
 
-- Alle eksisterende funksjoner beholdes
-- GPU-kode aktiveres kun hvis initialisering lykkes
-- Fallback til eksisterende CPU-kode hvis GPU ikke er tilgjengelig
-- Ingen API-endringer utad
+- Alle eksisterende funksjoner og strukturer beholdes uendret
+- GPU-kode aktiveres kun hvis `InitGPUCompositor()` lykkes
+- Automatisk fallback til eksisterende CPU-kode hvis:
+  - OpenGL/Mesa ikke er tilgjengelig
+  - GL-kontekst ikke kan opprettes
+  - Shader-kompilering feiler
+- Ingen endringer i det offentlige HIDD Compositor API
+
+### Ytelsesfordeler
+
+| Scenario | CPU-modus | GPU-modus |
+|----------|-----------|-----------|
+| Vanlig blit | HIDD_Gfx_CopyBox | GPU tekstur-binding (zero-copy for zunegfx) |
+| Alpha-blending | HIDD_BM_PutAlphaImage (CPU) | GPU shader |
+| Skygger | Ikke støttet | GPU SDF shader |
+| Multi-vindu | Sekvensiell CPU-blit | Parallell GPU-rendering |

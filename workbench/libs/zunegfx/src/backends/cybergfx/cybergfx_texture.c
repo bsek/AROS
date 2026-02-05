@@ -26,7 +26,6 @@
 #include "libraries/zunegfx.h"
 #include <stdbool.h>
 #include <string.h>
-#include <immintrin.h>
 
 #define DEBUG 0
 #include <aros/debug.h>
