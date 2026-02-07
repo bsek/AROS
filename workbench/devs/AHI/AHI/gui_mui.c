@@ -644,7 +644,7 @@ BOOL BuildGUI(char *screenname)
 #if defined(__AROS__)
             Child, ColGroup(2),
                 Child, MUIUseforSDT = MakeCheck(NULL),
-                Child, MUILUseforSDT = SpecialLabel((STRPTR)msgSystemSound),
+                Child, MUILUseforSDT = SpecialLabel((STRPTR)"System Sound"),
             End,
 #endif
             Child, MUIPlay = SimpleButton(msgButtonPlay),

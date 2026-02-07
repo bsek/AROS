@@ -1,0 +1,21 @@
+
+include $(SRCDIR)/config/aros.cfg
+
+#MM- workbench-devs-monitors: devs-monitors-glcompositor
+
+FILES   := glcompositor_class glcompositor_startup glcompositor_shaders displaymode
+EXEDIR  := $(AROSDIR)/Devs/Monitors
+EXENAME := GLCompositor
+
+USER_INCLUDES := -I$(SRCDIR)/$(CURDIR)/include
+USER_CPPFLAGS := -DDEBUG=1
+
+%build_prog mmake=devs-monitors-glcompositor \
+           progname=$(EXENAME) targetdir=$(EXEDIR) \
+           files="$(FILES)" uselibs="GL"
+
+INCLUDE_FILES := $(call WILDCARD, include/*.h)
+
+%copy_includes mmake=includes-glcompositor-copy path=hidd dir=include
+
+%common
