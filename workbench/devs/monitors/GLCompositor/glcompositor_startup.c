@@ -20,6 +20,7 @@
 /* Libraries */
 struct Library *OOPBase;
 struct Library *UtilityBase;
+struct Library *GLBase;
 
 /* Attr bases */
 OOP_AttrBase HiddPixFmtAttrBase;
@@ -100,6 +101,12 @@ int main(void)
 
                         if (!err)
                         {
+                            /* Open GL library for GPU compositing.
+                             * Non-fatal: CPU fallback is used if GL is unavailable. */
+                            GLBase = OpenLibrary("gl.library", 20);
+                            if (!GLBase)
+                                GLBase = OpenLibrary("mesa3dgl.library", 20);
+
                             /* Stay resident */
                             struct Process *me = (struct Process *)FindTask(NULL);
 

@@ -1,0 +1,7 @@
+include $(SRCDIR)/config/aros.cfg
+
+INCLUDE_FILES := $(call WILDCARD, include/*.h)
+
+%copy_includes mmake=includes-compositor-copy path=hidd dir=include
+
+%common

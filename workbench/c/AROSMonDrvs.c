@@ -62,8 +62,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define MONITORS_DIR     "DEVS:Monitors"
-#define COMPOSITING_NAME "Compositor"
+#define MONITORS_DIR        "DEVS:Monitors"
+#define COMPOSITING_DEFAULT  "Compositor"
+#define COMPOSITING_ENV_VAR  "SYS/compositor.name"
+#define COMPOSITING_BUFSIZE  64
 
 /************************************************************************/
 
@@ -72,6 +74,12 @@ struct MonitorNode
     struct Node n;
     char        Name[1];
 };
+
+static BOOL isCompositor(const char *name)
+{
+    return (strcmp(name, "Compositor") == 0 ||
+            strcmp(name, "GLCompositor") == 0);
+}
 
 static BYTE checkIcon(STRPTR name, struct Library *IconBase)
 {
@@ -121,8 +129,8 @@ static BOOL findMonitors(struct List *monitorsList, struct DosLibrary *DOSBase, 
 
             DB2(bug("[LoadMonDrvs] Found monitor name %s\n", ap->ap_Info.fib_FileName));
 
-            /* Software composition driver was loaded before */
-            if (strcmp(ap->ap_Info.fib_FileName, COMPOSITING_NAME))
+            /* Skip compositor executables -- they were loaded separately */
+            if (!isCompositor(ap->ap_Info.fib_FileName))
             {
                 newnode = AllocPooled(poolmem, sizeof(struct MonitorNode) + strlen(ap->ap_Info.fib_FileName));
                 DB2(bug("[LoadMonDrvs] Monitor node 0x%p\n", newnode));
@@ -193,9 +201,27 @@ AROS_SH2H(AROSMonDrvs, 1.0, "Load AROS Monitor and Compositor drivers",
 
         if (!SHArg(NOCOMPOSITION))
         {
-            /* Software composition driver is run first */
-            D(bug("[LoadMonDrvs] Loading composition driver...\n"));
-            Execute(COMPOSITING_NAME, BNULL, BNULL);
+            TEXT compositorName[COMPOSITING_BUFSIZE];
+
+            /* Read preferred compositor name from ENV:, fall back to default */
+            if (GetVar(COMPOSITING_ENV_VAR, compositorName,
+                       COMPOSITING_BUFSIZE, GVF_GLOBAL_ONLY) <= 0)
+            {
+                strcpy(compositorName, COMPOSITING_DEFAULT);
+            }
+
+            D(bug("[LoadMonDrvs] Loading compositor: %s\n", compositorName));
+            Execute(compositorName, BNULL, BNULL);
+
+            /* If we tried a non-default compositor, also run the fallback.
+             * If the first one succeeded, the fallback detects the existing
+             * class via OOP_FindClass() and exits cleanly.
+             * If the first one failed, the fallback takes over. */
+            if (strcmp(compositorName, COMPOSITING_DEFAULT) != 0)
+            {
+                D(bug("[LoadMonDrvs] Running fallback: %s\n", COMPOSITING_DEFAULT));
+                Execute(COMPOSITING_DEFAULT, BNULL, BNULL);
+            }
         }
         
         if (!SHArg(ONLYCOMPOSITION))

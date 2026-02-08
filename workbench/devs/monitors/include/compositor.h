@@ -1,7 +1,7 @@
 #ifndef HIDD_COMPOSITOR_H
 #define HIDD_COMPOSITOR_H
 /*
-    Copyright © 2010-2017, The AROS Development Team. All rights reserved.
+    Copyright (C) 2010-2017, The AROS Development Team. All rights reserved.
     $Id$
 */
 

@@ -307,27 +307,285 @@ static VOID HIDDCompositorRecalculateVisibleRegions(struct HIDDCompositorData *c
 /* GPU Initialization and Teardown                                           */
 /* ────────────────────────────────────────────────────────────────────────── */
 
-static BOOL InitGPUCompositor(struct HIDDCompositorData *compdata)
-{
-    struct TagItem ctxtags[] =
-    {
-        { GLA_Width,        1 },
-        { GLA_Height,       1 },
-        { GLA_NoDepth,      GL_TRUE },
-        { GLA_NoStencil,    GL_TRUE },
-        { GLA_NoAccum,      GL_TRUE },
-        { GLA_DoubleBuf,    GL_TRUE },
-        { GLA_RGBMode,      GL_TRUE },
-        { TAG_DONE,         0 }
-    };
+/*
+ * Access the Gallium driver OOP_Object from a GL context.
+ * The driver field is the first member of mesa3dgl_context.
+ */
+struct glcontext_driver_access {
+    APTR driver;  /* First field of mesa3dgl_context — OOP_Object * */
+};
 
-    D(bug("[GLCompositor] %s: Initializing GPU compositor\n", __func__));
+/* Global pointer to compositor data — only one instance exists.
+ * Used by the GPU init helper Process to access compdata. */
+static struct HIDDCompositorData *g_compdata;
+
+/* Forward declaration */
+static BOOL InitGPUCompositorLate(struct HIDDCompositorData *compdata);
+
+/*
+ * Helper Process entry point.
+ * Runs as a DOS Process (so Mesa's getenv/FindVar work).
+ * Allocates its own signal bit, stores it in compdata, then signals parent.
+ * Waits for sig_init, performs GPU init under WRITE lock, signals back.
+ */
+static void GPUInitHelperEntry(void)
+{
+    struct HIDDCompositorData *compdata = g_compdata;
+    BYTE sigbit;
+    ULONG sig_init_mask, sig_break_mask, sigs;
+
+    if (!compdata)
+        return;
+
+    sigbit = AllocSignal(-1);
+    if (sigbit == -1)
+    {
+        D(bug("[GLCompositor] GPU init helper: cannot alloc signal\n"));
+        /* Signal parent that we failed */
+        compdata->gpu.sig_init = -1;
+        Signal(compdata->gpu.requester, 1UL << compdata->gpu.req_sig_done);
+        return;
+    }
+
+    compdata->gpu.sig_init = sigbit;
+    sig_init_mask = 1UL << sigbit;
+    sig_break_mask = SIGBREAKF_CTRL_C;
+
+    D(bug("[GLCompositor] GPU init helper process running, signal bit %d\n", sigbit));
+
+    /* Signal parent that we're ready */
+    Signal(compdata->gpu.requester, 1UL << compdata->gpu.req_sig_done);
+    compdata->gpu.requester = NULL;
+
+    for (;;)
+    {
+        sigs = Wait(sig_init_mask | sig_break_mask);
+
+        if (sigs & sig_break_mask)
+        {
+            D(bug("[GLCompositor] GPU init helper: shutdown signal\n"));
+            break;
+        }
+
+        if (sigs & sig_init_mask)
+        {
+            D(bug("[GLCompositor] GPU init helper: init requested\n"));
+
+            /* Take the compositor WRITE lock for GPU init */
+            ObtainSemaphore(&compdata->semaphore);
+
+            if (!compdata->gpu.context_valid && compdata->gpu.displayBM)
+            {
+                compdata->gpu.init_result = InitGPUCompositorLate(compdata);
+                D(bug("[GLCompositor] GPU init helper: result=%d\n", compdata->gpu.init_result));
+            }
+
+            ReleaseSemaphore(&compdata->semaphore);
+
+            /* Signal the requester that we're done */
+            if (compdata->gpu.requester)
+            {
+                Signal(compdata->gpu.requester, 1UL << compdata->gpu.req_sig_done);
+                compdata->gpu.requester = NULL;
+            }
+        }
+    }
+
+    FreeSignal(sigbit);
+    D(bug("[GLCompositor] GPU init helper process exiting\n"));
+}
+
+/*
+ * Request GPU init from any context (Task or Process).
+ * If called from a Process, does it directly.
+ * If called from a Task, signals the helper Process and waits.
+ * Must NOT be called while holding the compositor semaphore.
+ * Returns TRUE if GPU is now available.
+ */
+static BOOL RequestGPUInit(struct HIDDCompositorData *compdata)
+{
+    struct Task *me = FindTask(NULL);
+
+    if (compdata->gpu.context_valid)
+        return compdata->gpu.available;
+
+    if (!compdata->gpu.displayBM || !compdata->displaybitmap)
+        return FALSE;
+
+    if (me->tc_Node.ln_Type == NT_PROCESS)
+    {
+        BOOL result;
+        D(bug("[GLCompositor] RequestGPUInit: direct init (Process context)\n"));
+        ObtainSemaphore(&compdata->semaphore);
+        if (!compdata->gpu.context_valid)
+            result = InitGPUCompositorLate(compdata);
+        else
+            result = compdata->gpu.available;
+        ReleaseSemaphore(&compdata->semaphore);
+        return result;
+    }
+
+    /* Task context — delegate to helper process */
+    if (!compdata->gpu.init_proc)
+    {
+        D(bug("[GLCompositor] RequestGPUInit: no helper process available\n"));
+        return FALSE;
+    }
+
+    D(bug("[GLCompositor] RequestGPUInit: signaling helper process\n"));
+
+    BYTE sigbit = AllocSignal(-1);
+    if (sigbit == -1)
+    {
+        D(bug("[GLCompositor] RequestGPUInit: cannot alloc signal\n"));
+        return FALSE;
+    }
+
+    compdata->gpu.requester = me;
+    compdata->gpu.req_sig_done = sigbit;
+
+    /* Signal the helper to do the init */
+    Signal((struct Task *)compdata->gpu.init_proc, 1UL << compdata->gpu.sig_init);
+
+    /* Wait for completion */
+    Wait(1UL << sigbit);
+
+    FreeSignal(sigbit);
+
+    D(bug("[GLCompositor] RequestGPUInit: helper done, result=%d\n", compdata->gpu.init_result));
+    return compdata->gpu.init_result;
+}
+
+/*
+ * Phase 1: Called from Root::New before any display bitmap exists.
+ * Publishes the semaphore (with master_context=NULL) and caches method IDs.
+ */
+static BOOL InitGPUCompositorEarly(struct HIDDCompositorData *compdata)
+{
+    D(bug("[GLCompositor] %s: Early GPU init (semaphore + method cache)\n", __func__));
 
     compdata->gpu.available = FALSE;
     compdata->gpu.context_valid = FALSE;
+    compdata->gpu.gl_context = NULL;
+    compdata->gpu.gallium_driver = NULL;
+    compdata->gpu.displayBM = NULL;
+    compdata->gpu.init_proc = NULL;
+    compdata->gpu.sig_init = -1;
 
-    /* Create master GL context (no sharing — this IS the master) */
-    compdata->gpu.gl_context = glACreateContext(ctxtags);
+    /* Store global pointer for helper process */
+    g_compdata = compdata;
+
+    /* mid_DisplayResource is cached in InitGPUCompositorLate, after GL is loaded */
+    compdata->gpu.mid_DisplayResource = 0;
+
+    /* Publish semaphore now so zunegfx can find it early;
+     * master_context is NULL until Phase 2 completes */
+    compdata->gpu.shared_sem.sem.ss_Link.ln_Name = GLCOMPOSITOR_SEMAPHORE_NAME;
+    compdata->gpu.shared_sem.sem.ss_Link.ln_Pri = 0;
+    compdata->gpu.shared_sem.master_context = NULL;
+    InitSemaphore(&compdata->gpu.shared_sem.sem);
+    AddSemaphore(&compdata->gpu.shared_sem.sem);
+
+    D(bug("[GLCompositor] %s: Published semaphore '%s' (context pending)\n",
+          __func__, GLCOMPOSITOR_SEMAPHORE_NAME));
+
+    /* Create helper Process for deferred GPU init.
+     * Mesa requires a DOS Process (for getenv → FindVar), but compositor
+     * methods are often called from Task context (input.device). */
+    {
+        BYTE sigbit = AllocSignal(-1);
+        if (sigbit >= 0)
+        {
+            compdata->gpu.requester = FindTask(NULL);
+            compdata->gpu.req_sig_done = sigbit;
+
+            compdata->gpu.init_proc = CreateNewProcTags(
+                NP_Entry,       (IPTR)GPUInitHelperEntry,
+                NP_Name,        (IPTR)"GLCompositor GPU Init",
+                NP_Priority,    0,
+                TAG_DONE);
+
+            if (compdata->gpu.init_proc)
+            {
+                /* Wait for helper to allocate its signal and report ready */
+                Wait(1UL << sigbit);
+                D(bug("[GLCompositor] %s: Helper process ready, sig_init=%d\n",
+                      __func__, compdata->gpu.sig_init));
+            }
+            else
+            {
+                D(bug("[GLCompositor] %s: Failed to create helper process\n", __func__));
+            }
+
+            compdata->gpu.requester = NULL;
+            FreeSignal(sigbit);
+        }
+    }
+
+    return TRUE;
+}
+
+/*
+ * Phase 2: Called from ToggleCompositing once displayBM is available.
+ * Creates the GL context using a RastPort backed by displayBM,
+ * loads extensions, compiles shaders, and caches the Gallium driver.
+ */
+static BOOL InitGPUCompositorLate(struct HIDDCompositorData *compdata)
+{
+    struct RastPort tmprp;
+    UWORD w, h;
+
+    D(bug("[GLCompositor] %s: Late GPU init (GL context + shaders)\n", __func__));
+
+    /* GLBase must be open for GL library calls to work */
+    {
+        extern struct Library *GLBase;
+        if (!GLBase)
+        {
+            D(bug("[GLCompositor] %s: GLBase is NULL, gl.library not open\n", __func__));
+            return FALSE;
+        }
+        D(bug("[GLCompositor] %s: GLBase=%p\n", __func__, GLBase));
+    }
+
+    if (!compdata->gpu.displayBM)
+    {
+        D(bug("[GLCompositor] %s: No displayBM, cannot create GL context\n", __func__));
+        return FALSE;
+    }
+
+    w = compdata->displayrect.MaxX - compdata->displayrect.MinX + 1;
+    h = compdata->displayrect.MaxY - compdata->displayrect.MinY + 1;
+
+    D(bug("[GLCompositor] %s: displayBM=%p, size=%dx%d\n", __func__, compdata->gpu.displayBM, w, h));
+    D(bug("[GLCompositor] %s: IS_HIDD_BM=%d\n", __func__, IS_HIDD_BM(compdata->gpu.displayBM)));
+
+    /* Build a temporary RastPort for GL context creation.
+     * Mesa clones it internally via CloneRastPort(), so stack is safe. */
+    InitRastPort(&tmprp);
+    tmprp.BitMap = compdata->gpu.displayBM;
+
+    D(bug("[GLCompositor] %s: RastPort initialized, BitMap set\n", __func__));
+
+    {
+        struct TagItem ctxtags[] =
+        {
+            { GLA_RastPort,     (IPTR)&tmprp },
+            { GLA_Width,        w },
+            { GLA_Height,       h },
+            { GLA_NoDepth,      GL_TRUE },
+            { GLA_NoStencil,    GL_TRUE },
+            { GLA_NoAccum,      GL_TRUE },
+            { GLA_DoubleBuf,    GL_TRUE },
+            { GLA_RGBMode,      GL_TRUE },
+            { TAG_DONE,         0 }
+        };
+
+        D(bug("[GLCompositor] %s: Calling glACreateContext...\n", __func__));
+        compdata->gpu.gl_context = glACreateContext(ctxtags);
+        D(bug("[GLCompositor] %s: glACreateContext returned %p\n", __func__, compdata->gpu.gl_context));
+    }
+
     if (!compdata->gpu.gl_context)
     {
         D(bug("[GLCompositor] %s: Failed to create GL context\n", __func__));
@@ -336,19 +594,21 @@ static BOOL InitGPUCompositor(struct HIDDCompositorData *compdata)
 
     D(bug("[GLCompositor] %s: GL context created @ %p\n", __func__, compdata->gpu.gl_context));
 
-    /* Make current so we can load extensions and compile shaders */
     glAMakeCurrent(compdata->gpu.gl_context);
     compdata->gpu.context_valid = TRUE;
 
-    /* Publish master context via named semaphore for zunegfx to discover */
-    compdata->gpu.shared_sem.sem.ss_Link.ln_Name = GLCOMPOSITOR_SEMAPHORE_NAME;
-    compdata->gpu.shared_sem.sem.ss_Link.ln_Pri = 0;
-    compdata->gpu.shared_sem.master_context = compdata->gpu.gl_context;
-    InitSemaphore(&compdata->gpu.shared_sem.sem);
-    AddSemaphore(&compdata->gpu.shared_sem.sem);
+    /* Cache gallium driver from GL context (first field of mesa3dgl_context) */
+    compdata->gpu.gallium_driver = (OOP_Object *)((struct glcontext_driver_access *)compdata->gpu.gl_context)->driver;
+    D(bug("[GLCompositor] %s: Gallium driver @ %p\n", __func__, compdata->gpu.gallium_driver));
 
-    D(bug("[GLCompositor] %s: Published master context semaphore '%s'\n",
-          __func__, GLCOMPOSITOR_SEMAPHORE_NAME));
+    /* Cache Gallium DisplayResource method ID — must be done after GL/gallium is loaded */
+    compdata->gpu.mid_DisplayResource = OOP_GetMethodID(IID_Hidd_Gallium, moHidd_Gallium_DisplayResource);
+    D(bug("[GLCompositor] %s: mid_DisplayResource = %lu\n", __func__, compdata->gpu.mid_DisplayResource));
+
+    /* Update semaphore with the real context */
+    ObtainSemaphore(&compdata->gpu.shared_sem.sem);
+    compdata->gpu.shared_sem.master_context = compdata->gpu.gl_context;
+    ReleaseSemaphore(&compdata->gpu.shared_sem.sem);
 
     /* Load GL extension function pointers */
     if (!GLCompositor_LoadExtensions(compdata))
@@ -367,7 +627,6 @@ static BOOL InitGPUCompositor(struct HIDDCompositorData *compdata)
     if (!GLCompositor_CompileShadowShader(compdata))
     {
         D(bug("[GLCompositor] %s: Shadow shader failed (non-fatal)\n", __func__));
-        /* Shadow shader is optional — compositing still works without it */
     }
 
     compdata->gpu.shaders_valid = TRUE;
@@ -382,19 +641,30 @@ static BOOL InitGPUCompositor(struct HIDDCompositorData *compdata)
     return TRUE;
 
 fail:
-    RemSemaphore(&compdata->gpu.shared_sem.sem);
     if (compdata->gpu.gl_context)
     {
         glADestroyContext(compdata->gpu.gl_context);
         compdata->gpu.gl_context = NULL;
     }
     compdata->gpu.context_valid = FALSE;
+    compdata->gpu.gallium_driver = NULL;
+    /* Semaphore stays published (with NULL context) — zunegfx checks for NULL */
+    ObtainSemaphore(&compdata->gpu.shared_sem.sem);
+    compdata->gpu.shared_sem.master_context = NULL;
+    ReleaseSemaphore(&compdata->gpu.shared_sem.sem);
     return FALSE;
 }
 
 static void ShutdownGPUCompositor(struct HIDDCompositorData *compdata)
 {
     D(bug("[GLCompositor] %s: Shutting down GPU compositor\n", __func__));
+
+    /* Signal helper process to exit */
+    if (compdata->gpu.init_proc)
+    {
+        Signal((struct Task *)compdata->gpu.init_proc, SIGBREAKF_CTRL_C);
+        compdata->gpu.init_proc = NULL;
+    }
 
     if (compdata->gpu.gl_context)
     {
@@ -414,15 +684,17 @@ static void ShutdownGPUCompositor(struct HIDDCompositorData *compdata)
         GLCompositor_DestroyQuadVBO(compdata);
         GLCompositor_DestroyShaders(compdata);
 
-        /* Remove published semaphore before destroying context */
-        RemSemaphore(&compdata->gpu.shared_sem.sem);
-
         glADestroyContext(compdata->gpu.gl_context);
         compdata->gpu.gl_context = NULL;
     }
 
+    /* Semaphore is always published by InitGPUCompositorEarly — always remove */
+    RemSemaphore(&compdata->gpu.shared_sem.sem);
+
     compdata->gpu.available = FALSE;
     compdata->gpu.context_valid = FALSE;
+    compdata->gpu.gallium_driver = NULL;
+    /* displayBM is freed via FreeBitMap in ToggleCompositing cleanup */
     compdata->flags &= ~COMPSTATEF_GPUACCEL;
 }
 
@@ -471,45 +743,67 @@ static BOOL GPUEnsureTexture(struct HIDDCompositorData *compdata, struct StackBi
     {
         UBYTE *baseaddress;
         ULONG bmwidth, bmheight, banksize, memsize;
+        BOOL direct = FALSE;
+        UBYTE *tmpbuf = NULL;
+        IPTR modulo;
 
+        /* Try direct access first (fastest), fall back to GetImage */
         if (HIDD_BM_ObtainDirectAccess(n->bm, &baseaddress, &bmwidth, &bmheight, &banksize, &memsize))
         {
-            IPTR modulo;
             OOP_GetAttr(n->bm, aHidd_BitMap_BytesPerRow, &modulo);
-
-            glBindTexture(GL_TEXTURE_2D, n->gpu.texture_id);
-
-            if (n->gpu.tex_width != (UWORD)width || n->gpu.tex_height != (UWORD)height)
-            {
-                /* Full re-upload */
-                glPixelStorei(GL_UNPACK_ROW_LENGTH, modulo / 4);
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height,
-                             0, GL_BGRA, GL_UNSIGNED_BYTE, baseaddress);
-                glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-
-                n->gpu.tex_width = (UWORD)width;
-                n->gpu.tex_height = (UWORD)height;
-
-                DGPU(bug("[GLCompositor] %s: Full texture upload %dx%d for bm %p (tex %d)\n",
-                     __func__, width, height, n->bm, n->gpu.texture_id));
-            }
-            else
-            {
-                /* Incremental sub-image update */
-                glPixelStorei(GL_UNPACK_ROW_LENGTH, modulo / 4);
-                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height,
-                                GL_BGRA, GL_UNSIGNED_BYTE, baseaddress);
-                glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-            }
-
-            HIDD_BM_ReleaseDirectAccess(n->bm);
-            n->gpu.needs_upload = FALSE;
+            direct = TRUE;
         }
         else
         {
-            D(bug("[GLCompositor] %s: Failed to obtain direct access for bm %p\n", __func__, n->bm));
-            return FALSE;
+            /* Allocate temporary buffer and read via GetImage */
+            modulo = width * 4;
+            tmpbuf = AllocMem(modulo * height, MEMF_ANY);
+            if (tmpbuf)
+            {
+                HIDD_BM_GetImage(n->bm, tmpbuf, modulo, 0, 0, width, height,
+                                 vHidd_StdPixFmt_BGRA32);
+                baseaddress = tmpbuf;
+                DGPU(bug("[GLCompositor] %s: GetImage fallback %dx%d for bm %p\n",
+                     __func__, width, height, n->bm));
+            }
+            else
+            {
+                D(bug("[GLCompositor] %s: Failed to alloc temp buffer for bm %p\n", __func__, n->bm));
+                return FALSE;
+            }
         }
+
+        glBindTexture(GL_TEXTURE_2D, n->gpu.texture_id);
+
+        if (n->gpu.tex_width != (UWORD)width || n->gpu.tex_height != (UWORD)height)
+        {
+            /* Full re-upload */
+            glPixelStorei(GL_UNPACK_ROW_LENGTH, modulo / 4);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height,
+                         0, GL_BGRA, GL_UNSIGNED_BYTE, baseaddress);
+            glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+
+            n->gpu.tex_width = (UWORD)width;
+            n->gpu.tex_height = (UWORD)height;
+
+            DGPU(bug("[GLCompositor] %s: Full texture upload %dx%d for bm %p (tex %d)\n",
+                 __func__, width, height, n->bm, n->gpu.texture_id));
+        }
+        else
+        {
+            /* Incremental sub-image update */
+            glPixelStorei(GL_UNPACK_ROW_LENGTH, modulo / 4);
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height,
+                            GL_BGRA, GL_UNSIGNED_BYTE, baseaddress);
+            glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+        }
+
+        if (direct)
+            HIDD_BM_ReleaseDirectAccess(n->bm);
+        else
+            FreeMem(tmpbuf, modulo * height);
+
+        n->gpu.needs_upload = FALSE;
     }
 
     return TRUE;
@@ -789,8 +1083,27 @@ static VOID GPUCompositorRedrawVisibleRegions(struct HIDDCompositorData *compdat
 
     glDisable(GL_BLEND);
 
-    /* Present to screen */
-    glASwapBuffers(compdata->gpu.gl_context);
+    /* Present to screen via Gallium DisplayResource (bypasses Layer requirement) */
+    glFinish();
+    {
+        APTR resource = glAGetRenderResource(compdata->gpu.gl_context);
+        if (resource && compdata->gpu.gallium_driver && compdata->gpu.displayBM)
+        {
+            struct pHidd_Gallium_DisplayResource drmsg;
+            drmsg.mID      = compdata->gpu.mid_DisplayResource;
+            drmsg.resource = resource;
+            drmsg.srcx     = 0;
+            drmsg.srcy     = 0;
+            drmsg.bitmap   = compdata->gpu.displayBM;
+            drmsg.dstx     = 0;
+            drmsg.dsty     = 0;
+            drmsg.width    = (ULONG)screenw;
+            drmsg.height   = (ULONG)screenh;
+            OOP_DoMethod(compdata->gpu.gallium_driver, (OOP_Msg)&drmsg);
+
+            HIDD_BM_UpdateRect(compdata->displaybitmap, 0, 0, (ULONG)screenw, (ULONG)screenh);
+        }
+    }
 
     DREDRAWSCR(bug("[GLCompositor] %s: GPU redraw complete\n", __func__));
 }
@@ -1051,14 +1364,13 @@ static BOOL HIDDCompositorToggleCompositing(struct HIDDCompositorData *compdata,
         {
             DTOGGLE(bug("[GLCompositor] %s: Initialising Display-Compositor..\n", __func__));
 
-            if (compdata->fb)
+            /*
+             * Reuse displayBM if already allocated (by BitMapStackChanged
+             * for early GPU init), otherwise allocate a new one.
+             */
+            if (compdata->gpu.displayBM)
             {
-                if (olddisplaybitmap != compdata->fb)
-                {
-                    compdata->screenbitmap = HIDD_Gfx_Show(compdata->gfx, compdata->fb, fHidd_Gfx_Show_CopyBack);
-                }
-                OOP_SetAttrsTags(compdata->fb, aHidd_BitMap_ModeID, compdata->displaymode, TAG_DONE);
-                compdata->displaybitmap = compdata->fb;
+                tmpBM = compdata->gpu.displayBM;
             }
             else
             {
@@ -1067,19 +1379,39 @@ static BOOL HIDDCompositorToggleCompositing(struct HIDDCompositorData *compdata,
                     compdata->displayrect.MaxY - compdata->displayrect.MinY + 1,
                     compdata->displaydepth,
                     BMF_DISPLAYABLE|BMF_CHECKVALUE, (struct BitMap *)bmtags);
-                if (tmpBM)
+                compdata->gpu.displayBM = tmpBM;
+            }
+
+            if (tmpBM)
+            {
+                compdata->displaybitmap = HIDD_BM_OBJ(tmpBM);
+                newsdispbitmap = compdata->displaybitmap;
+
+                if (compdata->fb)
                 {
-                    compdata->displaybitmap = HIDD_BM_OBJ(tmpBM);
-                    newsdispbitmap = compdata->displaybitmap;
-                    if (!newsdispbitmap)
-                        ok = FALSE;
+                    /* For fb drivers, show our allocated bitmap via the framebuffer */
+                    if (olddisplaybitmap != compdata->fb)
+                    {
+                        compdata->screenbitmap = HIDD_Gfx_Show(compdata->gfx, compdata->displaybitmap, fHidd_Gfx_Show_CopyBack);
+                    }
                 }
+
+                if (!compdata->displaybitmap)
+                    ok = FALSE;
+            }
+            else
+            {
+                ok = FALSE;
             }
         }
         else
         {
             olddisplaybitmap = NULL;
         }
+
+        /* GPU Phase 2 init is deferred to RequestGPUInit() which is called
+         * outside the compositor semaphore (from BitMapStackChanged or
+         * BitMapPositionChange after releasing the lock). */
 
         if ((compdata->flags & COMPSTATEF_HASALPHA) && !(compdata->intermedbitmap) &&
             !(compdata->gpu.available))
@@ -1335,12 +1667,10 @@ OOP_Object *METHOD(Compositor, Root, New)
 
             if ((compdata->gfx) && (compdata->gc))
             {
-                /* Initialize GPU compositor */
-                if (!InitGPUCompositor(compdata))
-                {
-                    D(bug("[GLCompositor] %s: GPU init failed, using CPU fallback\n", __func__));
-                    /* Continue without GPU — CPU fallback will be used */
-                }
+                /* Phase 1: publish semaphore and cache method IDs.
+                 * GL context is created later in ToggleCompositing (Phase 2)
+                 * once a display bitmap is available. */
+                InitGPUCompositorEarly(compdata);
 
                 return o;
             }
@@ -1529,6 +1859,11 @@ OOP_Object *METHOD(Compositor, Hidd_Compositor, BitMapStackChanged)
 
     UNLOCK_COMPOSITOR
 
+    /* Trigger deferred GPU init outside the semaphore.
+     * RequestGPUInit handles both Process (direct) and Task (helper) contexts. */
+    if (!compdata->gpu.context_valid && compdata->gpu.displayBM && compdata->displaybitmap)
+        RequestGPUInit(compdata);
+
     *msg->active = compdata->displaybitmap ? TRUE : FALSE;
     return compdata->screenbitmap;
 }
@@ -1536,6 +1871,10 @@ OOP_Object *METHOD(Compositor, Hidd_Compositor, BitMapStackChanged)
 VOID METHOD(Compositor, Hidd_Compositor, BitMapRectChanged)
 {
     struct HIDDCompositorData *compdata = OOP_INST_DATA(cl, o);
+
+    /* Deferred GPU init outside the semaphore */
+    if (!compdata->gpu.context_valid && compdata->gpu.displayBM && compdata->displaybitmap)
+        RequestGPUInit(compdata);
 
     if (compdata->displaybitmap)
     {
@@ -1685,6 +2024,10 @@ IPTR METHOD(Compositor, Hidd_Compositor, BitMapPositionChange)
     }
 
     UNLOCK_COMPOSITOR
+
+    /* Trigger deferred GPU init outside the semaphore */
+    if (!compdata->gpu.context_valid && compdata->gpu.displayBM && compdata->displaybitmap)
+        RequestGPUInit(compdata);
 
     return compdata->displaybitmap ? TRUE : FALSE;
 }

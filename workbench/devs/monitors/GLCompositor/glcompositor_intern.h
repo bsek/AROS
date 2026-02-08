@@ -16,6 +16,7 @@
 
 #include <GL/gl.h>
 #include <GL/gla.h>
+#include <hidd/gallium.h>
 
 /* ────────────────────────────────────────────────────────────────────────── */
 /* GL Extension Function Pointer Types                                       */
@@ -139,6 +140,18 @@ struct HIDDCompositorData
         APTR        gl_context;         /* Compositor's own GL context (the master) */
         BOOL        available;          /* TRUE if GPU pipeline is usable */
         BOOL        context_valid;      /* GL context is created and current */
+
+        OOP_MethodID    mid_DisplayResource;  /* Hidd_Gallium_DisplayResource */
+        OOP_Object      *gallium_driver;      /* Gallium HIDD driver for DisplayResource */
+        struct BitMap   *displayBM;           /* struct BitMap * for DisplayResource blit target */
+
+        /* Helper Process for deferred GPU init (Mesa needs Process context) */
+        struct Process  *init_proc;     /* Helper process waiting for init signal */
+        BYTE            sig_init;       /* Signal bit: "please init GPU" */
+        BYTE            sig_done;       /* Signal bit: "init complete" */
+        struct Task     *requester;     /* Task that requested init (to signal back) */
+        BYTE            req_sig_done;   /* Signal bit in requester to signal on completion */
+        BOOL            init_result;    /* TRUE if GPU init succeeded */
 
         /* Shared context semaphore - published for zunegfx to find */
         struct GLCompositorSemaphore shared_sem;
