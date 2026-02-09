@@ -2370,83 +2370,180 @@ static BOOL OpenGL_CreateMasterContext(struct Window *window)
     return TRUE;
 }
 
-/* Pre-init window/screen for shader compilation */
+/* Pre-init window/screen for shader compilation (fallback path) */
 static struct Screen *g_preinit_screen = NULL;
 static struct Window *g_preinit_window = NULL;
+static BOOL g_using_compositor_context = FALSE;
+
+/* GLCompositor semaphore structure — must match glcompositor_intern.h */
+struct GLCompositorSemaphore
+{
+    struct SignalSemaphore   sem;
+    APTR                    master_context;
+};
+#define GLCOMPOSITOR_SEMAPHORE_NAME "GLCompositorMasterContext"
+
+/*
+ * TryHeadlessContext - Create a headless GL context without a window
+ *
+ * Uses GLA_Headless to create a GL context without needing a window.
+ * CreatePipeV handles the Gallium driver lookup via LockPubScreen fallback,
+ * so no friendBM is needed.
+ *
+ * If the compositor has already published its master context, we share
+ * with it via GLA_ShareContext. Otherwise we create a standalone context.
+ *
+ * Returns the new context, or NULL on failure.
+ */
+static GLAContext TryHeadlessContext(void)
+{
+    struct GLCompositorSemaphore *comp_sem;
+    GLAContext ctx;
+    APTR compositor_ctx = NULL;
+
+    /* Check if compositor's master context is available for sharing */
+    Forbid();
+    comp_sem = (struct GLCompositorSemaphore *)FindSemaphore(GLCOMPOSITOR_SEMAPHORE_NAME);
+    Permit();
+
+    if (comp_sem)
+    {
+        ObtainSemaphoreShared(&comp_sem->sem);
+        compositor_ctx = comp_sem->master_context;
+        ReleaseSemaphore(&comp_sem->sem);
+    }
+
+    if (compositor_ctx)
+    {
+        struct TagItem ctx_tags[] = {
+            { GLA_Headless,      GL_TRUE },
+            { GLA_BitsPerPixel,  32 },
+            { GLA_Width,         1 },
+            { GLA_Height,        1 },
+            { GLA_NoDepth,       GL_TRUE },
+            { GLA_NoStencil,     GL_TRUE },
+            { GLA_NoAccum,       GL_TRUE },
+            { GLA_ShareContext,  (IPTR)compositor_ctx },
+            { TAG_DONE,          0 }
+        };
+
+        D(bug("[ZuneGfx:OpenGL] TryHeadlessContext: Sharing with compositor master context @ %p\n", compositor_ctx));
+        ctx = glACreateContext(ctx_tags);
+    }
+    else
+    {
+        struct TagItem ctx_tags[] = {
+            { GLA_Headless,      GL_TRUE },
+            { GLA_BitsPerPixel,  32 },
+            { GLA_Width,         1 },
+            { GLA_Height,        1 },
+            { GLA_NoDepth,       GL_TRUE },
+            { GLA_NoStencil,     GL_TRUE },
+            { GLA_NoAccum,       GL_TRUE },
+            { TAG_DONE,          0 }
+        };
+
+        D(bug("[ZuneGfx:OpenGL] TryHeadlessContext: Creating standalone headless context (no compositor yet)\n"));
+        ctx = glACreateContext(ctx_tags);
+    }
+
+    if (!ctx)
+    {
+        D(bug("[ZuneGfx:OpenGL] TryHeadlessContext: glACreateContext failed\n"));
+        return NULL;
+    }
+
+    D(bug("[ZuneGfx:OpenGL] TryHeadlessContext: Created headless context @ %p (shared=%d)\n",
+          ctx, compositor_ctx ? 1 : 0));
+    return ctx;
+}
 
 /*
  * OpenGL_PreInitializeShaders - Initialize shaders during library init
  *
- * Opens a small backdrop window to create a GL context and compile shaders.
- * This is needed because Mesa/LLVM shader compilation requires a valid GL
- * context, and we want to do this once during library init rather than
- * causing a delay when the first application window opens.
+ * First tries to discover GLCompositor's master GL context via semaphore
+ * and create a shared headless context (no window needed).
  *
- * The pre-init window is kept open until OpenGL_CleanupPreInit() is called
- * during library cleanup, as the GL context must remain valid.
+ * Falls back to opening a small backdrop window if GLCompositor is not
+ * available (e.g. running without compositor, or compositor not yet
+ * initialized).
+ *
+ * The context is kept alive for the library lifetime since GL shader
+ * objects are bound to the context that created them.
  */
 BOOL OpenGL_PreInitializeShaders(void)
 {
     GLAContext preinit_ctx;
-    struct TagItem ctx_tags[4];
-    
-    D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Creating pre-init window for shader compilation\n"));
-    
-    /* Lock the default public screen (Workbench) */
-    g_preinit_screen = LockPubScreen(NULL);
-    if (!g_preinit_screen) {
-        D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Cannot lock public screen\n"));
-        return FALSE;
+
+    D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Initializing...\n"));
+
+    /* Strategy 1: Use a headless GL context (no window needed) */
+    preinit_ctx = TryHeadlessContext();
+    if (preinit_ctx)
+    {
+        g_using_compositor_context = TRUE;
+        D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Using headless context (no window needed)\n"));
     }
-    
-    /* Open a small backdrop window - it will be behind everything */
-    g_preinit_window = OpenWindowTags(NULL,
-        WA_Left, 0,
-        WA_Top, 0,
-        WA_Width, 64,
-        WA_Height, 64,
-        WA_Backdrop, TRUE,
-        WA_Borderless, TRUE,
-        WA_NoCareRefresh, TRUE,
-        WA_PubScreen, (IPTR)g_preinit_screen,
-        TAG_DONE);
-    
-    if (!g_preinit_window) {
-        D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Cannot open pre-init window\n"));
-        UnlockPubScreen(NULL, g_preinit_screen);
-        g_preinit_screen = NULL;
-        return FALSE;
+    else
+    {
+        /* Strategy 2: Fall back to creating a pre-init window */
+        struct TagItem ctx_tags[4];
+
+        D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Compositor not available, creating pre-init window\n"));
+
+        g_preinit_screen = LockPubScreen(NULL);
+        if (!g_preinit_screen) {
+            D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Cannot lock public screen\n"));
+            return FALSE;
+        }
+
+        g_preinit_window = OpenWindowTags(NULL,
+            WA_Left, 0,
+            WA_Top, 0,
+            WA_Width, 64,
+            WA_Height, 64,
+            WA_Backdrop, TRUE,
+            WA_Borderless, TRUE,
+            WA_NoCareRefresh, TRUE,
+            WA_PubScreen, (IPTR)g_preinit_screen,
+            TAG_DONE);
+
+        if (!g_preinit_window) {
+            D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Cannot open pre-init window\n"));
+            UnlockPubScreen(NULL, g_preinit_screen);
+            g_preinit_screen = NULL;
+            return FALSE;
+        }
+
+        D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Pre-init window opened at %p\n", g_preinit_window));
+
+        ctx_tags[0].ti_Tag = GLA_Window;
+        ctx_tags[0].ti_Data = (IPTR)g_preinit_window;
+        ctx_tags[1].ti_Tag = GLA_DoubleBuf;
+        ctx_tags[1].ti_Data = FALSE;
+        ctx_tags[2].ti_Tag = GLA_NoStencil;
+        ctx_tags[2].ti_Data = TRUE;
+        ctx_tags[3].ti_Tag = TAG_DONE;
+
+        preinit_ctx = glACreateContext(ctx_tags);
+        if (!preinit_ctx) {
+            D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Cannot create GL context\n"));
+            CloseWindow(g_preinit_window);
+            g_preinit_window = NULL;
+            UnlockPubScreen(NULL, g_preinit_screen);
+            g_preinit_screen = NULL;
+            return FALSE;
+        }
     }
-    
-    D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Pre-init window opened at %p\n", g_preinit_window));
-    
-    /* Create GL context on this window */
-    ctx_tags[0].ti_Tag = GLA_Window;
-    ctx_tags[0].ti_Data = (IPTR)g_preinit_window;
-    ctx_tags[1].ti_Tag = GLA_DoubleBuf;
-    ctx_tags[1].ti_Data = FALSE;
-    ctx_tags[2].ti_Tag = GLA_NoStencil;
-    ctx_tags[2].ti_Data = TRUE;
-    ctx_tags[3].ti_Tag = TAG_DONE;
-    
-    preinit_ctx = glACreateContext(ctx_tags);
-    if (!preinit_ctx) {
-        D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Cannot create GL context\n"));
-        CloseWindow(g_preinit_window);
-        g_preinit_window = NULL;
-        UnlockPubScreen(NULL, g_preinit_screen);
-        g_preinit_screen = NULL;
-        return FALSE;
-    }
-    
+
     /* Make context current */
     glAMakeCurrent(preinit_ctx);
-    
+
     D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: GL context created, compiling shaders...\n"));
-    
+
     /* Load FBO functions */
     OpenGL_LoadFBOFunctions();
-    
+
     /* Compile shaders - this is the slow part that benefits from pre-init */
     if (OpenGL_InitShaders()) {
         D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Shaders compiled successfully\n"));
@@ -2454,25 +2551,26 @@ BOOL OpenGL_PreInitializeShaders(void)
     } else {
         D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Shader compilation failed\n"));
     }
-    
+
     /* Store this as the master context */
     if (g_opengl_priv) {
         APTR pipe_screen;
-        
+
         g_opengl_priv->master_context = preinit_ctx;
         g_opengl_priv->master_context_created = TRUE;
         g_opengl_priv->has_shaders = g_shaders_available;
-        
+
         /* Check if context sharing is supported by getting pipe_screen */
         pipe_screen = glAGetPipeScreen(preinit_ctx);
         g_opengl_priv->shared_contexts_supported = (pipe_screen != NULL);
-        
+
         D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Stored as master context, pipe_screen=%p, sharing=%d\n",
               pipe_screen, g_opengl_priv->shared_contexts_supported));
     }
-    
-    D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Done\n"));
-    
+
+    D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Done (compositor_shared=%d)\n",
+          g_using_compositor_context));
+
     return TRUE;
 }
 
@@ -2484,23 +2582,26 @@ BOOL OpenGL_PreInitializeShaders(void)
  */
 void OpenGL_CleanupPreInit(void)
 {
-    D(bug("[ZuneGfx:OpenGL] CleanupPreInit: Cleaning up pre-init resources\n"));
-    
+    D(bug("[ZuneGfx:OpenGL] CleanupPreInit: Cleaning up pre-init resources (compositor_shared=%d)\n",
+          g_using_compositor_context));
+
     /* Note: We don't destroy the GL context here because it's stored as master_context
      * and may be in use. It will be cleaned up when the library is expunged.
      */
-    
+
     if (g_preinit_window) {
         CloseWindow(g_preinit_window);
         g_preinit_window = NULL;
         D(bug("[ZuneGfx:OpenGL] CleanupPreInit: Pre-init window closed\n"));
     }
-    
+
     if (g_preinit_screen) {
         UnlockPubScreen(NULL, g_preinit_screen);
         g_preinit_screen = NULL;
         D(bug("[ZuneGfx:OpenGL] CleanupPreInit: Public screen unlocked\n"));
     }
+
+    g_using_compositor_context = FALSE;
 }
 
 /*

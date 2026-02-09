@@ -62,9 +62,7 @@ BACKEND_FILES := \
         src/backends/cybergfx/cybergfx_brush_sampler \
         src/backends/opengl/opengl_backend
 
-COMPOSITOR_FILES := \
-        src/compositor/layer_compositor \
-        src/zunegfx_compositor
+COMPOSITOR_FILES :=
 
 ROOT_FILES := \
         zunegfx_init
