@@ -145,6 +145,8 @@ struct HIDDCompositorData
         OOP_Object      *gallium_driver;      /* Gallium HIDD driver for DisplayResource */
         struct BitMap   *displayBM;           /* struct BitMap * for DisplayResource blit target */
 
+        struct BitMap   *friendBM;            /* BitMap for Gallium driver lookup (set before RequestGPUInit) */
+
         /* Helper Process for deferred GPU init (Mesa needs Process context) */
         struct Process  *init_proc;     /* Helper process waiting for init signal */
         BYTE            sig_init;       /* Signal bit: "please init GPU" */

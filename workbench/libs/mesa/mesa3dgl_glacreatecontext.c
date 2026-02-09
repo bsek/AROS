@@ -135,21 +135,51 @@
 
     D(bug("[MESA3DGL] %s: ctx @ 0x%p\n", __func__, ctx));
 
-    MESA3DGLSelectRastPort(ctx, tagList);
-    if (!ctx->visible_rp)
+    ctx->headless = GetTagData(GLA_Headless, GL_FALSE, tagList);
+
+    if (ctx->headless)
     {
-        bug("%s: ERROR - failed to select visible rastport\n", __func__);
-        goto error_out;
+        /* Headless mode: no RastPort needed.
+         * Used by compositors and offscreen renderers that present
+         * via glAGetRenderResource / Gallium DisplayResource. */
+        struct BitMap *friendbm = (struct BitMap *)GetTagData(GLA_PipeFriendBitMap, 0, tagList);
+        LONG width  = GetTagData(GLA_Width, 1, tagList);
+        LONG height = GetTagData(GLA_Height, 1, tagList);
+
+        ctx->visible_rp = NULL;
+        ctx->window = NULL;
+        ctx->Screen = NULL;
+        ctx->BitsPerPixel = GetTagData(GLA_BitsPerPixel, 32, tagList);
+        ctx->left = 0;
+        ctx->top = 0;
+        ctx->right = 0;
+        ctx->bottom = 0;
+        ctx->visible_rp_width = width;
+        ctx->visible_rp_height = height;
+
+        pscreen_tags[0].ti_Data = (IPTR)friendbm;
+
+        D(bug("[MESA3DGL] %s: Headless mode, friendbm=%p, size=%ldx%ld, bpp=%ld\n",
+              __func__, friendbm, width, height, ctx->BitsPerPixel));
     }
-
-    D(bug("[MESA3DGL] %s: visible_rp @ 0x%p\n", __func__, ctx->visible_rp));
-    pscreen_tags[0].ti_Data = (IPTR)ctx->visible_rp->BitMap;
-    D(bug("[MESA3DGL] %s:   _bmap @ 0x%p\n", __func__, pscreen_tags[0].ti_Data));
-
-    if (!MESA3DGLStandardInit(ctx, tagList))
+    else
     {
-        bug("%s: ERROR - failed to initialize context (missing dimensions?)\n", __func__);
-        goto error_out;
+        MESA3DGLSelectRastPort(ctx, tagList);
+        if (!ctx->visible_rp)
+        {
+            bug("%s: ERROR - failed to select visible rastport\n", __func__);
+            goto error_out;
+        }
+
+        D(bug("[MESA3DGL] %s: visible_rp @ 0x%p\n", __func__, ctx->visible_rp));
+        pscreen_tags[0].ti_Data = (IPTR)ctx->visible_rp->BitMap;
+        D(bug("[MESA3DGL] %s:   _bmap @ 0x%p\n", __func__, pscreen_tags[0].ti_Data));
+
+        if (!MESA3DGLStandardInit(ctx, tagList))
+        {
+            bug("%s: ERROR - failed to initialize context (missing dimensions?)\n", __func__);
+            goto error_out;
+        }
     }
 
     /*
@@ -170,8 +200,8 @@
         /* Increment reference count on the owning context */
         share_ctx->ref_count++;
         
-        /* We still need our own driver object for rendering */
-        pscreen_tags[0].ti_Data = (IPTR)ctx->visible_rp->BitMap;
+        /* We still need our own driver object for rendering.
+         * pscreen_tags[0] was already set above (from RastPort BitMap or GLA_PipeFriendBitMap). */
         if (!CreatePipeV(pscreen_tags))
         {
             bug("%s: ERROR - failed to create gallium pipe for shared context\n", __func__);

@@ -214,7 +214,7 @@ VOID MESA3DGLRecalculateBufferWidthHeight(struct mesa3dgl_context * ctx)
     /* Safety check - visible_rp must exist */
     if (!ctx || !ctx->visible_rp)
     {
-        D(bug("[MESA3DGL] %s: ERROR - ctx or visible_rp is NULL!\n", __func__));
+        /* Headless contexts have no RastPort — dimensions are fixed */
         return;
     }
 

@@ -52,6 +52,15 @@
 
     D(bug("[MESA3DGL] %s()\n", __func__));
 
+    if (_ctx->headless)
+    {
+        /* Headless context has no RastPort to blit to.
+         * Use glAGetRenderResource() + DisplayResource instead. */
+        D(bug("[MESA3DGL] %s: Headless context, skipping SwapBuffers\n", __func__));
+        MESA3DGLCheckAndUpdateBufferSize(_ctx);
+        return;
+    }
+
     if (_ctx->framebuffer->render_resource)
     {
         /* Flush rendering cache before blitting */

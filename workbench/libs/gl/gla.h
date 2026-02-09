@@ -91,6 +91,26 @@ typedef APTR GLAContext;
 #define GLA_ShareContext        (GLA_Dummy + 0x0040)
 
 /*
+ * GLA_Headless: Create a GL context without a RastPort. The context cannot
+ *               use glASwapBuffers — rendering is accessed via
+ *               glAGetRenderResource() and Gallium DisplayResource.
+ *               Requires GLA_Width and GLA_Height.
+ *               Default: GL_FALSE
+ *
+ * GLA_BitsPerPixel: Explicit bits-per-pixel for color format selection
+ *                   (16 or 32). Only used when GLA_Headless is GL_TRUE.
+ *                   Default: 32
+ *
+ * GLA_PipeFriendBitMap: A struct BitMap * used to find the correct Gallium
+ *                       driver (instead of extracting it from a RastPort).
+ *                       Only used when GLA_Headless is GL_TRUE.
+ *                       If not provided, falls back to LockPubScreen.
+ */
+#define GLA_Headless            (GLA_Dummy + 0x0050)
+#define GLA_BitsPerPixel        (GLA_Dummy + 0x0051)
+#define GLA_PipeFriendBitMap    (GLA_Dummy + 0x0052)
+
+/*
  * GLA API calls
  */
 

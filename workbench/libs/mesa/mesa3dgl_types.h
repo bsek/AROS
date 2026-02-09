@@ -50,6 +50,8 @@ struct mesa3dgl_context
     struct mesa3dgl_context     *share_ctx;      /* Context we share resources with (NULL if none) */
     LONG                        ref_count;       /* Reference count for shared stmanager/pipe_screen */
     BOOL                        owns_stmanager;  /* TRUE if this context owns the stmanager */
+
+    BOOL                        headless;        /* TRUE = no RastPort, no SwapBuffers */
 };
 
 /*  state trackers GL API */

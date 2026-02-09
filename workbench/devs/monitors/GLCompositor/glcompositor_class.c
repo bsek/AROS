@@ -320,7 +320,7 @@ struct glcontext_driver_access {
 static struct HIDDCompositorData *g_compdata;
 
 /* Forward declaration */
-static BOOL InitGPUCompositorLate(struct HIDDCompositorData *compdata);
+static BOOL InitGPUCompositorLate(struct HIDDCompositorData *compdata, struct BitMap *friendBM);
 
 /*
  * Helper Process entry point.
@@ -374,9 +374,9 @@ static void GPUInitHelperEntry(void)
             /* Take the compositor WRITE lock for GPU init */
             ObtainSemaphore(&compdata->semaphore);
 
-            if (!compdata->gpu.context_valid && compdata->gpu.displayBM)
+            if (!compdata->gpu.context_valid && compdata->gpu.friendBM)
             {
-                compdata->gpu.init_result = InitGPUCompositorLate(compdata);
+                compdata->gpu.init_result = InitGPUCompositorLate(compdata, compdata->gpu.friendBM);
                 D(bug("[GLCompositor] GPU init helper: result=%d\n", compdata->gpu.init_result));
             }
 
@@ -402,15 +402,18 @@ static void GPUInitHelperEntry(void)
  * Must NOT be called while holding the compositor semaphore.
  * Returns TRUE if GPU is now available.
  */
-static BOOL RequestGPUInit(struct HIDDCompositorData *compdata)
+static BOOL RequestGPUInit(struct HIDDCompositorData *compdata, struct BitMap *friendBM)
 {
     struct Task *me = FindTask(NULL);
 
     if (compdata->gpu.context_valid)
         return compdata->gpu.available;
 
-    if (!compdata->gpu.displayBM || !compdata->displaybitmap)
+    if (!friendBM)
         return FALSE;
+
+    /* Store friendBM so the helper process can access it */
+    compdata->gpu.friendBM = friendBM;
 
     if (me->tc_Node.ln_Type == NT_PROCESS)
     {
@@ -418,7 +421,7 @@ static BOOL RequestGPUInit(struct HIDDCompositorData *compdata)
         D(bug("[GLCompositor] RequestGPUInit: direct init (Process context)\n"));
         ObtainSemaphore(&compdata->semaphore);
         if (!compdata->gpu.context_valid)
-            result = InitGPUCompositorLate(compdata);
+            result = InitGPUCompositorLate(compdata, friendBM);
         else
             result = compdata->gpu.available;
         ReleaseSemaphore(&compdata->semaphore);
@@ -526,15 +529,13 @@ static BOOL InitGPUCompositorEarly(struct HIDDCompositorData *compdata)
 }
 
 /*
- * Phase 2: Called from ToggleCompositing once displayBM is available.
- * Creates the GL context using a RastPort backed by displayBM,
- * loads extensions, compiles shaders, and caches the Gallium driver.
+ * Phase 2: Creates a headless GL context for GPU compositing.
+ * friendBM is any HIDD bitmap used to find the correct Gallium driver.
+ * The GL context itself does not need a RastPort or display bitmap;
+ * rendering is presented via glAGetRenderResource + DisplayResource.
  */
-static BOOL InitGPUCompositorLate(struct HIDDCompositorData *compdata)
+static BOOL InitGPUCompositorLate(struct HIDDCompositorData *compdata, struct BitMap *friendBM)
 {
-    struct RastPort tmprp;
-    UWORD w, h;
-
     D(bug("[GLCompositor] %s: Late GPU init (GL context + shaders)\n", __func__));
 
     /* GLBase must be open for GL library calls to work */
@@ -548,40 +549,37 @@ static BOOL InitGPUCompositorLate(struct HIDDCompositorData *compdata)
         D(bug("[GLCompositor] %s: GLBase=%p\n", __func__, GLBase));
     }
 
-    if (!compdata->gpu.displayBM)
+    if (!friendBM)
     {
-        D(bug("[GLCompositor] %s: No displayBM, cannot create GL context\n", __func__));
+        D(bug("[GLCompositor] %s: No friendBM for Gallium driver lookup\n", __func__));
         return FALSE;
     }
 
-    w = compdata->displayrect.MaxX - compdata->displayrect.MinX + 1;
-    h = compdata->displayrect.MaxY - compdata->displayrect.MinY + 1;
+    D(bug("[GLCompositor] %s: friendBM=%p\n", __func__, friendBM));
+    D(bug("[GLCompositor] %s: IS_HIDD_BM=%d\n", __func__, IS_HIDD_BM(friendBM)));
 
-    D(bug("[GLCompositor] %s: displayBM=%p, size=%dx%d\n", __func__, compdata->gpu.displayBM, w, h));
-    D(bug("[GLCompositor] %s: IS_HIDD_BM=%d\n", __func__, IS_HIDD_BM(compdata->gpu.displayBM)));
-
-    /* Build a temporary RastPort for GL context creation.
-     * Mesa clones it internally via CloneRastPort(), so stack is safe. */
-    InitRastPort(&tmprp);
-    tmprp.BitMap = compdata->gpu.displayBM;
-
-    D(bug("[GLCompositor] %s: RastPort initialized, BitMap set\n", __func__));
-
+    /* Create a headless GL context — no RastPort needed.
+     * friendBM is passed as GLA_PipeFriendBitMap so Mesa can find the
+     * correct Gallium driver. We use the display dimensions for the
+     * internal framebuffer size. */
     {
+        UWORD w = compdata->displayrect.MaxX - compdata->displayrect.MinX + 1;
+        UWORD h = compdata->displayrect.MaxY - compdata->displayrect.MinY + 1;
+
         struct TagItem ctxtags[] =
         {
-            { GLA_RastPort,     (IPTR)&tmprp },
-            { GLA_Width,        w },
-            { GLA_Height,       h },
-            { GLA_NoDepth,      GL_TRUE },
-            { GLA_NoStencil,    GL_TRUE },
-            { GLA_NoAccum,      GL_TRUE },
-            { GLA_DoubleBuf,    GL_TRUE },
-            { GLA_RGBMode,      GL_TRUE },
-            { TAG_DONE,         0 }
+            { GLA_Headless,         GL_TRUE },
+            { GLA_PipeFriendBitMap, (IPTR)friendBM },
+            { GLA_BitsPerPixel,     32 },
+            { GLA_Width,            w },
+            { GLA_Height,           h },
+            { GLA_NoDepth,          GL_TRUE },
+            { GLA_NoStencil,        GL_TRUE },
+            { GLA_NoAccum,          GL_TRUE },
+            { TAG_DONE,             0 }
         };
 
-        D(bug("[GLCompositor] %s: Calling glACreateContext...\n", __func__));
+        D(bug("[GLCompositor] %s: Calling glACreateContext (headless, %dx%d)...\n", __func__, w, h));
         compdata->gpu.gl_context = glACreateContext(ctxtags);
         D(bug("[GLCompositor] %s: glACreateContext returned %p\n", __func__, compdata->gpu.gl_context));
     }
@@ -617,22 +615,10 @@ static BOOL InitGPUCompositorLate(struct HIDDCompositorData *compdata)
         goto fail;
     }
 
-    /* Compile shaders */
-    if (!GLCompositor_CompileCompositeShader(compdata))
-    {
-        D(bug("[GLCompositor] %s: Failed to compile composite shader\n", __func__));
-        goto fail;
-    }
-
-    if (!GLCompositor_CompileShadowShader(compdata))
-    {
-        D(bug("[GLCompositor] %s: Shadow shader failed (non-fatal)\n", __func__));
-    }
-
-    compdata->gpu.shaders_valid = TRUE;
-
-    /* Create unit quad VBO */
-    GLCompositor_CreateQuadVBO(compdata);
+    /* Shaders and VBO are compiled lazily at first GPU redraw
+     * to avoid crashes during early boot when SoftPipe may not
+     * be fully ready for shader compilation. */
+    compdata->gpu.shaders_valid = FALSE;
 
     compdata->gpu.available = TRUE;
     compdata->flags |= COMPSTATEF_GPUACCEL;
@@ -1022,6 +1008,26 @@ static VOID GPUCompositorRedrawVisibleRegions(struct HIDDCompositorData *compdat
 
     /* Make compositor GL context current */
     glAMakeCurrent(compdata->gpu.gl_context);
+
+    /* Lazy shader/VBO init on first redraw */
+    if (!compdata->gpu.shaders_valid)
+    {
+        D(bug("[GLCompositor] %s: Lazy shader compilation\n", __func__));
+
+        if (!GLCompositor_CompileCompositeShader(compdata))
+        {
+            D(bug("[GLCompositor] %s: Failed to compile composite shader\n", __func__));
+            return;
+        }
+
+        if (!GLCompositor_CompileShadowShader(compdata))
+        {
+            D(bug("[GLCompositor] %s: Shadow shader failed (non-fatal)\n", __func__));
+        }
+
+        GLCompositor_CreateQuadVBO(compdata);
+        compdata->gpu.shaders_valid = TRUE;
+    }
 
     screenw = (GLfloat)(compdata->displayrect.MaxX - compdata->displayrect.MinX + 1);
     screenh = (GLfloat)(compdata->displayrect.MaxY - compdata->displayrect.MinY + 1);
@@ -1859,10 +1865,17 @@ OOP_Object *METHOD(Compositor, Hidd_Compositor, BitMapStackChanged)
 
     UNLOCK_COMPOSITOR
 
-    /* Trigger deferred GPU init outside the semaphore.
-     * RequestGPUInit handles both Process (direct) and Task (helper) contexts. */
-    if (!compdata->gpu.context_valid && compdata->gpu.displayBM && compdata->displaybitmap)
-        RequestGPUInit(compdata);
+    /* Trigger GPU init outside the semaphore once display mode is known.
+     * Use topbitmap as friendBM for Gallium driver lookup — no displayBM needed. */
+    if (!compdata->gpu.context_valid && compdata->topbitmap &&
+        compdata->displaymode != vHidd_ModeID_Invalid &&
+        compdata->displayrect.MaxX > 0 && compdata->displayrect.MaxY > 0)
+    {
+        struct BitMap *friendBM = NULL;
+        OOP_GetAttr(compdata->topbitmap, aHidd_BitMap_BMStruct, (IPTR *)&friendBM);
+        if (friendBM)
+            RequestGPUInit(compdata, friendBM);
+    }
 
     *msg->active = compdata->displaybitmap ? TRUE : FALSE;
     return compdata->screenbitmap;
@@ -1871,10 +1884,6 @@ OOP_Object *METHOD(Compositor, Hidd_Compositor, BitMapStackChanged)
 VOID METHOD(Compositor, Hidd_Compositor, BitMapRectChanged)
 {
     struct HIDDCompositorData *compdata = OOP_INST_DATA(cl, o);
-
-    /* Deferred GPU init outside the semaphore */
-    if (!compdata->gpu.context_valid && compdata->gpu.displayBM && compdata->displaybitmap)
-        RequestGPUInit(compdata);
 
     if (compdata->displaybitmap)
     {
@@ -2026,8 +2035,14 @@ IPTR METHOD(Compositor, Hidd_Compositor, BitMapPositionChange)
     UNLOCK_COMPOSITOR
 
     /* Trigger deferred GPU init outside the semaphore */
-    if (!compdata->gpu.context_valid && compdata->gpu.displayBM && compdata->displaybitmap)
-        RequestGPUInit(compdata);
+    if (!compdata->gpu.context_valid && compdata->topbitmap &&
+        compdata->displaymode != vHidd_ModeID_Invalid)
+    {
+        struct BitMap *friendBM = NULL;
+        OOP_GetAttr(compdata->topbitmap, aHidd_BitMap_BMStruct, (IPTR *)&friendBM);
+        if (friendBM)
+            RequestGPUInit(compdata, friendBM);
+    }
 
     return compdata->displaybitmap ? TRUE : FALSE;
 }
