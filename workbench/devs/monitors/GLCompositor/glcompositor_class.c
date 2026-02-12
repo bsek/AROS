@@ -146,6 +146,64 @@ static struct Screen *HIDDCompositorFindBitMapScreen(
     return (struct Screen *)NULL;
 }
 
+/*
+ * Look up or create a LayerCompositor for a given screen.
+ * Uses the persistent cache in compdata->layer_compositor_cache.
+ * If the GPU is available and no compositor exists yet for this screen,
+ * one is created automatically with a shared GL context.
+ * Returns the LayerCompositor or NULL if GPU is not ready.
+ */
+static struct LayerCompositor *GetOrCreateLayerCompositor(
+    struct HIDDCompositorData *compdata, struct Screen *screen)
+{
+    struct LayerCompositorCacheEntry *entry;
+    struct LayerCompositor *comp;
+
+    if (!screen)
+        return NULL;
+
+    /* Search existing cache */
+    ForeachNode(&compdata->layer_compositor_cache, entry)
+    {
+        if (entry->screen == screen)
+            return entry->compositor;
+    }
+
+    /* Not found — create a new one if GPU is available */
+    if (!compdata->gpu.available || !compdata->gpu.gl_context)
+        return NULL;
+
+    /* Create LayerCompositor with shared GL context */
+    {
+        extern struct LayerCompositor *CreateLayerCompositorSharedInternal(
+            struct Screen *screen, APTR masterGLContext);
+
+        comp = CreateLayerCompositorSharedInternal(screen, compdata->gpu.gl_context);
+    }
+
+    if (!comp)
+        return NULL;
+
+    /* Activate it immediately */
+    {
+        extern BOOL ActivateLayerCompositorInternal(struct LayerCompositor *comp);
+        ActivateLayerCompositorInternal(comp);
+    }
+
+    /* Add to cache */
+    entry = AllocMem(sizeof(struct LayerCompositorCacheEntry), MEMF_ANY | MEMF_CLEAR);
+    if (entry)
+    {
+        entry->screen = screen;
+        entry->compositor = comp;
+        AddTail((struct List *)&compdata->layer_compositor_cache, (struct Node *)entry);
+        D(bug("[GLCompositor] Created and cached LayerCompositor %p for screen %p\n",
+              comp, screen));
+    }
+
+    return comp;
+}
+
 static VOID HIDDCompositorValidateBitMapPositionChange(
     OOP_Object *bm, SIPTR *newxoffset, SIPTR *newyoffset,
     LONG displayedwidth, LONG displayedheight)
@@ -475,6 +533,9 @@ static BOOL InitGPUCompositorEarly(struct HIDDCompositorData *compdata)
     compdata->gpu.init_proc = NULL;
     compdata->gpu.sig_init = -1;
 
+    /* Initialize the LayerCompositor cache */
+    NEWLIST(&compdata->layer_compositor_cache);
+
     /* Store global pointer for helper process */
     g_compdata = compdata;
 
@@ -644,6 +705,21 @@ fail:
 static void ShutdownGPUCompositor(struct HIDDCompositorData *compdata)
 {
     D(bug("[GLCompositor] %s: Shutting down GPU compositor\n", __func__));
+
+    /* Destroy all cached LayerCompositors */
+    {
+        struct LayerCompositorCacheEntry *entry, *next;
+        extern void DestroyLayerCompositorInternal(struct LayerCompositor *comp);
+
+        ForeachNodeSafe(&compdata->layer_compositor_cache, entry, next)
+        {
+            D(bug("[GLCompositor] %s: Destroying LayerCompositor %p for screen %p\n",
+                  __func__, entry->compositor, entry->screen));
+            DestroyLayerCompositorInternal(entry->compositor);
+            Remove((struct Node *)entry);
+            FreeMem(entry, sizeof(struct LayerCompositorCacheEntry));
+        }
+    }
 
     /* Signal helper process to exit */
     if (compdata->gpu.init_proc)
@@ -1051,6 +1127,7 @@ static VOID GPUCompositorRedrawVisibleRegions(struct HIDDCompositorData *compdat
     /*
      * Render bitmaps back-to-front (bottom of stack first).
      * For alpha bitmaps, draw shadow first, then the bitmap.
+     * If a bitmap has a LayerCompositor, delegate to it for per-window rendering.
      */
     for (n = (struct StackBitMapNode *)compdata->bitmapstack.mlh_TailPred;
          n->n.mln_Pred; n = (struct StackBitMapNode *)n->n.mln_Pred)
@@ -1064,6 +1141,19 @@ static VOID GPUCompositorRedrawVisibleRegions(struct HIDDCompositorData *compdat
         struct RegionRectangle *srrect = n->screenregion->RegionRectangle;
         if (!srrect)
             continue;
+
+        /* LayerCompositor delegation: if this screen has a LayerCompositor,
+         * delegate per-window rendering to it instead of drawing the
+         * screen bitmap as a single texture. */
+        if (n->layer_compositor)
+        {
+            extern void CompositorUpdateInternal(struct LayerCompositor *comp);
+            CompositorUpdateInternal(n->layer_compositor);
+
+            /* Restore our GL context after the LayerCompositor used its own */
+            glAMakeCurrent(compdata->gpu.gl_context);
+            continue;
+        }
 
         /* Draw shadow for alpha bitmaps */
         if ((n->sbmflags & COMPF_ALPHA) && compdata->gpu.shadow_shader)
@@ -1797,6 +1887,7 @@ OOP_Object *METHOD(Compositor, Hidd_Compositor, BitMapStackChanged)
 
         /* GPU fields are zero from MEMF_CLEAR */
         n->gpu.needs_upload = TRUE;
+        n->layer_compositor = NULL;
 
         if ((bmScreen = HIDDCompositorFindBitMapScreen(compdata, n->bm)) != NULL)
         {
@@ -1807,6 +1898,9 @@ OOP_Object *METHOD(Compositor, Hidd_Compositor, BitMapStackChanged)
             {
                 GetAttr(SA_AlphaPreCompositingHook, (Object *)bmScreen, (IPTR *)&n->prealphacomphook);
             }
+
+            /* Look up or create a LayerCompositor for this screen */
+            n->layer_compositor = GetOrCreateLayerCompositor(compdata, bmScreen);
         }
 
         if (n->sbmflags & COMPF_ALPHA)

@@ -68,6 +68,9 @@ struct GLCompositorSemaphore
 /* Per-Bitmap GPU Data                                                       */
 /* ────────────────────────────────────────────────────────────────────────── */
 
+/* Forward declaration - defined in zunegfx layer_compositor.c */
+struct LayerCompositor;
+
 struct StackBitMapNode
 {
     struct MinNode  n;
@@ -77,6 +80,9 @@ struct StackBitMapNode
     SIPTR           topedge;
     IPTR            sbmflags;
     struct Hook     *prealphacomphook;
+
+    /* Per-screen LayerCompositor (looked up from cache in BitMapStackChanged) */
+    struct LayerCompositor *layer_compositor;
 
     /* GPU rendering data */
     struct {
@@ -94,6 +100,24 @@ struct StackBitMapNode
 #define STACKNODEF_VISIBLE       (1 << STACKNODEB_VISIBLE)
 #define STACKNODEB_DISPLAYABLE   17
 #define STACKNODEF_DISPLAYABLE   (1 << STACKNODEB_DISPLAYABLE)
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Layer Compositor Cache                                                    */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+/*
+ * GLCompositor owns LayerCompositors and caches them per screen.
+ * This survives HIDDCompositorPurgeBitMapStack() — LayerCompositors are
+ * expensive to create (GL context + shaders) so we keep them alive.
+ * On each BitMapStackChanged, the cached LayerCompositor for a screen
+ * is looked up and stored in the corresponding StackBitMapNode.
+ */
+struct LayerCompositorCacheEntry
+{
+    struct MinNode              node;
+    struct Screen               *screen;
+    struct LayerCompositor      *compositor;
+};
 
 /* ────────────────────────────────────────────────────────────────────────── */
 /* Main Compositor Data                                                      */
@@ -206,6 +230,11 @@ struct HIDDCompositorData
         PFNGLVERTEXATTRIBPOINTERPROC_  glVertexAttribPointer;
         PFNGLGETATTRIBLOCATIONPROC_    glGetAttribLocation;
     } gpu;
+
+    /* Per-screen LayerCompositor cache.
+     * Survives PurgeBitMapStack — LayerCompositors are expensive to create.
+     * List of LayerCompositorCacheEntry. */
+    struct MinList              layer_compositor_cache;
 };
 
 /* Compositor state flags */
