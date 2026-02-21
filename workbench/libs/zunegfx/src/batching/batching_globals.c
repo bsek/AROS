@@ -16,13 +16,13 @@
 /* Batch System Implementation */
 /*****************************************************************************/
 
-struct BatchState *CreateBatchState(struct RenderPort *rp) {
+struct BatchState *CreateBatchState(struct RenderContext *rctx) {
   struct BatchState *batch;
 
   ENTER_FUNCTION("CreateBatchState");
 
-  if (!rp) {
-    D(bug("ZuneRenderer: Invalid RenderPort for batch state\n"));
+  if (!rctx) {
+    D(bug("ZuneRenderer: Invalid RenderContext for batch state\n"));
     return NULL;
   }
 
@@ -47,7 +47,7 @@ struct BatchState *CreateBatchState(struct RenderPort *rp) {
   batch->pixelBatch.needsFlush = FALSE;
 
   /* Initialize pen cache */
-  struct ColorMap *cmap = rp->colormap;
+  struct ColorMap *cmap = rctx->colormap;
   InitPenCache(&batch->penCache, cmap);
 
   /* Initialize color caches */
@@ -56,7 +56,7 @@ struct BatchState *CreateBatchState(struct RenderPort *rp) {
 
   /* Initialize batch state */
   batch->active = FALSE;
-  batch->render_port = rp;
+  batch->render_port = rctx;
 
   D(bug("ZuneRenderer: Enhanced BatchState created\n"));
   EXIT_FUNCTION("CreateBatchState");
@@ -70,8 +70,8 @@ void DestroyBatchState(struct BatchState *batch) {
     return;
 
   /* Flush any pending operations */
-  if (batch->immediate.count > 0 || batch->deferred.count > 0) {
-    // TODO FlushBatchState(batch);
+  if (batch->deferred.count > 0) {
+    ExecuteBatchCommands(batch);
   }
 
   /* Cleanup pen cache */
@@ -105,82 +105,8 @@ BOOL AddCommandToBatch(struct BatchState *batch, BatchCommandType type, WORD x,
   if (!batch || !batch->active)
     return FALSE;
 
-  ENTER_FUNCTION("AddCommandToBatch");
-
-  /* Check if we should use immediate batch (same pen) */
-  LONG pen = -1;
-  // TODO!!
-  // if (!ShouldUseCyberGraphics(batch->render_port)) {
-  //   pen = GetCachedPen(&batch->penCache, color);
-  //   if (pen == -1) {
-  //     D(bug("ZuneRenderer: Failed to get cached pen for color 0x%08x\n",
-  //           (unsigned int)color));
-  //     EXIT_FUNCTION("AddCommandToBatch");
-  //     return FALSE;
-  //   }
-  // }
-
-  // /* Try immediate batch first (same pen commands) */
-  // if (!ShouldUseCyberGraphics(batch->render_port) &&
-  //     batch->immediate.penValid && batch->immediate.currentPen == pen &&
-  //     batch->immediate.count < IMMEDIATE_BATCH_SIZE) {
-
-  //   struct BatchCommand *cmd =
-  //       &batch->immediate.commands[batch->immediate.count];
-  //   cmd->type = type;
-  //   cmd->x = x;
-  //   cmd->y = y;
-  //   cmd->width = width;
-  //   cmd->height = height;
-  //   cmd->x2 = x2;
-  //   cmd->y2 = y2;
-  //   cmd->color = color;
-  //   cmd->pen = pen;
-  //   cmd->sortKey = (UWORD)pen;
-
-  //   batch->immediate.count++;
-
-  //   D(bug("ZuneRenderer: Added command to immediate batch (%d/%d), pen %d\n",
-  //         batch->immediate.count, IMMEDIATE_BATCH_SIZE, (int)pen));
-  //   EXIT_FUNCTION("AddCommandToBatch");
-  //   return TRUE;
-  // }
-
-  /* Flush immediate batch if pen changed */
-  if (batch->immediate.count > 0 &&
-      (!batch->immediate.penValid || batch->immediate.currentPen != pen)) {
-    /* ZuneInternalBatchFlushImmediate(batch); */
-  }
-
-  /* Set up immediate batch for new pen */
-  if (batch->immediate.count == 0) {
-    batch->immediate.currentPen = pen;
-    batch->immediate.penValid = TRUE;
-
-    struct BatchCommand *cmd =
-        &batch->immediate.commands[batch->immediate.count];
-    cmd->type = type;
-    cmd->x = x;
-    cmd->y = y;
-    cmd->width = width;
-    cmd->height = height;
-    cmd->x2 = x2;
-    cmd->y2 = y2;
-    cmd->color = color;
-    cmd->pen = pen;
-    cmd->sortKey = (UWORD)pen;
-
-    batch->immediate.count++;
-
-    D(bug("ZuneRenderer: Started new immediate batch with pen %d\n", (int)pen));
-    EXIT_FUNCTION("AddCommandToBatch");
-    return TRUE;
-  }
-
-  /* Use deferred batch for different pens or CyberGraphics */
-  if (batch->deferred.count >= DEFERRED_BATCH_SIZE) {
-    /* Future heuristic hook for forced flush */
-  }
+  if (batch->deferred.count >= DEFERRED_BATCH_SIZE)
+    return FALSE;
 
   struct BatchCommand *cmd = &batch->deferred.commands[batch->deferred.count];
   cmd->type = type;
@@ -191,16 +117,48 @@ BOOL AddCommandToBatch(struct BatchState *batch, BatchCommandType type, WORD x,
   cmd->x2 = x2;
   cmd->y2 = y2;
   cmd->color = color;
-  cmd->pen = pen;
-  cmd->sortKey = (UWORD)pen;
+  cmd->pen = -1;
+  cmd->sortKey = color;
+  cmd->border_width = 0;
 
   batch->deferred.count++;
   batch->deferred.needsSort = TRUE;
 
-  D(bug("ZuneRenderer: Added command to deferred batch (%d/%d)\n",
+  D(bug("ZuneRenderer: Batched command type %d (%d/%d)\n",
+        (int)type, (int)batch->deferred.count, DEFERRED_BATCH_SIZE));
+
+  return TRUE;
+}
+
+BOOL AddStyledCommandToBatch(struct BatchState *batch, BatchCommandType type,
+                             WORD x, WORD y, UWORD width, UWORD height,
+                             UBYTE border_width, ULONG color) {
+  if (!batch || !batch->active)
+    return FALSE;
+
+  if (batch->deferred.count >= DEFERRED_BATCH_SIZE)
+    return FALSE;
+
+  struct BatchCommand *cmd = &batch->deferred.commands[batch->deferred.count];
+  cmd->type = type;
+  cmd->x = x;
+  cmd->y = y;
+  cmd->width = width;
+  cmd->height = height;
+  cmd->x2 = 0;
+  cmd->y2 = 0;
+  cmd->color = color;
+  cmd->pen = -1;
+  cmd->sortKey = color;
+  cmd->border_width = border_width;
+
+  batch->deferred.count++;
+  batch->deferred.needsSort = TRUE;
+
+  D(bug("ZuneRenderer: Batched styled command type %d bw=%d (%d/%d)\n",
+        (int)type, (int)border_width,
         (int)batch->deferred.count, DEFERRED_BATCH_SIZE));
 
-  EXIT_FUNCTION("AddCommandToBatch");
   return TRUE;
 }
 
@@ -213,12 +171,70 @@ void ZuneInternalBatchFlushImmediate(struct BatchState *batch) {
   batch->immediate.penValid = FALSE;
 }
 
-void ZuneInternalBatchFlushState(struct BatchState *batch) {
-  if (!batch)
+void ExecuteBatchCommands(struct BatchState *batch) {
+  if (!batch || !batch->render_port || batch->deferred.count == 0)
     return;
-  /* Reset batches */
+
+  struct RenderContext *rctx = batch->render_port;
+
+  D(bug("ZuneRenderer: Executing %d batched commands\n",
+        (int)batch->deferred.count));
+
+  /* Optimize: merge adjacent same-color fill rects */
+  OptimizeBatchCommands(batch);
+
+  /* Execute commands via backend */
+  ZuneBackend *backend = ZuneGetRenderContextBackend(rctx);
+  if (!backend || !backend->ops) {
+    D(bug("ZuneRenderer: No backend for batch execution\n"));
+    batch->deferred.count = 0;
+    return;
+  }
+
+  for (UWORD i = 0; i < batch->deferred.count; i++) {
+    struct BatchCommand *cmd = &batch->deferred.commands[i];
+    struct InternalColor ic =
+        ZuneColorToInternal(rctx, cmd->color, rctx->pixel_format);
+
+    switch (cmd->type) {
+    case BATCH_CMD_FILL_RECT:
+      if (backend->ops->DrawRectangle)
+        backend->ops->DrawRectangle(rctx, cmd->x, cmd->y, cmd->width,
+                                    cmd->height, 0, 0, NULL, &ic, TRUE, FALSE);
+      break;
+    case BATCH_CMD_DRAW_RECT:
+      if (backend->ops->DrawRectangle)
+        backend->ops->DrawRectangle(rctx, cmd->x, cmd->y, cmd->width,
+                                    cmd->height, 1, 0, NULL, &ic, FALSE,
+                                    FALSE);
+      break;
+    case BATCH_CMD_DRAW_RECT_STYLED:
+      if (backend->ops->DrawRectangle)
+        backend->ops->DrawRectangle(rctx, cmd->x, cmd->y, cmd->width,
+                                    cmd->height, cmd->border_width, 0, NULL,
+                                    &ic, FALSE, FALSE);
+      break;
+    case BATCH_CMD_DRAW_LINE:
+      if (backend->ops->DrawLine)
+        backend->ops->DrawLine(rctx, cmd->x, cmd->y, cmd->x2, cmd->y2, 1, &ic,
+                               FALSE);
+      break;
+    case BATCH_CMD_DRAW_PIXEL:
+      if (backend->ops->DrawPixel)
+        backend->ops->DrawPixel(rctx, cmd->x, cmd->y, &ic, FALSE);
+      break;
+    }
+  }
+
+  D(bug("ZuneRenderer: Batch execution complete\n"));
+
+  /* Reset counters */
   batch->immediate.count = 0;
   batch->deferred.count = 0;
+}
+
+void ZuneInternalBatchFlushState(struct BatchState *batch) {
+  ExecuteBatchCommands(batch);
 }
 
 /*****************************************************************************/
@@ -232,7 +248,7 @@ void ZuneInternalBatchSortCommandsByPen(struct BatchCommand *commands,
   (void)count;
 }
 
-BOOL ShouldFlushBatch(struct BatchState *batch, struct RenderPort *newTarget) {
+BOOL ShouldFlushBatch(struct BatchState *batch, struct RenderContext *newTarget) {
   if (!batch || !batch->active)
     return FALSE;
 

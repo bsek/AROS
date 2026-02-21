@@ -11,7 +11,7 @@
 AROS_LH1(ULONG, ZuneGetBatchCount,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
 
          /*  LOCATION */
          struct Library *, ZuneGfxBase, 23, zunegfx)
@@ -20,7 +20,7 @@ AROS_LH1(ULONG, ZuneGetBatchCount,
     Gets the number of operations currently in the batch buffer.
 
 INPUTS
-    rp - RenderPort to check (must not be NULL)
+    rctx - RenderContext to check (must not be NULL)
 
 RESULT
     Number of batched operations, or 0 if batching is not active.
@@ -32,10 +32,10 @@ SEE ALSO
 {
   AROS_LIBFUNC_INIT
 
-  if (!ValidateRenderPort(rp) || !rp->batch_state)
+  if (!ValidateRenderContext(rctx) || !rctx->batch_state)
     return 0;
 
-  struct BatchState *batch = (struct BatchState *)rp->batch_state;
+  struct BatchState *batch = (struct BatchState *)rctx->batch_state;
   return batch->immediate.count + batch->deferred.count;
 
   AROS_LIBFUNC_EXIT

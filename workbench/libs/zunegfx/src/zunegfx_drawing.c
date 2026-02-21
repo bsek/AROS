@@ -9,6 +9,7 @@
 */
 
 #include "backends/backend_interface.h"
+#include "batching/batching_intern.h"
 #include "zunegfx_intern.h"
 #include <aros/debug.h>
 #include <aros/libcall.h>
@@ -23,7 +24,7 @@
 AROS_LH4(void, ZuneFillCircle,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(struct ZunePoint *, center, A1), AROS_LHA(UBYTE, radius, D0),
          AROS_LHA(struct ZuneBrush *, brush, A2),
 
@@ -34,7 +35,7 @@ AROS_LH4(void, ZuneFillCircle,
     Draws a filled circle.
 
 INPUTS
-    rp - RenderPort
+    rctx - RenderContext
     centerX, centerY - Center coordinates
     radius - Circle radius
     color - Fill color in ARGB format
@@ -48,8 +49,8 @@ RESULT
 
   ENTER_FUNCTION("DrawCircle");
 
-  if (!rp || !center) {
-    D(bug("DrawCircle: Invalid parameters (rp=%p, center=%p)\n", rp, center));
+  if (!rctx || !center) {
+    D(bug("DrawCircle: Invalid parameters (rctx=%p, center=%p)\n", rctx, center));
     EXIT_FUNCTION("DrawCircle");
     return;
   }
@@ -63,7 +64,7 @@ RESULT
   const WORD centerX = center->x;
   const WORD centerY = center->y;
 
-  ZUNE_BACKEND_CALL(rp, DrawCircle, centerX, centerY, radius, (UBYTE)0, brush, NULL, TRUE, FALSE);
+  ZUNE_BACKEND_CALL(rctx, DrawCircle, centerX, centerY, radius, (UBYTE)0, brush, NULL, TRUE, FALSE);
 
   EXIT_FUNCTION("DrawCircle");
 
@@ -76,7 +77,7 @@ RESULT
 AROS_LH4(void, ZuneDrawCircleOutline,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(struct ZunePoint *, center, A1), AROS_LHA(UBYTE, radius, D0),
          AROS_LHA(ULONG, color, D1),
 
@@ -87,7 +88,7 @@ AROS_LH4(void, ZuneDrawCircleOutline,
     Draws a circle outline.
 
 INPUTS
-    rp - RenderPort
+    rctx - RenderContext
     centerX, centerY - Center coordinates
     radius - Circle radius
     color - Border color in ARGB format
@@ -101,8 +102,8 @@ RESULT
 
   ENTER_FUNCTION("DrawCircle");
 
-  if (!rp || !center) {
-    D(bug("DrawCircleOutline: Invalid parameters (rp=%p, center=%p)\n", rp,
+  if (!rctx || !center) {
+    D(bug("DrawCircleOutline: Invalid parameters (rctx=%p, center=%p)\n", rctx,
           center));
     EXIT_FUNCTION("DrawCircle");
     return;
@@ -118,8 +119,8 @@ RESULT
   const WORD centerY = center->y;
 
   struct InternalColor internal_color =
-      ZuneColorToInternal(rp, color, rp->pixel_format);
-  ZUNE_BACKEND_CALL(rp, DrawCircle, centerX, centerY, radius, (UBYTE)1, NULL,
+      ZuneColorToInternal(rctx, color, rctx->pixel_format);
+  ZUNE_BACKEND_CALL(rctx, DrawCircle, centerX, centerY, radius, (UBYTE)1, NULL,
                     &internal_color, FALSE, FALSE);
 
   EXIT_FUNCTION("DrawCircle");
@@ -133,7 +134,7 @@ RESULT
 AROS_LH4(void, ZuneDrawLine,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(struct ZunePoint *, start, A1),
          AROS_LHA(struct ZunePoint *, end, A2),
          AROS_LHA(ULONG, color, D0),
@@ -145,7 +146,7 @@ AROS_LH4(void, ZuneDrawLine,
     Draws a line using Bresenham's line algorithm.
 
 INPUTS
-    rp - RenderPort
+    rctx - RenderContext
     startX, startY - Starting coordinates
     endX, endY - Ending coordinates
     color - Line color in ARGB format
@@ -159,8 +160,8 @@ RESULT
 
   ENTER_FUNCTION("ZuneDrawLine");
 
-  if (!rp || !start || !end) {
-    D(bug("ZuneDrawLine: Invalid parameters (rp=%p, start=%p, end=%p)\n", rp,
+  if (!rctx || !start || !end) {
+    D(bug("ZuneDrawLine: Invalid parameters (rctx=%p, start=%p, end=%p)\n", rctx,
           start, end));
     EXIT_FUNCTION("ZuneDrawLine");
     return;
@@ -171,8 +172,21 @@ RESULT
   const WORD endX = end->x;
   const WORD endY = end->y;
 
-  struct InternalColor internal_color = ZuneColorToInternal(rp, color, rp->pixel_format);
-  ZUNE_BACKEND_CALL(rp, DrawLine, startX, startY, endX, endY, 1.0, &internal_color, FALSE);
+  /* Batch lines when batching is active */
+  if (rctx->batching_enabled && rctx->batch_state) {
+    struct BatchState *batch = (struct BatchState *)rctx->batch_state;
+    if (!AddCommandToBatch(batch, BATCH_CMD_DRAW_LINE, startX, startY, 0, 0,
+                           endX, endY, color)) {
+      ExecuteBatchCommands(batch);
+      AddCommandToBatch(batch, BATCH_CMD_DRAW_LINE, startX, startY, 0, 0, endX,
+                        endY, color);
+    }
+    EXIT_FUNCTION("ZuneDrawLine");
+    return;
+  }
+
+  struct InternalColor internal_color = ZuneColorToInternal(rctx, color, rctx->pixel_format);
+  ZUNE_BACKEND_CALL(rctx, DrawLine, startX, startY, endX, endY, 1.0, &internal_color, FALSE);
 
   EXIT_FUNCTION("ZuneDrawLine");
 
@@ -185,7 +199,7 @@ RESULT
 AROS_LH5(void, ZuneDrawCircleOutlineStyled,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(struct ZunePoint *, center, A1),
          AROS_LHA(UBYTE, radius, D0),
          AROS_LHA(UBYTE, line_width, D1),
@@ -198,7 +212,7 @@ AROS_LH5(void, ZuneDrawCircleOutlineStyled,
     Draws a styled circle outline.
 
 INPUTS
-    rp - RenderPort
+    rctx - RenderContext
     centerX, centerY - Center coordinates
     radius - Circle radius
     lineWidth - Line width for outline
@@ -213,9 +227,9 @@ RESULT
 
   ENTER_FUNCTION("DrawCircleOutlineStyled");
 
-  if (!rp || !center) {
-    D(bug("DrawCircleOutlineStyled: Invalid parameters (rp=%p, center=%p)\n",
-          rp, center));
+  if (!rctx || !center) {
+    D(bug("DrawCircleOutlineStyled: Invalid parameters (rctx=%p, center=%p)\n",
+          rctx, center));
     EXIT_FUNCTION("DrawCircleOutlineStyled");
     return;
   }
@@ -230,8 +244,8 @@ RESULT
   const WORD centerY = center->y;
 
   struct InternalColor internal_color =
-      ZuneColorToInternal(rp, color, rp->pixel_format);
-  ZUNE_BACKEND_CALL(rp, DrawCircle, centerX, centerY, radius, line_width, NULL,
+      ZuneColorToInternal(rctx, color, rctx->pixel_format);
+  ZUNE_BACKEND_CALL(rctx, DrawCircle, centerX, centerY, radius, line_width, NULL,
                     &internal_color, FALSE, FALSE);
 
   EXIT_FUNCTION("DrawCircleOutlineStyled");
@@ -245,7 +259,7 @@ RESULT
 AROS_LH5(void, ZuneDrawLineStyled,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(struct ZunePoint *, start, A1),
          AROS_LHA(struct ZunePoint *, end, A2),
          AROS_LHA(UWORD, line_width, D0),
@@ -258,7 +272,7 @@ AROS_LH5(void, ZuneDrawLineStyled,
     Draws a styled line using Bresenham's line algorithm.
 
 INPUTS
-    rp - RenderPort
+    rctx - RenderContext
     startX, startY - Starting coordinates
     endX, endY - Ending coordinates
     lineWidth - Width of the line
@@ -273,9 +287,9 @@ RESULT
 
   ENTER_FUNCTION("ZuneDrawLineStyled");
 
-  if (!rp || !start || !end) {
-    D(bug("ZuneDrawLineStyled: Invalid parameters (rp=%p, start=%p, end=%p)\n",
-          rp, start, end));
+  if (!rctx || !start || !end) {
+    D(bug("ZuneDrawLineStyled: Invalid parameters (rctx=%p, start=%p, end=%p)\n",
+          rctx, start, end));
     EXIT_FUNCTION("ZuneDrawLineStyled");
     return;
   }
@@ -286,8 +300,8 @@ RESULT
   const WORD endY = end->y;
 
   struct InternalColor internal_color =
-      ZuneColorToInternal(rp, color, rp->pixel_format);
-  ZUNE_BACKEND_CALL(rp, DrawLine, startX, startY, endX, endY, line_width,
+      ZuneColorToInternal(rctx, color, rctx->pixel_format);
+  ZUNE_BACKEND_CALL(rctx, DrawLine, startX, startY, endX, endY, line_width,
                     &internal_color, FALSE);
 
   EXIT_FUNCTION("ZuneDrawLineStyled");
@@ -301,7 +315,7 @@ RESULT
 AROS_LH3(void, ZuneDrawPixel,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(struct ZunePoint *, point, A1),
          AROS_LHA(ULONG, color, D0),
 
@@ -312,7 +326,7 @@ AROS_LH3(void, ZuneDrawPixel,
     Draws a single pixel.
 
 INPUTS
-    rp - RenderPort
+    rctx - RenderContext
     x, y - Pixel coordinates
     color - Pixel color in ARGB format
 
@@ -325,8 +339,8 @@ RESULT
 
   ENTER_FUNCTION("ZuneDrawPixel");
 
-  if (!rp || !point) {
-    D(bug("ZuneDrawPixel: Invalid parameters (rp=%p, point=%p)\n", rp, point));
+  if (!rctx || !point) {
+    D(bug("ZuneDrawPixel: Invalid parameters (rctx=%p, point=%p)\n", rctx, point));
     EXIT_FUNCTION("ZuneDrawPixel");
     return;
   }
@@ -334,9 +348,21 @@ RESULT
   const WORD x = point->x;
   const WORD y = point->y;
 
+  /* Batch pixels when batching is active */
+  if (rctx->batching_enabled && rctx->batch_state) {
+    struct BatchState *batch = (struct BatchState *)rctx->batch_state;
+    if (!AddCommandToBatch(batch, BATCH_CMD_DRAW_PIXEL, x, y, 0, 0, 0, 0,
+                           color)) {
+      ExecuteBatchCommands(batch);
+      AddCommandToBatch(batch, BATCH_CMD_DRAW_PIXEL, x, y, 0, 0, 0, 0, color);
+    }
+    EXIT_FUNCTION("ZuneDrawPixel");
+    return;
+  }
+
   struct InternalColor internal_color =
-      ZuneColorToInternal(rp, color, rp->pixel_format);
-  ZUNE_BACKEND_CALL(rp, DrawPixel, x, y, &internal_color, FALSE);
+      ZuneColorToInternal(rctx, color, rctx->pixel_format);
+  ZUNE_BACKEND_CALL(rctx, DrawPixel, x, y, &internal_color, FALSE);
 
   EXIT_FUNCTION("ZuneDrawPixel");
 

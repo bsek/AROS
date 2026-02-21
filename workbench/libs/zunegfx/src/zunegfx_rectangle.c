@@ -9,6 +9,7 @@
 */
 #define DEBUG 0
 #include "backends/backend_interface.h"
+#include "batching/batching_intern.h"
 #include "zunegfx_intern.h"
 #include <aros/debug.h>
 #include <aros/libcall.h>
@@ -18,7 +19,7 @@
 AROS_LH3(void, ZuneFillRectangle,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(struct ZuneRect *, rect, A1),
          AROS_LHA(struct ZuneBrush *, brush, A2),
 
@@ -29,7 +30,7 @@ AROS_LH3(void, ZuneFillRectangle,
     Draws a filled rectangle.
 
 INPUTS
-    rp - RenderPort
+    rctx - RenderContext
     x, y - Top-left corner
     width, height - Rectangle dimensions
     color - Fill color in ARGB format
@@ -46,8 +47,8 @@ RESULT
   D(bug("DrawRectangle x = %d, y = %d, width = %d, height = %d\n", rect->x,
         rect->y, rect->width, rect->height));
 
-  if (!rp || !rect) {
-    D(bug("DrawRectangle: Invalid parameters (rp=%p, rect=%p)\n", rp, rect));
+  if (!rctx || !rect) {
+    D(bug("DrawRectangle: Invalid parameters (rctx=%p, rect=%p)\n", rctx, rect));
     EXIT_FUNCTION("DrawRectangle");
     return;
   }
@@ -63,7 +64,21 @@ RESULT
   const UWORD width = rect->width;
   const UWORD height = rect->height;
 
-  ZUNE_BACKEND_CALL(rp, DrawRectangle, x, y, width, height, 0, 0, brush,
+  /* Batch solid-color fills when batching is active */
+  if (rctx->batching_enabled && rctx->batch_state && brush &&
+      brush->type == ZUNE_BRUSH_TYPE_SOLID) {
+    struct BatchState *batch = (struct BatchState *)rctx->batch_state;
+    if (!AddCommandToBatch(batch, BATCH_CMD_FILL_RECT, x, y, width, height, 0,
+                           0, brush->data.solid.color)) {
+      ExecuteBatchCommands(batch);
+      AddCommandToBatch(batch, BATCH_CMD_FILL_RECT, x, y, width, height, 0, 0,
+                        brush->data.solid.color);
+    }
+    EXIT_FUNCTION("DrawRectangle");
+    return;
+  }
+
+  ZUNE_BACKEND_CALL(rctx, DrawRectangle, x, y, width, height, 0, 0, brush,
                     NULL, TRUE, FALSE);
 
   EXIT_FUNCTION("DrawRectangle");
@@ -77,7 +92,7 @@ RESULT
 AROS_LH4(void, ZuneFillRectangleRounded,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(struct ZuneRect *, rect, A1),
          AROS_LHA(UBYTE, cornerRadius, D0),
          AROS_LHA(struct ZuneBrush *, brush, A2),
@@ -89,7 +104,7 @@ AROS_LH4(void, ZuneFillRectangleRounded,
     Draws a filled rounded rectangle.
 
 INPUTS
-    rp - RenderPort
+    rctx - RenderContext
     x, y - Top-left corner
     width, height - Rectangle dimensions
     cornerRadius - Corner radius
@@ -104,8 +119,8 @@ RESULT
 
   ENTER_FUNCTION("DrawRectangleRounded");
 
-  if (!rp || !rect) {
-    D(bug("DrawRectangleRounded: Invalid parameters (rp=%p, rect=%p)\n", rp,
+  if (!rctx || !rect) {
+    D(bug("DrawRectangleRounded: Invalid parameters (rctx=%p, rect=%p)\n", rctx,
           rect));
     EXIT_FUNCTION("DrawRectangleRounded");
     return;
@@ -122,7 +137,7 @@ RESULT
   const UWORD width = rect->width;
   const UWORD height = rect->height;
 
-  ZUNE_BACKEND_CALL(rp, DrawRectangle, x, y, width, height, (UBYTE)0, cornerRadius, brush, NULL, TRUE, FALSE);
+  ZUNE_BACKEND_CALL(rctx, DrawRectangle, x, y, width, height, (UBYTE)0, cornerRadius, brush, NULL, TRUE, FALSE);
 
   EXIT_FUNCTION("DrawRectangleRounded");
 
@@ -135,7 +150,7 @@ RESULT
 AROS_LH3(void, ZuneDrawRectangleOutline,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(struct ZuneRect *, rect, A1),
          AROS_LHA(ULONG, color, D0),
 
@@ -146,7 +161,7 @@ AROS_LH3(void, ZuneDrawRectangleOutline,
     Draws a rectangle outline.
 
 INPUTS
-    rp - RenderPort
+    rctx - RenderContext
     x, y - Top-left corner
     width, height - Rectangle dimensions
     color - Border color in ARGB format
@@ -160,8 +175,8 @@ RESULT
 
   ENTER_FUNCTION("DrawRectangleOutline");
 
-  if (!rp || !rect) {
-    D(bug("DrawRectangleOutline: Invalid parameters (rp=%p, rect=%p)\n", rp,
+  if (!rctx || !rect) {
+    D(bug("DrawRectangleOutline: Invalid parameters (rctx=%p, rect=%p)\n", rctx,
           rect));
     EXIT_FUNCTION("DrawRectangleOutline");
     return;
@@ -178,9 +193,22 @@ RESULT
   const UWORD width = rect->width;
   const UWORD height = rect->height;
 
+  /* Batch outline rectangles when batching is active */
+  if (rctx->batching_enabled && rctx->batch_state) {
+    struct BatchState *batch = (struct BatchState *)rctx->batch_state;
+    if (!AddCommandToBatch(batch, BATCH_CMD_DRAW_RECT, x, y, width, height, 0,
+                           0, color)) {
+      ExecuteBatchCommands(batch);
+      AddCommandToBatch(batch, BATCH_CMD_DRAW_RECT, x, y, width, height, 0, 0,
+                        color);
+    }
+    EXIT_FUNCTION("DrawRectangleOutline");
+    return;
+  }
+
   struct InternalColor border_color =
-      ZuneColorToInternal(rp, color, rp->pixel_format);
-  ZUNE_BACKEND_CALL(rp, DrawRectangle, x, y, width, height, (UBYTE)1, (UBYTE)0, NULL,
+      ZuneColorToInternal(rctx, color, rctx->pixel_format);
+  ZUNE_BACKEND_CALL(rctx, DrawRectangle, x, y, width, height, (UBYTE)1, (UBYTE)0, NULL,
                     &border_color, FALSE, FALSE);
 
   EXIT_FUNCTION("DrawRectangleOutline");
@@ -194,7 +222,7 @@ RESULT
 AROS_LH4(void, ZuneDrawRectangleRoundedOutline,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(struct ZuneRect *, rect, A1),
          AROS_LHA(UBYTE, cornerRadius, D0), AROS_LHA(ULONG, color, D1),
 
@@ -205,7 +233,7 @@ AROS_LH4(void, ZuneDrawRectangleRoundedOutline,
     Draws a rounded rectangle outline.
 
 INPUTS
-    rp - RenderPort
+    rctx - RenderContext
     x, y - Top-left corner
     width, height - Rectangle dimensions
     cornerRadius - Corner radius
@@ -220,9 +248,9 @@ RESULT
 
   ENTER_FUNCTION("DrawRectangleRoundedOutline");
 
-  if (!rp || !rect) {
-    D(bug("DrawRectangleRoundedOutline: Invalid parameters (rp=%p, rect=%p)\n",
-          rp, rect));
+  if (!rctx || !rect) {
+    D(bug("DrawRectangleRoundedOutline: Invalid parameters (rctx=%p, rect=%p)\n",
+          rctx, rect));
     EXIT_FUNCTION("DrawRectangleRoundedOutline");
     return;
   }
@@ -239,8 +267,8 @@ RESULT
   const UWORD height = rect->height;
 
   struct InternalColor internal_color =
-      ZuneColorToInternal(rp, color, rp->pixel_format);
-  ZUNE_BACKEND_CALL(rp, DrawRectangle, x, y, width, height, (UBYTE)1, cornerRadius,
+      ZuneColorToInternal(rctx, color, rctx->pixel_format);
+  ZUNE_BACKEND_CALL(rctx, DrawRectangle, x, y, width, height, (UBYTE)1, cornerRadius,
                     NULL, &internal_color, FALSE, FALSE);
 
   EXIT_FUNCTION("DrawRectangleRoundedOutline");
@@ -254,7 +282,7 @@ RESULT
 AROS_LH5(void, ZuneDrawRectangleRoundedOutlineStyled,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(struct ZuneRect *, rect, A1),
          AROS_LHA(UBYTE, cornerRadius, D0), AROS_LHA(UBYTE, borderWidth, D1),
          AROS_LHA(ULONG, color, D2),
@@ -266,7 +294,7 @@ AROS_LH5(void, ZuneDrawRectangleRoundedOutlineStyled,
     Draws a styled rounded rectangle outline.
 
 INPUTS
-    rp - RenderPort
+    rctx - RenderContext
     x, y - Top-left corner
     width, height - Rectangle dimensions
     cornerRadius - Corner radius
@@ -282,10 +310,10 @@ RESULT
 
   ENTER_FUNCTION("DrawRectangleRoundedOutlineStyled");
 
-  if (!rp || !rect) {
-    D(bug("DrawRectangleRoundedOutlineStyled: Invalid parameters (rp=%p, "
+  if (!rctx || !rect) {
+    D(bug("DrawRectangleRoundedOutlineStyled: Invalid parameters (rctx=%p, "
           "rect=%p)\n",
-          rp, rect));
+          rctx, rect));
     EXIT_FUNCTION("DrawRectangleRoundedOutlineStyled");
     return;
   }
@@ -302,8 +330,8 @@ RESULT
   const UWORD height = rect->height;
 
   struct InternalColor internal_color =
-      ZuneColorToInternal(rp, color, rp->pixel_format);
-  ZUNE_BACKEND_CALL(rp, DrawRectangle, x, y, width, height, borderWidth,
+      ZuneColorToInternal(rctx, color, rctx->pixel_format);
+  ZUNE_BACKEND_CALL(rctx, DrawRectangle, x, y, width, height, borderWidth,
                     cornerRadius, NULL, &internal_color, FALSE, FALSE);
 
   EXIT_FUNCTION("DrawRectangleRoundedOutlineStyled");
@@ -317,7 +345,7 @@ RESULT
 AROS_LH6(void, ZuneDrawRectangleRoundedStyled,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(struct ZuneRect *, rect, A1),
          AROS_LHA(UBYTE, cornerRadius, D0),
          AROS_LHA(UBYTE, borderWidth, D1),
@@ -331,7 +359,7 @@ AROS_LH6(void, ZuneDrawRectangleRoundedStyled,
     Draws a rounded rectangle with both fill and border.
 
 INPUTS
-    rp - RenderPort
+    rctx - RenderContext
     rect - Rectangle dimensions
     cornerRadius - Corner radius
     borderWidth - Border width
@@ -347,10 +375,10 @@ RESULT
 
   ENTER_FUNCTION("ZuneDrawRectangleRoundedStyled");
 
-  if (!rp || !rect) {
-    D(bug("ZuneDrawRectangleRoundedStyled: Invalid parameters (rp=%p, "
+  if (!rctx || !rect) {
+    D(bug("ZuneDrawRectangleRoundedStyled: Invalid parameters (rctx=%p, "
           "rect=%p)\n",
-          rp, rect));
+          rctx, rect));
     EXIT_FUNCTION("ZuneDrawRectangleRoundedStyled");
     return;
   }
@@ -367,8 +395,8 @@ RESULT
   const UWORD height = rect->height;
 
   struct InternalColor internal_border_color =
-      ZuneColorToInternal(rp, borderColor, rp->pixel_format);
-  ZUNE_BACKEND_CALL(rp, DrawRectangle, x, y, width, height, borderWidth,
+      ZuneColorToInternal(rctx, borderColor, rctx->pixel_format);
+  ZUNE_BACKEND_CALL(rctx, DrawRectangle, x, y, width, height, borderWidth,
                     cornerRadius, fillBrush, &internal_border_color, TRUE, FALSE);
 
   EXIT_FUNCTION("ZuneDrawRectangleRoundedStyled");
@@ -382,7 +410,7 @@ RESULT
 AROS_LH4(void, ZuneDrawRectangleOutlineStyled,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(struct ZuneRect *, rect, A1),
          AROS_LHA(UBYTE, borderWidth, D0), AROS_LHA(ULONG, color, D1),
 
@@ -393,7 +421,7 @@ AROS_LH4(void, ZuneDrawRectangleOutlineStyled,
     Draws a styled rectangle outline.
 
 INPUTS
-    rp - RenderPort
+    rctx - RenderContext
     x, y - Top-left corner
     width, height - Rectangle dimensions
     lineWidth - Line width for outline
@@ -408,9 +436,9 @@ RESULT
 
   ENTER_FUNCTION("DrawRectangleOutlineStyled");
 
-  if (!rp || !rect) {
-    D(bug("DrawRectangleOutlineStyled: Invalid parameters (rp=%p, rect=%p)\n",
-          rp, rect));
+  if (!rctx || !rect) {
+    D(bug("DrawRectangleOutlineStyled: Invalid parameters (rctx=%p, rect=%p)\n",
+          rctx, rect));
     EXIT_FUNCTION("DrawRectangleOutlineStyled");
     return;
   }
@@ -426,9 +454,22 @@ RESULT
   const UWORD width = rect->width;
   const UWORD height = rect->height;
 
+  /* Batch styled outline rectangles when batching is active */
+  if (rctx->batching_enabled && rctx->batch_state) {
+    struct BatchState *batch = (struct BatchState *)rctx->batch_state;
+    if (!AddStyledCommandToBatch(batch, BATCH_CMD_DRAW_RECT_STYLED, x, y,
+                                 width, height, borderWidth, color)) {
+      ExecuteBatchCommands(batch);
+      AddStyledCommandToBatch(batch, BATCH_CMD_DRAW_RECT_STYLED, x, y, width,
+                              height, borderWidth, color);
+    }
+    EXIT_FUNCTION("DrawRectangleOutlineStyled");
+    return;
+  }
+
   struct InternalColor border_color =
-      ZuneColorToInternal(rp, color, rp->pixel_format);
-  ZUNE_BACKEND_CALL(rp, DrawRectangle, x, y, width, height, borderWidth, 0.0,
+      ZuneColorToInternal(rctx, color, rctx->pixel_format);
+  ZUNE_BACKEND_CALL(rctx, DrawRectangle, x, y, width, height, borderWidth, 0.0,
                     NULL, &border_color, FALSE, FALSE);
 
   EXIT_FUNCTION("DrawRectangleOutlineStyled");

@@ -12,7 +12,7 @@
 #include <string.h>
 #include <clib/alib_protos.h>
 
-void PrepareBrushForRendering(struct RenderPort *rp, struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
+void PrepareBrushForRendering(struct RenderContext *rctx, struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
                               UWORD rect_w, UWORD rect_h) {
   if (!brush)
     return;
@@ -117,9 +117,9 @@ void PrepareBrushForRendering(struct RenderPort *rp, struct ZuneBrush *brush, WO
           brush->type == ZUNE_BRUSH_TYPE_SOLID ? "SOLID" : "PEN"));
 
     /* Use inline color struct - no allocation needed */
-    D(bug("PrepareBrushForRendering: Calling ZuneBrushToInternalColor with rp=%p, brush=%p, color=%p\n", rp, brush, &brush->internal.color));
+    D(bug("PrepareBrushForRendering: Calling ZuneBrushToInternalColor with rctx=%p, brush=%p, color=%p\n", rctx, brush, &brush->internal.color));
 
-    if (!ZuneBrushToInternalColor(rp, brush, &brush->internal.color)) {
+    if (!ZuneBrushToInternalColor(rctx, brush, &brush->internal.color)) {
       brush->internal.valid = FALSE;
     }
     break;

@@ -20,10 +20,10 @@
  *       ZuneSetAntialiasingQuality -- Set the antialiasing quality level
  *
  *   SYNOPSIS
- *       ZuneSetAntialiasingQuality(rp, quality);
+ *       ZuneSetAntialiasingQuality(rctx, quality);
  *                                  A0  D0
  *
- *       VOID ZuneSetAntialiasingQuality(struct RenderPort *, UBYTE);
+ *       VOID ZuneSetAntialiasingQuality(struct RenderContext *, UBYTE);
  *
  *   FUNCTION
  *       Sets the antialiasing quality level for the graphics backend.
@@ -31,23 +31,23 @@
  *       drawing operations.
  *
  *   INPUTS
- *       rp -- RenderPort (used to determine the backend)
+ *       rctx -- RenderContext (used to determine the backend)
  *       quality -- Quality level (0=fast, 1=good, 2=best)
  *
  ***************************************************************************/
 
 AROS_LH2(VOID, ZuneSetAntialiasingQuality,
-         AROS_LHA(struct RenderPort *, rp, A0), AROS_LHA(UBYTE, quality, D0),
+         AROS_LHA(struct RenderContext *, rctx, A0), AROS_LHA(UBYTE, quality, D0),
          struct Library *, ZuneGfxBase, 59, zunegfx)
 
 {
   AROS_LIBFUNC_INIT
 
-  if (!rp) {
+  if (!rctx) {
     return;
   }
 
-  (void)rp;
+  (void)rctx;
   g_aa_quality = quality;
 
   AROS_LIBFUNC_EXIT

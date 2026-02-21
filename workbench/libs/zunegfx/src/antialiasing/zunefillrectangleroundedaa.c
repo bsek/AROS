@@ -18,13 +18,13 @@
  *
  *   NAME
  *       ZuneFillRectangleRoundedAA -- Fill an antialiased rounded rectangle on
- *a RenderPort.
+ *a RenderContext.
  *
  *   SYNOPSIS
- *       ZuneFillRectangleRoundedAA(rp, x, y, width, height, cornerRadius,
+ *       ZuneFillRectangleRoundedAA(rctx, x, y, width, height, cornerRadius,
  *color)
  *
- *       VOID ZuneFillRectangleRoundedAA(struct RenderPort *rp, UWORD x,
+ *       VOID ZuneFillRectangleRoundedAA(struct RenderContext *rctx, UWORD x,
  *       UWORD *y, UWORD width, UWORD height, UBYTE cornerRadius, IPTR color)
  *
  *   FUNCTION
@@ -32,7 +32,7 @@
  *       determines how rounded the corners are.
  *
  *   INPUTS
- *       rp -- The RenderPort to draw on
+ *       rctx -- The RenderContext to draw on
  *       x -- X coordinate of the rectangle's top-left corner
  *       y -- Y coordinate of the rectangle's top-left corner
  *       width -- Width of the rectangle in pixels
@@ -43,7 +43,7 @@
  ***************************************************************************/
 
 AROS_LH4(VOID, ZuneFillRectangleRoundedAA,
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(struct ZuneRect *, rect, A1),
          AROS_LHA(UBYTE, cornerRadius, D0),
          AROS_LHA(struct ZuneBrush *, brush, A2),
@@ -51,7 +51,7 @@ AROS_LH4(VOID, ZuneFillRectangleRoundedAA,
 {
   AROS_LIBFUNC_INIT
 
-  if (!rp || !rect) {
+  if (!rctx || !rect) {
     return;
   }
 
@@ -68,7 +68,7 @@ AROS_LH4(VOID, ZuneFillRectangleRoundedAA,
   D(bug(
       "ZuneFillRectangleRoundedAA: CALLING backend with cornerRadius=%d\n",
       (int)cornerRadius));
-  ZUNE_BACKEND_CALL(rp, DrawRectangle, x, y, width, height, (UBYTE)0, cornerRadius,
+  ZUNE_BACKEND_CALL(rctx, DrawRectangle, x, y, width, height, (UBYTE)0, cornerRadius,
                     brush, NULL, TRUE, TRUE);
 
   AROS_LIBFUNC_EXIT

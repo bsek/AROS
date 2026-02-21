@@ -55,24 +55,24 @@ BOOL ValidateDrawingBoard(struct DrawingBoard *board);
 /* DrawingBoard Internal Functions */
 /*****************************************************************************/
 
-void SetPixelInternal(struct RenderPort *rp, WORD x, WORD y, ULONG color) {
+void SetPixelInternal(struct RenderContext *rctx, WORD x, WORD y, ULONG color) {
   struct InternalColor internal_color =
-      ZuneColorToInternal(rp, color, rp->pixel_format);
+      ZuneColorToInternal(rctx, color, rctx->pixel_format);
 
-  ZuneBackend *backend = ZuneGetRenderPortBackend(rp);
+  ZuneBackend *backend = ZuneGetRenderContextBackend(rctx);
   if (backend && backend->ops && backend->ops->SetPixel) {
-    backend->ops->SetPixel(rp->target_board, x, y, &internal_color);
+    backend->ops->SetPixel(rctx->target_board, x, y, &internal_color);
   } else {
-    ZuneFallback_SetPixel(rp->target_board, x, y, &internal_color);
+    ZuneFallback_SetPixel(rctx->target_board, x, y, &internal_color);
   }
 }
 
-ULONG GetPixelInternal(struct RenderPort *rp, WORD x, WORD y) {
-  ZuneBackend *backend = ZuneGetRenderPortBackend(rp);
+ULONG GetPixelInternal(struct RenderContext *rctx, WORD x, WORD y) {
+  ZuneBackend *backend = ZuneGetRenderContextBackend(rctx);
   if (backend && backend->ops && backend->ops->GetPixel) {
-    return backend->ops->GetPixel(rp->target_board, x, y);
+    return backend->ops->GetPixel(rctx->target_board, x, y);
   }
-  return ZuneFallback_GetPixel(rp->target_board, x, y);
+  return ZuneFallback_GetPixel(rctx->target_board, x, y);
 }
 
 BOOL AllocateDrawingBoardBitmap(struct DrawingBoard *board,
@@ -245,7 +245,7 @@ void InitDrawingBoard(struct DrawingBoard *board) {
   EXIT_FUNCTION("InitDrawingBoard");
 }
 
-void CleanupDrawingBoard(struct RenderPort *rp, struct DrawingBoard *board) {
+void CleanupDrawingBoard(struct RenderContext *rctx, struct DrawingBoard *board) {
   ZuneBackend *backend;
 
   if (!board)
@@ -262,7 +262,7 @@ void CleanupDrawingBoard(struct RenderPort *rp, struct DrawingBoard *board) {
    * Use the backend interface for proper abstraction.
    */
   if (board->backend_data) {
-    backend = rp ? ZuneGetRenderPortBackend(rp) : ZuneFindBackendByType(BACKEND_OPENGL);
+    backend = rctx ? ZuneGetRenderContextBackend(rctx) : ZuneFindBackendByType(BACKEND_OPENGL);
     if (backend && backend->ops && backend->ops->CleanupDrawingBoard) {
       backend->ops->CleanupDrawingBoard(board);
     }
@@ -283,46 +283,46 @@ void CleanupDrawingBoard(struct RenderPort *rp, struct DrawingBoard *board) {
   EXIT_FUNCTION("CleanupDrawingBoard");
 }
 
-APTR LockDrawingBoardPixelsInternal(struct RenderPort *rp, ULONG *pitch) {
-  if (!ValidateDrawingBoard(rp->target_board)) {
+APTR LockDrawingBoardPixelsInternal(struct RenderContext *rctx, ULONG *pitch) {
+  if (!ValidateDrawingBoard(rctx->target_board)) {
     D(bug("ZuneRenderer: Invalid DrawingBoard\n"));
     return NULL;
   }
 
-  if (rp->target_board->pixels_locked) {
+  if (rctx->target_board->pixels_locked) {
     D(bug("ZuneRenderer: DrawingBoard already locked\n"));
     return NULL;
   }
 
-  ZuneBackend *backend = ZuneGetRenderPortBackend(rp);
+  ZuneBackend *backend = ZuneGetRenderContextBackend(rctx);
   if (backend && backend->ops && backend->ops->LockPixels) {
-    return backend->ops->LockPixels(rp->target_board, pitch);
+    return backend->ops->LockPixels(rctx->target_board, pitch);
   }
 
-  return ZuneFallback_LockPixels(rp->target_board, pitch);
+  return ZuneFallback_LockPixels(rctx->target_board, pitch);
 }
 
-void UnlockDrawingBoardPixelsInternal(struct RenderPort *rp) {
-  if (!rp) {
-    D(bug("ZuneRenderer: ZuneUnlockDrawingBoardPixels called with NULL RenderPort\n"));
+void UnlockDrawingBoardPixelsInternal(struct RenderContext *rctx) {
+  if (!rctx) {
+    D(bug("ZuneRenderer: ZuneUnlockDrawingBoardPixels called with NULL RenderContext\n"));
     return;
   }
-  if (!ValidateDrawingBoard(rp->target_board)) {
+  if (!ValidateDrawingBoard(rctx->target_board)) {
     D(bug("ZuneRenderer: Invalid DrawingBoard\n"));
     return;
   }
-  if (!rp->target_board->pixels_locked) {
+  if (!rctx->target_board->pixels_locked) {
     D(bug("ZuneRenderer: DrawingBoard already UNlocked\n"));
     return;
   }
 
-  ZuneBackend *backend = ZuneGetRenderPortBackend(rp);
+  ZuneBackend *backend = ZuneGetRenderContextBackend(rctx);
   if (backend && backend->ops && backend->ops->UnlockPixels) {
-    backend->ops->UnlockPixels(rp->target_board);
+    backend->ops->UnlockPixels(rctx->target_board);
     return;
   }
 
-  ZuneFallback_UnlockPixels(rp->target_board);
+  ZuneFallback_UnlockPixels(rctx->target_board);
 }
 
 /*****************************************************************************/
@@ -356,10 +356,10 @@ void RemoveDrawingBoardFromList(struct IntZuneGfxBase *base,
 /*****************************************************************************
 
     NAME */
-AROS_LH4(struct DrawingBoard *, ZuneCreateDrawingBoardForRenderPort,
+AROS_LH4(struct DrawingBoard *, ZuneCreateDrawingBoardForRenderContext,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(UWORD, width, D0),
          AROS_LHA(UWORD, height, D1),
          AROS_LHA(ULONG, flags, D2),
@@ -368,14 +368,14 @@ AROS_LH4(struct DrawingBoard *, ZuneCreateDrawingBoardForRenderPort,
          struct Library *, ZuneGfxBase, 6, zunegfx)
 
 /*  FUNCTION
-    Creates a new DrawingBoard bound to a RenderPort.
+    Creates a new DrawingBoard bound to a RenderContext.
 
     This is the preferred way to create DrawingBoards in the new architecture.
     The DrawingBoard is created with:
     - A BitMap (always, for legacy SetAPen/RectFill compatibility)
     - An FBO (if OpenGL backend, for accelerated rendering)
 
-    The RenderPort's window reference is used for OpenGL context.
+    The RenderContext's window reference is used for OpenGL context.
 
     Flags control bitmap allocation:
     - ZUNE_DRAWINGBOARD_LINEARMEM: Force linear memory for direct pixel access.
@@ -385,7 +385,7 @@ AROS_LH4(struct DrawingBoard *, ZuneCreateDrawingBoardForRenderPort,
       pen drawing, but may not support direct pixel locking.
 
 INPUTS
-    rp - Parent RenderPort (must not be NULL, must have window)
+    rctx - Parent RenderContext (must not be NULL, must have window)
     width - Surface width in pixels
     height - Surface height in pixels
     flags - ZUNE_DRAWINGBOARD_* flags (0 for default behavior)
@@ -397,7 +397,7 @@ NOTES
     Use ZUNE_DRAWINGBOARD_LINEARMEM when you need ZuneLockDrawingBoardPixels().
     Use 0 for legacy pen drawing compatibility.
     The DrawingBoard must be freed with ZuneDestroyDrawingBoard().
-    The RenderPort must remain valid for the lifetime of the DrawingBoard.
+    The RenderContext must remain valid for the lifetime of the DrawingBoard.
 
 *****************************************************************************/
 {
@@ -407,27 +407,27 @@ NOTES
   struct DrawingBoard *board;
   UBYTE depth;
 
-  ENTER_FUNCTION("ZuneCreateDrawingBoardForRenderPort");
+  ENTER_FUNCTION("ZuneCreateDrawingBoardForRenderContext");
 
-  D(bug("ZuneRenderer: ZuneCreateDrawingBoardForRenderPort(rp=%p, %dx%d, flags=0x%08x)\n",
-        rp, width, height, flags));
+  D(bug("ZuneRenderer: ZuneCreateDrawingBoardForRenderContext(rctx=%p, %dx%d, flags=0x%08x)\n",
+        rctx, width, height, flags));
 
   /* Validate parameters */
-  if (!rp || !rp->valid) {
-    D(bug("ZuneRenderer: Invalid RenderPort\n"));
-    EXIT_FUNCTION("ZuneCreateDrawingBoardForRenderPort");
+  if (!rctx || !rctx->valid) {
+    D(bug("ZuneRenderer: Invalid RenderContext\n"));
+    EXIT_FUNCTION("ZuneCreateDrawingBoardForRenderContext");
     return NULL;
   }
 
   if (width == 0 || height == 0) {
     D(bug("ZuneRenderer: Invalid dimensions\n"));
-    EXIT_FUNCTION("ZuneCreateDrawingBoardForRenderPort");
+    EXIT_FUNCTION("ZuneCreateDrawingBoardForRenderContext");
     return NULL;
   }
 
   /* Determine depth from window bitmap */
-  if (rp->window && rp->window->RPort && rp->window->RPort->BitMap) {
-    depth = GetBitMapAttr(rp->window->RPort->BitMap, BMA_DEPTH);
+  if (rctx->window && rctx->window->RPort && rctx->window->RPort->BitMap) {
+    depth = GetBitMapAttr(rctx->window->RPort->BitMap, BMA_DEPTH);
   } else {
     depth = 32;  /* Default to 32-bit */
   }
@@ -439,7 +439,7 @@ NOTES
    *
    * Also force 32-bit if ZUNE_DRAWINGBOARD_ALPHA flag is set, for compositing.
    */
-  if ((rp->backend_type == BACKEND_OPENGL || (flags & ZUNE_DRAWINGBOARD_ALPHA)) && depth < 32) {
+  if ((rctx->backend_type == BACKEND_OPENGL || (flags & ZUNE_DRAWINGBOARD_ALPHA)) && depth < 32) {
     D(bug("ZuneRenderer: Forcing 32-bit depth for alpha support (was %d)\n", depth));
     depth = 32;
   }
@@ -448,7 +448,7 @@ NOTES
   board = AllocVec(sizeof(struct DrawingBoard), MEMF_CLEAR | MEMF_PUBLIC);
   if (!board) {
     D(bug("ZuneRenderer: Failed to allocate DrawingBoard\n"));
-    EXIT_FUNCTION("ZuneCreateDrawingBoardForRenderPort");
+    EXIT_FUNCTION("ZuneCreateDrawingBoardForRenderContext");
     return NULL;
   }
 
@@ -459,8 +459,8 @@ NOTES
   board->flags = flags | ZUNE_DRAWINGBOARD_CACHED;
 
   /* Store parent window for OpenGL FBO support */
-  if (rp->window) {
-    board->parent_window = rp->window;
+  if (rctx->window) {
+    board->parent_window = rctx->window;
   }
 
   /* Initialize DrawingBoard */
@@ -473,22 +473,22 @@ NOTES
    */
   struct BitMap *friend_bitmap = NULL;
   if (!(flags & ZUNE_DRAWINGBOARD_LINEARMEM)) {
-    if (rp->window && rp->window->RPort && rp->window->RPort->BitMap) {
-      friend_bitmap = rp->window->RPort->BitMap;
+    if (rctx->window && rctx->window->RPort && rctx->window->RPort->BitMap) {
+      friend_bitmap = rctx->window->RPort->BitMap;
     }
   }
 
-  if (!AllocateDrawingBoardBitmap(board, rp->backend_type, friend_bitmap)) {
+  if (!AllocateDrawingBoardBitmap(board, rctx->backend_type, friend_bitmap)) {
     D(bug("ZuneRenderer: Failed to allocate DrawingBoard bitmap\n"));
     FreeVec(board);
-    EXIT_FUNCTION("ZuneCreateDrawingBoardForRenderPort");
+    EXIT_FUNCTION("ZuneCreateDrawingBoardForRenderContext");
     return NULL;
   }
 
-  /* Store colormap from RenderPort for legacy pen-based drawing. */
-  if (rp->colormap) {
-    board->colormap = rp->colormap;
-    D(bug("ZuneRenderer: DrawingBoard colormap set from RenderPort: %p\n", board->colormap));
+  /* Store colormap from RenderContext for legacy pen-based drawing. */
+  if (rctx->colormap) {
+    board->colormap = rctx->colormap;
+    D(bug("ZuneRenderer: DrawingBoard colormap set from RenderContext: %p\n", board->colormap));
   }
 
   D(bug("ZuneRenderer: DrawingBoard bitmap allocated: %p\n", board->bitmap));
@@ -503,10 +503,10 @@ NOTES
   /* Add to tracking list */
   AddDrawingBoardToList(base, board);
 
-  D(bug("ZuneRenderer: DrawingBoard created for RenderPort, bitmap=%p\n",
+  D(bug("ZuneRenderer: DrawingBoard created for RenderContext, bitmap=%p\n",
         board->bitmap));
 
-  EXIT_FUNCTION("ZuneCreateDrawingBoardForRenderPort");
+  EXIT_FUNCTION("ZuneCreateDrawingBoardForRenderContext");
   return board;
 
   AROS_LIBFUNC_EXIT
@@ -521,7 +521,7 @@ NOTES
 AROS_LH2(void, ZuneDestroyDrawingBoard,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(struct DrawingBoard *, board, A1),
 
          /*  LOCATION */
@@ -532,7 +532,7 @@ AROS_LH2(void, ZuneDestroyDrawingBoard,
     the bitmap, pixel buffers, and any locked memory.
 
 INPUTS
-    rp    - RenderPort associated with the DrawingBoard
+    rctx    - RenderContext associated with the DrawingBoard
     board - DrawingBoard to destroy (may be NULL)
 
 RESULT
@@ -553,7 +553,7 @@ SEE ALSO
 
   ENTER_FUNCTION("ZuneDestroyDrawingBoard");
 
-  D(bug("ZuneRenderer: ZuneDestroyDrawingBoard(rp=%p, board=%p)\n", rp, board));
+  D(bug("ZuneRenderer: ZuneDestroyDrawingBoard(rctx=%p, board=%p)\n", rctx, board));
 
   if (!board) {
     D(bug("ZuneRenderer: NULL DrawingBoard, nothing to destroy\n"));
@@ -567,7 +567,7 @@ SEE ALSO
   RemoveDrawingBoardFromList(base, board);
 
   /* Cleanup backend-specific data and free resources */
-  CleanupDrawingBoard(rp, board);
+  CleanupDrawingBoard(rctx, board);
 
   /* Free structure */
   FreeVec(board);
@@ -585,7 +585,7 @@ SEE ALSO
 AROS_LH2(void, ZuneClearDrawingBoard,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(ULONG, color, D0),
 
          /*  LOCATION */
@@ -606,7 +606,7 @@ NOTES
     based on the backend and whether pixels are currently locked.
 
 SEE ALSO
-    ZuneClearRenderPort(), FastFillRect()
+    ZuneClearRenderContext(), FastFillRect()
 
 *****************************************************************************/
 {
@@ -615,21 +615,21 @@ SEE ALSO
   ENTER_FUNCTION("ZuneClearDrawingBoard");
 
   D(bug("ZuneRenderer: ZuneClearDrawingBoard(board=%p, color=0x%08x)\n",
-        rp->target_board, color));
+        rctx->target_board, color));
 
-  if (!ValidateDrawingBoard(rp->target_board)) {
+  if (!ValidateDrawingBoard(rctx->target_board)) {
     D(bug("ZuneRenderer: Invalid DrawingBoard\n"));
     return;
   }
 
   /*
-   * Use ZuneClearRenderPort which is more efficient than DrawRectangle:
+   * Use ZuneClearRenderContext which is more efficient than DrawRectangle:
    * - OpenGL: Uses glClear() which is hardware-optimized
    * - CyberGfx: Uses optimized fill operations
    */
   struct InternalColor internal_color =
-      ZuneColorToInternal(rp, color, rp->pixel_format);
-  ZUNE_BACKEND_CALL(rp, ClearRenderPort, &internal_color);
+      ZuneColorToInternal(rctx, color, rctx->pixel_format);
+  ZUNE_BACKEND_CALL(rctx, ClearRenderContext, &internal_color);
 
   D(bug("ZuneRenderer: DrawingBoard cleared\n"));
 
@@ -648,7 +648,7 @@ SEE ALSO
 AROS_LH2(APTR, ZuneLockDrawingBoardPixels,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0), AROS_LHA(ULONG *, pitch, A1),
+         AROS_LHA(struct RenderContext *, rctx, A0), AROS_LHA(ULONG *, pitch, A1),
 
          /*  LOCATION */
          struct Library *, ZuneGfxBase, 14, zunegfx)
@@ -679,9 +679,9 @@ SEE ALSO
 
   ENTER_FUNCTION("ZuneLockDrawingBoardPixels");
 
-  D(bug("ZuneRenderer: ZuneLockDrawingBoardPixels(board=%p)\n", rp->target_board));
+  D(bug("ZuneRenderer: ZuneLockDrawingBoardPixels(board=%p)\n", rctx->target_board));
 
-  return LockDrawingBoardPixelsInternal(rp, pitch);
+  return LockDrawingBoardPixelsInternal(rctx, pitch);
 
   AROS_LIBFUNC_EXIT
 }
@@ -692,7 +692,7 @@ SEE ALSO
 AROS_LH1(void, ZuneUnlockDrawingBoardPixels,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
 
          /*  LOCATION */
          struct Library *, ZuneGfxBase, 15, zunegfx)
@@ -720,7 +720,7 @@ SEE ALSO
 
   ENTER_FUNCTION("ZuneUnlockDrawingBoardPixels");
 
-  UnlockDrawingBoardPixelsInternal(rp);
+  UnlockDrawingBoardPixelsInternal(rctx);
 
   EXIT_FUNCTION("ZuneUnlockDrawingBoardPixels");
 
@@ -737,7 +737,7 @@ SEE ALSO
 AROS_LH2(ULONG, ZuneGetPixel,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(struct ZunePoint *, point, A1),
 
          /*  LOCATION */
@@ -765,12 +765,12 @@ SEE ALSO
 {
   AROS_LIBFUNC_INIT
 
-  if (!rp || !point) {
-    D(bug("ZuneGetPixel: Invalid parameters (rp=%p, point=%p)\n", rp, point));
+  if (!rctx || !point) {
+    D(bug("ZuneGetPixel: Invalid parameters (rctx=%p, point=%p)\n", rctx, point));
     return 0;
   }
 
-  return GetPixelInternal(rp, point->x, point->y);
+  return GetPixelInternal(rctx, point->x, point->y);
 
   AROS_LIBFUNC_EXIT
 }
@@ -781,7 +781,7 @@ SEE ALSO
 AROS_LH3(void, ZuneSetPixel,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(struct ZunePoint *, point, A1), AROS_LHA(ULONG, color, D0),
 
          /*  LOCATION */
@@ -809,10 +809,10 @@ SEE ALSO
 {
   AROS_LIBFUNC_INIT
 
-  if (!rp || !point || !rp->target_board || !rp->target_board->pixels_locked)
+  if (!rctx || !point || !rctx->target_board || !rctx->target_board->pixels_locked)
     return;
 
-  SetPixelInternal(rp, point->x, point->y, color);
+  SetPixelInternal(rctx, point->x, point->y, color);
 
   AROS_LIBFUNC_EXIT
 }
@@ -1053,8 +1053,8 @@ void FastBlitInternal(struct DrawingBoard *src, struct DrawingBoard *dst,
 AROS_LH8(void, ZuneBlit,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, src_rp, A0),
-         AROS_LHA(struct RenderPort *, dst_rp, A1),
+         AROS_LHA(struct RenderContext *, src_rctx, A0),
+         AROS_LHA(struct RenderContext *, dst_rctx, A1),
          AROS_LHA(WORD, src_x, D0),
          AROS_LHA(WORD, src_y, D1),
          AROS_LHA(WORD, dst_x, D2),
@@ -1066,7 +1066,7 @@ AROS_LH8(void, ZuneBlit,
          struct Library *, ZuneGfxBase, 25, zunegfx)
 
 /*  FUNCTION
-    General-purpose blit between two RenderPorts. Handles all combinations:
+    General-purpose blit between two RenderContexts. Handles all combinations:
     - DrawingBoard to DrawingBoard
     - DrawingBoard to screen RastPort
     - Screen RastPort to DrawingBoard
@@ -1075,8 +1075,8 @@ AROS_LH8(void, ZuneBlit,
     Automatically syncs OpenGL FBO to bitmap when source is a DrawingBoard.
 
 INPUTS
-    src_rp - Source RenderPort
-    dst_rp - Destination RenderPort
+    src_rctx - Source RenderContext
+    dst_rctx - Destination RenderContext
     src_x, src_y - Source coordinates
     dst_x, dst_y - Destination coordinates
     width, height - Size of area to blit
@@ -1085,9 +1085,9 @@ RESULT
     None
 
 NOTES
-    The function determines source/destination based on RenderPort targets:
+    The function determines source/destination based on RenderContext targets:
     - If target_board is set, uses the DrawingBoard
-    - Otherwise uses target_rp or window->RPort
+    - Otherwise uses target_rastport or window->RPort
 
 SEE ALSO
     ZunePresent(), ZuneCapture(), ZuneSetTarget()
@@ -1102,11 +1102,11 @@ SEE ALSO
 
   ENTER_FUNCTION("ZuneBlit");
 
-  D(bug("ZuneRenderer: ZuneBlit(src_rp=%p, dst_rp=%p, src=%d,%d dst=%d,%d %dx%d)\n",
-        src_rp, dst_rp, src_x, src_y, dst_x, dst_y, width, height));
+  D(bug("ZuneRenderer: ZuneBlit(src_rctx=%p, dst_rctx=%p, src=%d,%d dst=%d,%d %dx%d)\n",
+        src_rctx, dst_rctx, src_x, src_y, dst_x, dst_y, width, height));
 
-  if (!src_rp || !dst_rp) {
-    D(bug("ZuneRenderer: Invalid RenderPort parameters\n"));
+  if (!src_rctx || !dst_rctx) {
+    D(bug("ZuneRenderer: Invalid RenderContext parameters\n"));
     EXIT_FUNCTION("ZuneBlit");
     return;
   }
@@ -1117,27 +1117,27 @@ SEE ALSO
   }
 
   /* Determine source */
-  if (src_rp->target_board && src_rp->target_board->valid) {
+  if (src_rctx->target_board && src_rctx->target_board->valid) {
     /* Source is DrawingBoard - sync FBO to bitmap first */
-    ZuneBackend *backend = ZuneGetRenderPortBackend(src_rp);
+    ZuneBackend *backend = ZuneGetRenderContextBackend(src_rctx);
     if (backend && backend->ops) {
       if (backend->ops->FlushBatch) {
-        backend->ops->FlushBatch(src_rp);
+        backend->ops->FlushBatch(src_rctx);
       }
       if (backend->ops->CopyRegionFromDrawingBoard) {
-        backend->ops->CopyRegionFromDrawingBoard(src_rp, src_x, src_y, width, height);
+        backend->ops->CopyRegionFromDrawingBoard(src_rctx, src_x, src_y, width, height);
       } else if (backend->ops->CopyFromDrawingBoard) {
-        backend->ops->CopyFromDrawingBoard(src_rp);
+        backend->ops->CopyFromDrawingBoard(src_rctx);
       }
     }
-    src_bitmap = src_rp->target_board->bitmap;
+    src_bitmap = src_rctx->target_board->bitmap;
     D(bug("ZuneBlit: Source is DrawingBoard, bitmap=%p\n", src_bitmap));
-  } else if (src_rp->target_rp) {
-    src_rastport = src_rp->target_rp;
+  } else if (src_rctx->target_rastport) {
+    src_rastport = src_rctx->target_rastport;
     src_bitmap = src_rastport->BitMap;
-    D(bug("ZuneBlit: Source is target_rp, rastport=%p\n", src_rastport));
-  } else if (src_rp->window && src_rp->window->RPort) {
-    src_rastport = src_rp->window->RPort;
+    D(bug("ZuneBlit: Source is target_rastport, rastport=%p\n", src_rastport));
+  } else if (src_rctx->window && src_rctx->window->RPort) {
+    src_rastport = src_rctx->window->RPort;
     src_bitmap = src_rastport->BitMap;
     D(bug("ZuneBlit: Source is window RPort, rastport=%p\n", src_rastport));
   }
@@ -1149,18 +1149,18 @@ SEE ALSO
   }
 
   /* Determine destination */
-  if (dst_rp->target_board && dst_rp->target_board->valid) {
+  if (dst_rctx->target_board && dst_rctx->target_board->valid) {
     /* Destination is DrawingBoard - use internal blit for board-to-board */
-    if (src_rp->target_board && src_rp->target_board->valid) {
+    if (src_rctx->target_board && src_rctx->target_board->valid) {
       D(bug("ZuneBlit: Board to Board blit\n"));
-      BlitDrawingBoardInternal(src_rp->target_board, dst_rp->target_board,
+      BlitDrawingBoardInternal(src_rctx->target_board, dst_rctx->target_board,
                                src_x, src_y, dst_x, dst_y, width, height);
     } else {
       /* RastPort to DrawingBoard - use backend CopyFromRastPort */
-      ZuneBackend *backend = ZuneGetRenderPortBackend(dst_rp);
+      ZuneBackend *backend = ZuneGetRenderContextBackend(dst_rctx);
       if (backend && backend->ops && backend->ops->CopyFromRastPort && src_rastport) {
         D(bug("ZuneBlit: RastPort to Board via CopyFromRastPort\n"));
-        backend->ops->CopyFromRastPort(dst_rp, src_rastport, src_x, src_y,
+        backend->ops->CopyFromRastPort(dst_rctx, src_rastport, src_x, src_y,
                                        dst_x, dst_y, width, height);
       } else {
         D(bug("ZuneBlit: Backend does not support CopyFromRastPort\n"));
@@ -1168,10 +1168,10 @@ SEE ALSO
     }
   } else {
     /* Destination is screen RastPort */
-    if (dst_rp->target_rp) {
-      dst_rastport = dst_rp->target_rp;
-    } else if (dst_rp->window && dst_rp->window->RPort) {
-      dst_rastport = dst_rp->window->RPort;
+    if (dst_rctx->target_rastport) {
+      dst_rastport = dst_rctx->target_rastport;
+    } else if (dst_rctx->window && dst_rctx->window->RPort) {
+      dst_rastport = dst_rctx->window->RPort;
     }
 
     if (!dst_rastport || !dst_rastport->BitMap) {
@@ -1196,7 +1196,7 @@ SEE ALSO
 AROS_LH7(void, ZunePresent,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(WORD, src_x, D0),
          AROS_LHA(WORD, src_y, D1),
          AROS_LHA(WORD, dst_x, D2),
@@ -1215,7 +1215,7 @@ AROS_LH7(void, ZunePresent,
     Automatically syncs OpenGL FBO to bitmap before blitting to window.
 
 INPUTS
-    rp - RenderPort with a DrawingBoard and associated window
+    rctx - RenderContext with a DrawingBoard and associated window
     src_x, src_y - Source coordinates in the DrawingBoard
     dst_x, dst_y - Destination coordinates in the window
     width, height - Size of area to present
@@ -1224,10 +1224,10 @@ RESULT
     None
 
 NOTES
-    The RenderPort must have both a valid target_board and window reference.
+    The RenderContext must have both a valid target_board and window reference.
 
 SEE ALSO
-    ZuneBlit(), ZuneCapture(), ZuneCreateDrawingBoardForRenderPort()
+    ZuneBlit(), ZuneCapture(), ZuneCreateDrawingBoardForRenderContext()
 
 *****************************************************************************/
 {
@@ -1235,23 +1235,23 @@ SEE ALSO
 
   ENTER_FUNCTION("ZunePresent");
 
-  D(bug("ZuneRenderer: ZunePresent(rp=%p, src=%d,%d dst=%d,%d %dx%d)\n",
-        rp, src_x, src_y, dst_x, dst_y, width, height));
+  D(bug("ZuneRenderer: ZunePresent(rctx=%p, src=%d,%d dst=%d,%d %dx%d)\n",
+        rctx, src_x, src_y, dst_x, dst_y, width, height));
 
-  if (!rp) {
-    D(bug("ZuneRenderer: Invalid RenderPort for ZunePresent\n"));
+  if (!rctx) {
+    D(bug("ZuneRenderer: Invalid RenderContext for ZunePresent\n"));
     EXIT_FUNCTION("ZunePresent");
     return;
   }
 
-  if (!rp->window || !rp->window->RPort || !rp->window->RPort->BitMap) {
-    D(bug("ZuneRenderer: RenderPort has no valid window\n"));
+  if (!rctx->window || !rctx->window->RPort || !rctx->window->RPort->BitMap) {
+    D(bug("ZuneRenderer: RenderContext has no valid window\n"));
     EXIT_FUNCTION("ZunePresent");
     return;
   }
 
-  if (!rp->target_board || !rp->target_board->bitmap || !rp->target_board->valid) {
-    D(bug("ZuneRenderer: RenderPort has no valid DrawingBoard\n"));
+  if (!rctx->target_board || !rctx->target_board->bitmap || !rctx->target_board->valid) {
+    D(bug("ZuneRenderer: RenderContext has no valid DrawingBoard\n"));
     EXIT_FUNCTION("ZunePresent");
     return;
   }
@@ -1263,21 +1263,21 @@ SEE ALSO
 
   /* Sync FBO region to bitmap before presenting */
   {
-    ZuneBackend *backend = ZuneGetRenderPortBackend(rp);
+    ZuneBackend *backend = ZuneGetRenderContextBackend(rctx);
     D(bug("ZuneRenderer: ZunePresent - backend=%p\n", backend));
     if (backend && backend->ops) {
       D(bug("ZuneRenderer: ZunePresent - backend->ops=%p, name=%s\n", 
             backend->ops, backend->ops->name ? (const char *)backend->ops->name : "NULL"));
       if (backend->ops->FlushBatch) {
         D(bug("ZuneRenderer: ZunePresent - calling ZuneFlushBatch\n"));
-        backend->ops->FlushBatch(rp);
+        backend->ops->FlushBatch(rctx);
       }
       if (backend->ops->CopyRegionFromDrawingBoard) {
         D(bug("ZuneRenderer: ZunePresent - calling CopyRegionFromDrawingBoard\n"));
-        backend->ops->CopyRegionFromDrawingBoard(rp, src_x, src_y, width, height);
+        backend->ops->CopyRegionFromDrawingBoard(rctx, src_x, src_y, width, height);
       } else if (backend->ops->CopyFromDrawingBoard) {
         D(bug("ZuneRenderer: ZunePresent - calling CopyFromDrawingBoard\n"));
-        backend->ops->CopyFromDrawingBoard(rp);
+        backend->ops->CopyFromDrawingBoard(rctx);
       } else {
         D(bug("ZuneRenderer: ZunePresent - no sync function available!\n"));
       }
@@ -1288,36 +1288,36 @@ SEE ALSO
 
   /* Blit from DrawingBoard bitmap to window's RastPort */
   {
-    struct BitMap *src_bm = rp->target_board->bitmap;
-    struct BitMap *dst_bm = rp->window->RPort->BitMap;
+    struct BitMap *src_bm = rctx->target_board->bitmap;
+    struct BitMap *dst_bm = rctx->window->RPort->BitMap;
     ULONG src_depth = GetBitMapAttr(src_bm, BMA_DEPTH);
     ULONG dst_depth = GetBitMapAttr(dst_bm, BMA_DEPTH);
-    D(bug("ZuneRenderer: ZunePresent - BltBitMapRastPort src_bm=%p (depth=%ld) dst_rp=%p dst_bm=%p (depth=%ld)\n",
-          src_bm, src_depth, rp->window->RPort, dst_bm, dst_depth));
+    D(bug("ZuneRenderer: ZunePresent - BltBitMapRastPort src_bm=%p (depth=%ld) dst_rctx=%p dst_bm=%p (depth=%ld)\n",
+          src_bm, src_depth, rctx->window->RPort, dst_bm, dst_depth));
     
     /* Verify source bitmap has content before blitting */
-    if (CyberGfxBase && rp->target_board->rastport) {
+    if (CyberGfxBase && rctx->target_board->rastport) {
         UBYTE verify_src[4];
-        ReadPixelArray(verify_src, 0, 0, 4, rp->target_board->rastport, 
+        ReadPixelArray(verify_src, 0, 0, 4, rctx->target_board->rastport, 
                        src_x, src_y, 1, 1, RECTFMT_RGBA);
         D(bug("ZuneRenderer: ZunePresent - src bitmap sample at %d,%d: RGBA = %02x %02x %02x %02x\n",
               src_x, src_y, verify_src[0], verify_src[1], verify_src[2], verify_src[3]));
         
         /* Also check if rastport->BitMap == board->bitmap */
         D(bug("ZuneRenderer: ZunePresent - board->rastport->BitMap=%p, board->bitmap=%p, match=%s\n",
-              rp->target_board->rastport->BitMap, rp->target_board->bitmap,
-              (rp->target_board->rastport->BitMap == rp->target_board->bitmap) ? "YES" : "NO"));
+              rctx->target_board->rastport->BitMap, rctx->target_board->bitmap,
+              (rctx->target_board->rastport->BitMap == rctx->target_board->bitmap) ? "YES" : "NO"));
     }
   }
 
-  BltBitMapRastPort(rp->target_board->bitmap, src_x, src_y,
-                    rp->window->RPort, dst_x, dst_y,
+  BltBitMapRastPort(rctx->target_board->bitmap, src_x, src_y,
+                    rctx->window->RPort, dst_x, dst_y,
                     width, height, 0xC0);
   
   /* Verify destination after blitting */
   if (CyberGfxBase) {
       UBYTE verify_dst[4];
-      ReadPixelArray(verify_dst, 0, 0, 4, rp->window->RPort,
+      ReadPixelArray(verify_dst, 0, 0, 4, rctx->window->RPort,
                      dst_x, dst_y, 1, 1, RECTFMT_RGBA);
       D(bug("ZuneRenderer: ZunePresent - dst window sample at %d,%d: RGBA = %02x %02x %02x %02x\n",
             dst_x, dst_y, verify_dst[0], verify_dst[1], verify_dst[2], verify_dst[3]));
@@ -1336,7 +1336,7 @@ SEE ALSO
 AROS_LH8(void, ZuneCapture,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(struct RastPort *, src_rp, A1),
          AROS_LHA(WORD, src_x, D0),
          AROS_LHA(WORD, src_y, D1),
@@ -1354,7 +1354,7 @@ AROS_LH8(void, ZuneCapture,
     when drawing antialiased graphics over existing content.
 
 INPUTS
-    rp - RenderPort with a DrawingBoard target
+    rctx - RenderContext with a DrawingBoard target
     src_rp - Source RastPort to read pixels from (e.g., window or double buffer)
     src_x, src_y - Source coordinates in the RastPort
     dst_x, dst_y - Destination coordinates in the DrawingBoard
@@ -1364,12 +1364,12 @@ RESULT
     None
 
 NOTES
-    The RenderPort must have a valid target_board.
+    The RenderContext must have a valid target_board.
     For OpenGL backend, this uploads the captured pixels to the FBO.
     For CyberGfx backend, this copies directly to the DrawingBoard's bitmap.
 
 SEE ALSO
-    ZuneBlit(), ZunePresent(), ZuneCreateDrawingBoardForRenderPort()
+    ZuneBlit(), ZunePresent(), ZuneCreateDrawingBoardForRenderContext()
 
 *****************************************************************************/
 {
@@ -1379,17 +1379,17 @@ SEE ALSO
 
   ENTER_FUNCTION("ZuneCapture");
 
-  D(bug("ZuneRenderer: ZuneCapture(rp=%p, src_rp=%p, src=%d,%d dst=%d,%d %dx%d)\n",
-        rp, src_rp, src_x, src_y, dst_x, dst_y, width, height));
+  D(bug("ZuneRenderer: ZuneCapture(rctx=%p, src_rp=%p, src=%d,%d dst=%d,%d %dx%d)\n",
+        rctx, src_rp, src_x, src_y, dst_x, dst_y, width, height));
 
-  if (!rp || !src_rp) {
-    D(bug("ZuneRenderer: Invalid RenderPort or source RastPort for ZuneCapture\n"));
+  if (!rctx || !src_rp) {
+    D(bug("ZuneRenderer: Invalid RenderContext or source RastPort for ZuneCapture\n"));
     EXIT_FUNCTION("ZuneCapture");
     return;
   }
 
-  if (!rp->target_board || !rp->target_board->valid) {
-    D(bug("ZuneRenderer: RenderPort has no valid DrawingBoard\n"));
+  if (!rctx->target_board || !rctx->target_board->valid) {
+    D(bug("ZuneRenderer: RenderContext has no valid DrawingBoard\n"));
     EXIT_FUNCTION("ZuneCapture");
     return;
   }
@@ -1400,9 +1400,9 @@ SEE ALSO
   }
 
   /* Use backend's CopyFromRastPort to capture content from source RastPort */
-  backend = ZuneGetRenderPortBackend(rp);
+  backend = ZuneGetRenderContextBackend(rctx);
   if (backend && backend->ops && backend->ops->CopyFromRastPort) {
-    backend->ops->CopyFromRastPort(rp, src_rp, src_x, src_y,
+    backend->ops->CopyFromRastPort(rctx, src_rp, src_x, src_y,
                                    dst_x, dst_y, width, height);
   } else {
     D(bug("ZuneRenderer: Backend does not support CopyFromRastPort\n"));
@@ -1419,7 +1419,7 @@ SEE ALSO
 AROS_LH1(BOOL, ZuneSync,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
 
          /*  LOCATION */
          struct Library *, ZuneGfxBase, 100, zunegfx)
@@ -1435,7 +1435,7 @@ AROS_LH1(BOOL, ZuneSync,
     For CyberGfx backend: No-op since the bitmap IS the render target.
 
 INPUTS
-    rp - RenderPort with target DrawingBoard to sync (must not be NULL)
+    rctx - RenderContext with target DrawingBoard to sync (must not be NULL)
 
 RESULT
     TRUE if sync was successful or not needed, FALSE on error.
@@ -1445,28 +1445,28 @@ NOTES
     CyberGfx/graphics.library operations on the same DrawingBoard.
 
     Example mixed-mode rendering:
-    1. ZuneSetTarget(rp, board)
+    1. ZuneSetTarget(rctx, board)
     2. ZuneFillRectangle(...) // OpenGL draws to FBO
-    3. ZuneSync(rp)           // Copy FBO to bitmap
+    3. ZuneSync(rctx)           // Copy FBO to bitmap
     4. FillPixelArray(board->rastport, ...) // CyberGfx sees OpenGL content
 
 SEE ALSO
-    ZuneCreateDrawingBoardForRenderPort(), ZuneSetTarget(), ZunePresent()
+    ZuneCreateDrawingBoardForRenderContext(), ZuneSetTarget(), ZunePresent()
 
 *****************************************************************************/
 {
   AROS_LIBFUNC_INIT
 
   ENTER_FUNCTION("ZuneSync");
-  D(bug("ZuneRenderer: ZuneSync(rp=%p)\n", rp));
+  D(bug("ZuneRenderer: ZuneSync(rctx=%p)\n", rctx));
 
-  if (!rp || !rp->target_board || !rp->target_board->valid) {
-    D(bug("ZuneRenderer: ZuneSync - Invalid RenderPort or DrawingBoard\n"));
+  if (!rctx || !rctx->target_board || !rctx->target_board->valid) {
+    D(bug("ZuneRenderer: ZuneSync - Invalid RenderContext or DrawingBoard\n"));
     EXIT_FUNCTION("ZuneSync");
     return FALSE;
   }
 
-  return ZUNE_BACKEND_CALL_NO_ARGS_RET(rp, CopyFromDrawingBoard, FALSE);
+  return ZUNE_BACKEND_CALL_NO_ARGS_RET(rctx, CopyFromDrawingBoard, FALSE);
 
   AROS_LIBFUNC_EXIT
 }
@@ -1477,7 +1477,7 @@ SEE ALSO
 AROS_LH1(BOOL, ZuneReload,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
 
          /*  LOCATION */
          struct Library *, ZuneGfxBase, 102, zunegfx)
@@ -1493,7 +1493,7 @@ AROS_LH1(BOOL, ZuneReload,
     For CyberGfx backend: No-op since the bitmap IS the render target.
 
 INPUTS
-    rp - RenderPort with target DrawingBoard to reload (must not be NULL)
+    rctx - RenderContext with target DrawingBoard to reload (must not be NULL)
 
 RESULT
     TRUE if reload was successful or not needed, FALSE on error.
@@ -1505,13 +1505,13 @@ NOTES
     This is the inverse of ZuneSync().
 
     Example mixed-mode rendering:
-    1. ZuneSetTarget(rp, board)
+    1. ZuneSetTarget(rctx, board)
     2. FillPixelArray(board->rastport, ...) // CyberGfx draws to bitmap
-    3. ZuneReload(rp)                       // Upload bitmap to FBO
+    3. ZuneReload(rctx)                       // Upload bitmap to FBO
     4. ZuneFillRectangle(...)               // OpenGL sees bitmap content
 
 SEE ALSO
-    ZuneSync(), ZuneCreateDrawingBoardForRenderPort(), ZuneSetTarget()
+    ZuneSync(), ZuneCreateDrawingBoardForRenderContext(), ZuneSetTarget()
 
 *****************************************************************************/
 {
@@ -1521,15 +1521,15 @@ SEE ALSO
   struct DrawingBoard *board;
 
   ENTER_FUNCTION("ZuneReload");
-  D(bug("ZuneRenderer: ZuneReload(rp=%p)\n", rp));
+  D(bug("ZuneRenderer: ZuneReload(rctx=%p)\n", rctx));
 
-  if (!rp || !rp->target_board || !rp->target_board->valid) {
-    D(bug("ZuneRenderer: ZuneReload - Invalid RenderPort or DrawingBoard\n"));
+  if (!rctx || !rctx->target_board || !rctx->target_board->valid) {
+    D(bug("ZuneRenderer: ZuneReload - Invalid RenderContext or DrawingBoard\n"));
     EXIT_FUNCTION("ZuneReload");
     return FALSE;
   }
 
-  board = rp->target_board;
+  board = rctx->target_board;
   if (!board->rastport) {
     D(bug("ZuneRenderer: ZuneReload - DrawingBoard has no rastport\n"));
     EXIT_FUNCTION("ZuneReload");
@@ -1537,9 +1537,9 @@ SEE ALSO
   }
 
   /* Use CopyFromRastPort to upload the DrawingBoard's bitmap to the FBO */
-  backend = ZuneGetRenderPortBackend(rp);
+  backend = ZuneGetRenderContextBackend(rctx);
   if (backend && backend->ops && backend->ops->CopyFromRastPort) {
-    backend->ops->CopyFromRastPort(rp, board->rastport,
+    backend->ops->CopyFromRastPort(rctx, board->rastport,
                                    0, 0, 0, 0, board->width, board->height);
     EXIT_FUNCTION("ZuneReload");
     return TRUE;

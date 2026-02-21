@@ -20,10 +20,10 @@
  *       ZuneGetAntialiasingQuality -- Get the current antialiasing quality
  *
  *   SYNOPSIS
- *       quality = ZuneGetAntialiasingQuality(rp);
+ *       quality = ZuneGetAntialiasingQuality(rctx);
  *       D0                                   A0
  *
- *       UBYTE ZuneGetAntialiasingQuality(struct RenderPort *);
+ *       UBYTE ZuneGetAntialiasingQuality(struct RenderContext *);
  *
  *   FUNCTION
  *       Returns the current antialiasing quality level from the graphics
@@ -31,7 +31,7 @@
  *       all antialiased drawing operations.
  *
  *   INPUTS
- *       rp -- RenderPort (used to determine the backend)
+ *       rctx -- RenderContext (used to determine the backend)
  *
  *   RESULT
  *       quality -- Current quality level (0=fast, 1=good, 2=best)
@@ -40,17 +40,17 @@
  ***************************************************************************/
 
 AROS_LH1(UWORD, ZuneGetAntialiasingQuality,
-         AROS_LHA(struct RenderPort *, rp, A0), struct Library *,
+         AROS_LHA(struct RenderContext *, rctx, A0), struct Library *,
          ZuneGfxBase, 60, zunegfx)
 
 {
   AROS_LIBFUNC_INIT
 
-  if (!rp) {
+  if (!rctx) {
     return 0;
   }
 
-  (void)rp;
+  (void)rctx;
   return g_aa_quality;
 
   AROS_LIBFUNC_EXIT

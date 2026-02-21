@@ -32,7 +32,7 @@
  *   - For SOLID: No preparation needed
  *   - Sets brush->internal.valid = TRUE on success
  */
-void PrepareBrushForRendering(struct RenderPort *rp, struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
+void PrepareBrushForRendering(struct RenderContext *rctx, struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
                               UWORD rect_w, UWORD rect_h);
 
 /**

@@ -624,15 +624,15 @@ AROS_UFH3
             (pi->Flags & KNOBHIT) ? 1 : 0));
 
         struct MUI_RenderInfo *mri = muiRenderInfo(muiobj);
-        struct RenderPort *rp = mri->mri_RenderPort;
+        struct RenderContext *rctx = mri->mri_RenderContext;
 
-        D(bug("[ZuneProp]   msg->wdp_RPort=%p, rp=%p, rp->target_rp=%p\n",
-            msg->wdp_RPort, rp, rp ? rp->target_rp : NULL));
+        D(bug("[ZuneProp]   msg->wdp_RPort=%p, rctx=%p, rctx->target_rastport=%p\n",
+            msg->wdp_RPort, rctx, rctx ? rctx->target_rastport : NULL));
 
-        if (!rp)
+        if (!rctx)
             return;
 
-        /* We render to rp->target_rp which may be a double buffer.
+        /* We render to rctx->target_rastport which may be a double buffer.
          * After rendering, we need to flush the prop region to the window.
          */
 
@@ -670,7 +670,7 @@ AROS_UFH3
             .height = prop_rect->MaxY - prop_rect->MinY + 1
         };
         struct ZuneBrush container_brush = ZUNE_BRUSH_LITERAL_SOLID(container_color);
-        ZuneFillRectangle(rp, &container, &container_brush);
+        ZuneFillRectangle(rctx, &container, &container_brush);
 
         /* Draw knob with rounded corners and border */
         WORD knob_width = knob_rect->MaxX - knob_rect->MinX + 1;
@@ -696,7 +696,7 @@ AROS_UFH3
             }
 
             struct ZuneBrush knob_brush = ZUNE_BRUSH_LITERAL_SOLID(knob_color);
-            ZuneFillRectangleRoundedStyledAA(rp, &knob, corner_radius, 1, &knob_brush, knob_border_color);
+            ZuneFillRectangleRoundedStyledAA(rctx, &knob, corner_radius, 1, &knob_brush, knob_border_color);
         }
 
         /*
@@ -1086,7 +1086,7 @@ IPTR Prop__MUIM_Show(struct IClass *cl, Object *obj, struct MUIP_Show *msg)
                 /* Use zunegfx for STANDARD and NEWLOOK scrollbar types
                  * when we have sufficient color depth */
                 struct MUI_RenderInfo *mri = muiRenderInfo(obj);
-                if (mri && mri->mri_RenderPort)
+                if (mri && mri->mri_RenderContext)
                 {
                     data->dhook.h_Entry = (HOOKFUNC) ZunePropRenderFunc;
                     data->dhook.h_Data = data;

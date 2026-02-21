@@ -246,13 +246,13 @@ BOOL CybergfxUpdateTexture(struct ZuneTexture *texture, APTR data, UWORD x,
  *
  * Returns TRUE if fast path was used, FALSE if fallback needed.
  */
-static BOOL CybergfxDrawTextureToRastPortFast(struct RenderPort *rp,
+static BOOL CybergfxDrawTextureToRastPortFast(struct RenderContext *rctx,
                                               struct ZuneTexture *texture,
                                               WORD dest_x, WORD dest_y,
                                               UWORD width, UWORD height,
                                               WORD src_x, WORD src_y,
                                               BOOL needs_alpha_blend) {
-  struct RastPort *rastport = rp->target_rp;
+  struct RastPort *rastport = rctx->target_rastport;
 
   if (!rastport || !rastport->BitMap)
     return FALSE;
@@ -285,7 +285,7 @@ static BOOL CybergfxDrawTextureToRastPortFast(struct RenderPort *rp,
   return TRUE;
 }
 
-void CybergfxDrawTextureToRastPort(struct RenderPort *rp,
+void CybergfxDrawTextureToRastPort(struct RenderContext *rctx,
                                    struct ZuneTexture *texture, WORD dest_x,
                                    WORD dest_y, UWORD dest_width,
                                    UWORD dest_height, WORD src_x, WORD src_y,
@@ -295,17 +295,17 @@ void CybergfxDrawTextureToRastPort(struct RenderPort *rp,
 
   /* Get target rastport and cached HIDD bitmap object */
   struct RastPort *rastport =
-      rp->target_board ? rp->target_board->rastport : rp->target_rp;
+      rctx->target_board ? rctx->target_board->rastport : rctx->target_rastport;
   OOP_Object *bitmap_obj =
-      (rp->target_rp && rp->hidd_bitmap_obj)
-          ? (OOP_Object *)rp->hidd_bitmap_obj
+      (rctx->target_rastport && rctx->hidd_bitmap_obj)
+          ? (OOP_Object *)rctx->hidd_bitmap_obj
           : NULL;
 
   /* Get window border offset for correct pixel positioning */
   WORD window_offset_x = 0, window_offset_y = 0;
-  if (rp->target_rp && rp->target_rp->Layer) {
-    window_offset_x = rp->target_rp->Layer->bounds.MinX;
-    window_offset_y = rp->target_rp->Layer->bounds.MinY;
+  if (rctx->target_rastport && rctx->target_rastport->Layer) {
+    window_offset_x = rctx->target_rastport->Layer->bounds.MinX;
+    window_offset_y = rctx->target_rastport->Layer->bounds.MinY;
   }
 
   ULONG bytes_per_pixel = GetBytesPerPixel(texture->format);
@@ -340,9 +340,9 @@ void CybergfxDrawTextureToRastPort(struct RenderPort *rp,
   BOOL needs_alpha_blend = (texture->flags & ZUNE_TEXTURE_ALPHA) != 0 &&
                            (texture->flags & ZUNE_TEXTURE_OPAQUE) == 0;
 
-  if (unity_scale && !tint && rp->target_rp && !rp->target_board) {
+  if (unity_scale && !tint && rctx->target_rastport && !rctx->target_board) {
     /* Check if we can use the fast path */
-    if (CybergfxDrawTextureToRastPortFast(rp, texture, dest_x, dest_y,
+    if (CybergfxDrawTextureToRastPortFast(rctx, texture, dest_x, dest_y,
                                           dest_width, dest_height,
                                           src_x, src_y, needs_alpha_blend)) {
       /* Fast path succeeded, we're done */
@@ -427,7 +427,7 @@ void CybergfxDrawTextureToRastPort(struct RenderPort *rp,
       WORD pixel_x = dest_x + dx;
       WORD pixel_y = dest_y + dy;
 
-      if (!CybergfxClipPixel(rp, pixel_x, pixel_y))
+      if (!CybergfxClipPixel(rctx, pixel_x, pixel_y))
         continue;
 
       /* For partially transparent pixels (0 < a < 255), we need alpha blending.
@@ -470,7 +470,7 @@ void CybergfxDrawTextureToRastPort(struct RenderPort *rp,
   /* Update the display region to make the changes visible only when we're
    * drawing directly to a screen RastPort. Off-screen DrawingBoards will be
    * blitted later, so avoid poking the windowing system to prevent crashes. */
-  if (rp->target_rp && bitmap_obj) {
+  if (rctx->target_rastport && bitmap_obj) {
     HIDD_BM_UpdateRect(bitmap_obj, dest_x + window_offset_x,
                        dest_y + window_offset_y, dest_width + 1,
                        dest_height + 1);
@@ -478,14 +478,14 @@ void CybergfxDrawTextureToRastPort(struct RenderPort *rp,
 }
 
 void CybergfxDrawTextureToDrawingBoard(
-    struct RenderPort *rp, struct ZuneTexture *texture, WORD dest_x,
+    struct RenderContext *rctx, struct ZuneTexture *texture, WORD dest_x,
     WORD dest_y, UWORD dest_width, UWORD dest_height, WORD src_x, WORD src_y,
     UWORD src_width, UWORD src_height, struct InternalColor *tint,
     ULONG scale_x, ULONG scale_y) {
   ULONG bytes_per_pixel = GetBytesPerPixel(texture->format);
   UBYTE *src_pixels = (UBYTE *)texture->pixel_data;
   /* Rendering to DrawingBoard */
-  struct DrawingBoard *board = rp->target_board;
+  struct DrawingBoard *board = rctx->target_board;
   D(bug("CybergfxDrawTexture: Using DrawingBoard, pixels_locked = %s\n",
         board->pixels_locked ? "TRUE" : "FALSE"));
 
@@ -589,20 +589,20 @@ void CybergfxDrawTextureToDrawingBoard(
       return;
     }
 
-    CybergfxDrawTextureToRastPort(rp, texture, dest_x, dest_y, dest_width,
+    CybergfxDrawTextureToRastPort(rctx, texture, dest_x, dest_y, dest_width,
                                   dest_height, src_x, src_y, src_width,
                                   src_height, tint, scale_x, scale_y);
   }
 }
 
-void CybergfxDrawTexture(struct RenderPort *rp, struct ZuneTexture *texture,
+void CybergfxDrawTexture(struct RenderContext *rctx, struct ZuneTexture *texture,
                          WORD dest_x, WORD dest_y, UWORD dest_width,
                          UWORD dest_height, WORD src_x, WORD src_y,
                          UWORD src_width, UWORD src_height,
                          struct InternalColor *tint) {
   ENTER_FUNCTION("CybergfxDrawTexture");
 
-  if (!rp || !texture || !texture->pixel_data) {
+  if (!rctx || !texture || !texture->pixel_data) {
     D(bug("CybergfxDrawTexture: Invalid parameters\n"));
     return;
   }
@@ -631,15 +631,15 @@ void CybergfxDrawTexture(struct RenderPort *rp, struct ZuneTexture *texture,
         src_x, src_y, src_width, src_height, dest_x, dest_y, dest_width,
         dest_height, scale_x, scale_y));
 
-  if (rp->target_board) {
-    CybergfxDrawTextureToDrawingBoard(rp, texture, dest_x, dest_y, dest_width,
+  if (rctx->target_board) {
+    CybergfxDrawTextureToDrawingBoard(rctx, texture, dest_x, dest_y, dest_width,
                                       dest_height, src_x, src_y, src_width,
                                       src_height, tint, scale_x, scale_y);
-  } else if (rp->target_rp) {
+  } else if (rctx->target_rastport) {
     /* Rendering directly to RastPort */
     D(bug("CybergfxDrawTexture: Using direct RastPort path\n"));
-    struct RastPort *rastport = rp->target_rp;
-    CybergfxDrawTextureToRastPort(rp, texture, dest_x, dest_y, dest_width,
+    struct RastPort *rastport = rctx->target_rastport;
+    CybergfxDrawTextureToRastPort(rctx, texture, dest_x, dest_y, dest_width,
                                   dest_height, src_x, src_y, src_width,
                                   src_height, tint, scale_x, scale_y);
   } else {
@@ -1054,11 +1054,11 @@ static BOOL EnsureTiledCache(struct ZuneTexture *texture, struct RastPort *frien
  * 2. Exponentially double horizontally
  * 3. Exponentially double vertically
  */
-static BOOL RenderTiledCacheToRastPort(struct RenderPort *rp,
+static BOOL RenderTiledCacheToRastPort(struct RenderContext *rctx,
                                        struct ZuneTexture *texture,
                                        WORD dest_x, WORD dest_y,
                                        UWORD dest_width, UWORD dest_height) {
-  struct RastPort *rastport = rp->target_rp;
+  struct RastPort *rastport = rctx->target_rastport;
   struct BitMap *cache_bitmap = texture->tiled_cache_bitmap;
   ULONG *cache_pixels = (ULONG *)texture->tiled_cache_pixels;
   UWORD cache_width = texture->tiled_cache_width;
@@ -1159,11 +1159,11 @@ static BOOL RenderTiledCacheToRastPort(struct RenderPort *rp,
  * Renders using the pre-tiled cache directly to a locked DrawingBoard.
  * Uses memory copy operations for maximum speed.
  */
-static BOOL RenderTiledCacheToDrawingBoard(struct RenderPort *rp,
+static BOOL RenderTiledCacheToDrawingBoard(struct RenderContext *rctx,
                                            struct ZuneTexture *texture,
                                            WORD dest_x, WORD dest_y,
                                            UWORD dest_width, UWORD dest_height) {
-  struct DrawingBoard *board = rp->target_board;
+  struct DrawingBoard *board = rctx->target_board;
   ULONG *cache_pixels = (ULONG *)texture->tiled_cache_pixels;
   UWORD cache_width = texture->tiled_cache_width;
   UWORD cache_height = texture->tiled_cache_height;
@@ -1241,12 +1241,12 @@ static BOOL RenderTiledCacheToDrawingBoard(struct RenderPort *rp,
  *
  * Returns TRUE if successful, FALSE if fallback needed.
  */
-static BOOL CybergfxDrawTextureTiledToDrawingBoard(struct RenderPort *rp,
+static BOOL CybergfxDrawTextureTiledToDrawingBoard(struct RenderContext *rctx,
                                                    struct ZuneTexture *texture,
                                                    WORD dest_x, WORD dest_y,
                                                    UWORD dest_width,
                                                    UWORD dest_height) {
-  struct DrawingBoard *board = rp->target_board;
+  struct DrawingBoard *board = rctx->target_board;
 
   if (!board || !board->pixels_locked)
     return FALSE;
@@ -1335,12 +1335,12 @@ static BOOL CybergfxDrawTextureTiledToDrawingBoard(struct RenderPort *rp,
  *
  * Returns TRUE if successful, FALSE if fallback to slow path needed.
  */
-static BOOL CybergfxDrawTextureTiledToRastPort(struct RenderPort *rp,
+static BOOL CybergfxDrawTextureTiledToRastPort(struct RenderContext *rctx,
                                                struct ZuneTexture *texture,
                                                WORD dest_x, WORD dest_y,
                                                UWORD dest_width,
                                                UWORD dest_height) {
-  struct RastPort *rastport = rp->target_rp;
+  struct RastPort *rastport = rctx->target_rastport;
 
   if (!rastport || !rastport->BitMap)
     return FALSE;
@@ -1432,15 +1432,15 @@ static BOOL CybergfxDrawTextureTiledToRastPort(struct RenderPort *rp,
  *
  * Returns TRUE if successful, FALSE if fallback to slow path needed.
  */
-BOOL CybergfxDrawTextureTiledFast(struct RenderPort *rp,
+BOOL CybergfxDrawTextureTiledFast(struct RenderContext *rctx,
                                   struct ZuneTexture *texture,
                                   WORD dest_x, WORD dest_y,
                                   UWORD dest_width, UWORD dest_height) {
-  D(bug("CybergfxDrawTextureTiledFast: ENTER rp=%p target_board=%p target_rp=%p\n",
-        rp, rp ? rp->target_board : NULL, rp ? rp->target_rp : NULL));
+  D(bug("CybergfxDrawTextureTiledFast: ENTER rctx=%p target_board=%p target_rastport=%p\n",
+        rctx, rctx ? rctx->target_board : NULL, rctx ? rctx->target_rastport : NULL));
 
   /* Validate basic parameters */
-  if (!rp || !texture || !texture->pixel_data) {
+  if (!rctx || !texture || !texture->pixel_data) {
     D(bug("CybergfxDrawTextureTiledFast: Invalid params - returning FALSE\n"));
     return FALSE;
   }
@@ -1455,9 +1455,9 @@ BOOL CybergfxDrawTextureTiledFast(struct RenderPort *rp,
     return FALSE;
 
   /* Get the target RastPort for friend bitmap allocation */
-  struct RastPort *friend_rp = rp->target_rp;
-  if (!friend_rp && rp->target_board)
-    friend_rp = rp->target_board->rastport;
+  struct RastPort *friend_rp = rctx->target_rastport;
+  if (!friend_rp && rctx->target_board)
+    friend_rp = rctx->target_board->rastport;
 
   /*
    * FAST PATH: Use pre-tiled cache if available or can be created.
@@ -1473,9 +1473,9 @@ BOOL CybergfxDrawTextureTiledFast(struct RenderPort *rp,
     /* We have a pre-tiled cache - use it */
 
     /* Try DrawingBoard path first (fastest when locked) */
-    if (rp->target_board && rp->target_board->pixels_locked) {
+    if (rctx->target_board && rctx->target_board->pixels_locked) {
       D(bug("CybergfxDrawTextureTiledFast: Trying locked DrawingBoard path\n"));
-      if (RenderTiledCacheToDrawingBoard(rp, texture, dest_x, dest_y,
+      if (RenderTiledCacheToDrawingBoard(rctx, texture, dest_x, dest_y,
                                          dest_width, dest_height)) {
         D(bug("CybergfxDrawTextureTiledFast: Locked DrawingBoard path SUCCESS\n"));
         return TRUE;
@@ -1483,9 +1483,9 @@ BOOL CybergfxDrawTextureTiledFast(struct RenderPort *rp,
     }
 
     /* Try RastPort path */
-    if (rp->target_rp && !rp->target_board) {
+    if (rctx->target_rastport && !rctx->target_board) {
       D(bug("CybergfxDrawTextureTiledFast: Trying direct RastPort path\n"));
-      if (RenderTiledCacheToRastPort(rp, texture, dest_x, dest_y,
+      if (RenderTiledCacheToRastPort(rctx, texture, dest_x, dest_y,
                                      dest_width, dest_height)) {
         D(bug("CybergfxDrawTextureTiledFast: Direct RastPort path SUCCESS\n"));
         return TRUE;
@@ -1493,11 +1493,11 @@ BOOL CybergfxDrawTextureTiledFast(struct RenderPort *rp,
     }
 
     /* Fall back to unlocked DrawingBoard's rastport if available */
-    if (rp->target_board && rp->target_board->rastport) {
+    if (rctx->target_board && rctx->target_board->rastport) {
       D(bug("CybergfxDrawTextureTiledFast: Trying unlocked DrawingBoard rastport path (board->rastport=%p, bitmap=%p)\n",
-            rp->target_board->rastport, rp->target_board->rastport ? rp->target_board->rastport->BitMap : NULL));
-      struct RenderPort temp_rp = *rp;
-      temp_rp.target_rp = rp->target_board->rastport;
+            rctx->target_board->rastport, rctx->target_board->rastport ? rctx->target_board->rastport->BitMap : NULL));
+      struct RenderContext temp_rp = *rctx;
+      temp_rp.target_rastport = rctx->target_board->rastport;
       temp_rp.target_board = NULL;
       if (RenderTiledCacheToRastPort(&temp_rp, texture, dest_x, dest_y,
                                      dest_width, dest_height)) {
@@ -1513,25 +1513,25 @@ BOOL CybergfxDrawTextureTiledFast(struct RenderPort *rp,
    */
 
   /* Try DrawingBoard path first (fastest when locked) */
-  if (rp->target_board && rp->target_board->pixels_locked) {
-    if (CybergfxDrawTextureTiledToDrawingBoard(rp, texture, dest_x, dest_y,
+  if (rctx->target_board && rctx->target_board->pixels_locked) {
+    if (CybergfxDrawTextureTiledToDrawingBoard(rctx, texture, dest_x, dest_y,
                                                 dest_width, dest_height)) {
       return TRUE;
     }
   }
 
   /* Try RastPort path */
-  if (rp->target_rp && !rp->target_board) {
-    if (CybergfxDrawTextureTiledToRastPort(rp, texture, dest_x, dest_y,
+  if (rctx->target_rastport && !rctx->target_board) {
+    if (CybergfxDrawTextureTiledToRastPort(rctx, texture, dest_x, dest_y,
                                            dest_width, dest_height)) {
       return TRUE;
     }
   }
 
   /* Fall back to unlocked DrawingBoard's rastport if available */
-  if (rp->target_board && rp->target_board->rastport) {
-    struct RenderPort temp_rp = *rp;
-    temp_rp.target_rp = rp->target_board->rastport;
+  if (rctx->target_board && rctx->target_board->rastport) {
+    struct RenderContext temp_rp = *rctx;
+    temp_rp.target_rastport = rctx->target_board->rastport;
     temp_rp.target_board = NULL;
     if (CybergfxDrawTextureTiledToRastPort(&temp_rp, texture, dest_x, dest_y,
                                            dest_width, dest_height)) {

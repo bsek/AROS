@@ -48,8 +48,8 @@
         return;
 
     /* End batching before finishing refresh */
-    if (mri->mri_RenderPort) {
-        ZuneEndBatch(mri->mri_RenderPort);
+    if (mri->mri_RenderContext) {
+        ZuneEndBatch(mri->mri_RenderContext);
     }
 
     EndRefresh(w, TRUE);

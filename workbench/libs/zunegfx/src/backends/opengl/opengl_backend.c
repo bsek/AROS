@@ -12,7 +12,7 @@
     - hostgl.library: Hardware-accelerated passthrough (hosted AROS on X11)
 
     Context Management:
-    - Each RenderPort/DrawingBoard gets its own GL context
+    - Each RenderContext/DrawingBoard gets its own GL context
     - Contexts are created on-demand when OpenGL rendering is first used
     - The backend manages context switching transparently
 
@@ -235,35 +235,35 @@ static OpenGLPrivateData *g_opengl_priv = NULL;
 static BOOL OpenGLInitBackend(ZuneBackendContext *ctx);
 static void OpenGLCleanupBackend(ZuneBackendContext *ctx);
 static BOOL OpenGLIsAvailable(void);
-static BOOL OpenGLIsCompatible(struct RenderPort *rp);
+static BOOL OpenGLIsCompatible(struct RenderContext *rctx);
 static ULONG OpenGLGetCapabilities(void);
 static ULONG OpenGLGetPixelFormat(struct BitMap *bitmap);
 
-static BOOL OpenGLInitRenderPort(struct RenderPort *rp);
-static void OpenGLCleanupRenderPort(struct RenderPort *rp);
+static BOOL OpenGLInitRenderContext(struct RenderContext *rctx);
+static void OpenGLCleanupRenderContext(struct RenderContext *rctx);
 
-static BOOL OpenGLPrepareColor(struct RenderPort *rp,
+static BOOL OpenGLPrepareColor(struct RenderContext *rctx,
                                struct InternalColor *color);
-static void OpenGLReleaseColor(struct RenderPort *rp,
+static void OpenGLReleaseColor(struct RenderContext *rctx,
                                struct InternalColor *color);
 
-static void OpenGLDrawPixel(struct RenderPort *rp, WORD x, WORD y,
+static void OpenGLDrawPixel(struct RenderContext *rctx, WORD x, WORD y,
                             struct InternalColor *color, BOOL antialias);
-static void OpenGLDrawLine(struct RenderPort *rp, WORD startX, WORD startY,
+static void OpenGLDrawLine(struct RenderContext *rctx, WORD startX, WORD startY,
                            WORD endX, WORD endY, UWORD width,
                            struct InternalColor *color, BOOL antialias);
-static void OpenGLDrawRectangle(struct RenderPort *rp, WORD x, WORD y,
+static void OpenGLDrawRectangle(struct RenderContext *rctx, WORD x, WORD y,
                                 UWORD width, UWORD height, UBYTE border_width,
                                 UBYTE corner_radius, struct ZuneBrush *fill_brush,
                                 struct InternalColor *border_color, BOOL filled,
                                 BOOL antialias);
-static void OpenGLDrawCircle(struct RenderPort *rp, WORD center_x, WORD center_y,
+static void OpenGLDrawCircle(struct RenderContext *rctx, WORD center_x, WORD center_y,
                              UWORD radius, UBYTE border_width,
                              struct ZuneBrush *fill_brush,
                              struct InternalColor *border_color, BOOL filled,
                              BOOL antialias);
 
-static void OpenGLClearRenderPort(struct RenderPort *rp,
+static void OpenGLClearRenderContext(struct RenderContext *rctx,
                                   struct InternalColor *color);
 
 static APTR OpenGLLockPixels(struct DrawingBoard *board, ULONG *pitch_out);
@@ -272,16 +272,16 @@ static ULONG OpenGLGetPixel(struct DrawingBoard *board, WORD x, WORD y);
 static void OpenGLSetPixel(struct DrawingBoard *board, WORD x, WORD y,
                            struct InternalColor *color);
 
-static void OpenGLBeginBatch(struct RenderPort *rp);
-static void OpenGLEndBatch(struct RenderPort *rp);
-static void OpenGLFlushBatch(struct RenderPort *rp);
-static BOOL OpenGLIsBatching(struct RenderPort *rp);
+static void OpenGLBeginBatch(struct RenderContext *rctx);
+static void OpenGLEndBatch(struct RenderContext *rctx);
+static void OpenGLFlushBatch(struct RenderContext *rctx);
+static BOOL OpenGLIsBatching(struct RenderContext *rctx);
 
-static void OpenGLBlitRenderPorts(struct RenderPort *source,
-                                  struct RenderPort *dest, WORD src_x,
+static void OpenGLBlitRenderContexts(struct RenderContext *source,
+                                  struct RenderContext *dest, WORD src_x,
                                   WORD src_y, WORD dest_x, WORD dest_y,
                                   UWORD width, UWORD height);
-static void OpenGLBlitToScreen(struct RenderPort *source,
+static void OpenGLBlitToScreen(struct RenderContext *source,
                                struct RastPort *screen_rp, WORD src_x,
                                WORD src_y, WORD dest_x, WORD dest_y,
                                UWORD width, UWORD height);
@@ -291,9 +291,9 @@ void OpenGLCleanupDrawingBoard(struct DrawingBoard *board);
 
 /* Helper functions */
 static BOOL OpenGL_EnsureGlobalContext(struct Window *window);
-static BOOL OpenGL_SwitchToWindow(struct RenderPort *rp);
-static BOOL OpenGL_SwitchToDrawingBoard(struct RenderPort *rp);
-static BOOL OpenGL_SwitchToTarget(struct RenderPort *rp);
+static BOOL OpenGL_SwitchToWindow(struct RenderContext *rctx);
+static BOOL OpenGL_SwitchToDrawingBoard(struct RenderContext *rctx);
+static BOOL OpenGL_SwitchToTarget(struct RenderContext *rctx);
 static void OpenGL_SetupOrthoProjection(UWORD width, UWORD height);
 static void OpenGL_SetColor(struct InternalColor *color);
 
@@ -321,8 +321,8 @@ static GLuint OpenGL_GetFBOAsTexture(struct DrawingBoard *board);
 static void OpenGL_BlitFBOToFBO(struct DrawingBoard *src, struct DrawingBoard *dst,
                                 WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
                                 UWORD width, UWORD height);
-static BOOL OpenGL_SyncFBOToBitmap(struct RenderPort *rp);
-static BOOL OpenGL_SyncRegionFBOToBitmap(struct RenderPort *rp,
+static BOOL OpenGL_SyncFBOToBitmap(struct RenderContext *rctx);
+static BOOL OpenGL_SyncRegionFBOToBitmap(struct RenderContext *rctx,
                                          WORD x, WORD y, UWORD width, UWORD height);
 
 /* Pixel buffer helper functions */
@@ -335,7 +335,7 @@ static GLuint OpenGL_UploadTextureFromBuffer(const UBYTE *buffer, UWORD width, U
 static void OpenGL_DrawTexturedQuad(WORD x, WORD y, UWORD width, UWORD height, BOOL flip_texcoord);
 
 /* Brush to texture conversion */
-static GLuint OpenGL_BrushToTexture(struct RenderPort *rp, struct ZuneBrush *brush,
+static GLuint OpenGL_BrushToTexture(struct RenderContext *rctx, struct ZuneBrush *brush,
                                     WORD x, WORD y, UWORD width, UWORD height);
 
 /*****************************************************************************/
@@ -489,21 +489,21 @@ static const GLchar *g_rounded_rect_textured_fs_source =
  * 2. Upload them as a texture
  * 3. Draw the texture to the framebuffer at the destination position
  */
-static void OpenGLCopyFromRastPort(struct RenderPort *rp, struct RastPort *src_rp,
+static void OpenGLCopyFromRastPort(struct RenderContext *rctx, struct RastPort *src_rp,
                                    WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
                                    UWORD width, UWORD height)
 {
     UBYTE *pixelbuffer;
     GLuint texture;
 
-    if (!rp || !src_rp || !g_opengl_priv || !CyberGfxBase) {
+    if (!rctx || !src_rp || !g_opengl_priv || !CyberGfxBase) {
         return;
     }
 
     D(bug("[ZuneGfx:OpenGL] CopyFromRastPort: ENTER, switching to target\n"));
     
     /* OpenGL_SwitchToTarget -> OpenGL_SwitchToDrawingBoard now handles context switching */
-    if (!OpenGL_SwitchToTarget(rp)) {
+    if (!OpenGL_SwitchToTarget(rctx)) {
         D(bug("[ZuneGfx:OpenGL] CopyFromRastPort: SwitchToTarget FAILED\n"));
         return;
     }
@@ -575,8 +575,8 @@ static void OpenGLCopyFromRastPort(struct RenderPort *rp, struct RastPort *src_r
      * This is critical when drawing the full-size texture to the FBO,
      * as the projection matrix must match the FBO dimensions.
      */
-    if (rp->target_board) {
-        struct DrawingBoard *board = rp->target_board;
+    if (rctx->target_board) {
+        struct DrawingBoard *board = rctx->target_board;
         OpenGLFBOData *fbo = (OpenGLFBOData *)board->backend_data;
         
         D(bug("[ZuneGfx:OpenGL] CopyFromRastPort: board=%dx%d, texture=%dx%d, dst=%d,%d\n",
@@ -617,8 +617,8 @@ static void OpenGLCopyFromRastPort(struct RenderPort *rp, struct RastPort *src_r
         
         /* Read back a pixel that should be yellow (150, 50 in screen coords) */
         /* Note: OpenGL Y is flipped, so we need to flip the Y coordinate */
-        if (rp->target_board) {
-            WORD read_y = rp->target_board->height - 150 - 1;
+        if (rctx->target_board) {
+            WORD read_y = rctx->target_board->height - 150 - 1;
             glReadPixels(50, read_y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, test_pixel);
             D(bug("[ZuneGfx:OpenGL] CopyFromRastPort: FBO readback at (50,%d) RGBA = %02x %02x %02x %02x\n",
                   read_y, test_pixel[0], test_pixel[1], test_pixel[2], test_pixel[3]));
@@ -646,8 +646,8 @@ ZuneBackendOps opengl_backend_ops = {
     .IsCompatible = OpenGLIsCompatible,
     .GetPixelFormat = OpenGLGetPixelFormat,
 
-    .InitRenderPort = OpenGLInitRenderPort,
-    .CleanupRenderPort = OpenGLCleanupRenderPort,
+    .InitRenderContext = OpenGLInitRenderContext,
+    .CleanupRenderContext = OpenGLCleanupRenderContext,
 
     .PrepareColor = OpenGLPrepareColor,
     .ReleaseColor = OpenGLReleaseColor,
@@ -657,7 +657,7 @@ ZuneBackendOps opengl_backend_ops = {
     .DrawRectangle = OpenGLDrawRectangle,
     .DrawCircle = OpenGLDrawCircle,
 
-    .ClearRenderPort = OpenGLClearRenderPort,
+    .ClearRenderContext = OpenGLClearRenderContext,
 
     .LockPixels = OpenGLLockPixels,
     .UnlockPixels = OpenGLUnlockPixels,
@@ -669,7 +669,7 @@ ZuneBackendOps opengl_backend_ops = {
     .FlushBatch = OpenGLFlushBatch,
     .IsBatching = OpenGLIsBatching,
 
-    .BlitRenderPorts = OpenGLBlitRenderPorts,
+    .BlitRenderContexts = OpenGLBlitRenderContexts,
     .BlitToScreen = OpenGLBlitToScreen,
 
     .InitDrawingBoard = OpenGLInitDrawingBoard,
@@ -801,7 +801,7 @@ static UBYTE *OpenGL_ReadPixelsToBuffer(WORD x, WORD y, UWORD width, UWORD heigh
  * Allocates a buffer and reads pixels from a RastPort using CyberGraphics.
  *
  * Parameters:
- *   rp            - Source RastPort
+ *   rctx            - Source RastPort
  *   x, y          - Source position
  *   width, height - Size of region to read
  *   force_opaque  - If TRUE, set alpha to 0xFF for all pixels
@@ -897,14 +897,14 @@ static void OpenGL_DrawTexturedQuad(WORD x, WORD y, UWORD width, UWORD height, B
  * Supports: TEXTURE, DATATYPE, LINEAR_GRADIENT, RADIAL_GRADIENT, PATTERN, PEN, SOLID.
  *
  * Parameters:
- *   rp           - RenderPort (for colormap/pen resolution)
+ *   rctx           - RenderContext (for colormap/pen resolution)
  *   brush        - The brush to convert
  *   x, y         - Rectangle position (for gradient calculations)
  *   width,height - Rectangle dimensions
  *
  * Returns texture ID, or 0 on failure. Caller must delete the texture.
  */
-static GLuint OpenGL_BrushToTexture(struct RenderPort *rp, struct ZuneBrush *brush,
+static GLuint OpenGL_BrushToTexture(struct RenderContext *rctx, struct ZuneBrush *brush,
                                     WORD x, WORD y, UWORD width, UWORD height)
 {
     UBYTE *buffer;
@@ -948,8 +948,8 @@ static GLuint OpenGL_BrushToTexture(struct RenderPort *rp, struct ZuneBrush *bru
         ULONG rgb[3];
         UBYTE r, g, b, a = 0xFF;
 
-        if (rp && rp->colormap) {
-            GetRGB32(rp->colormap, brush->data.pen.pen, 1, rgb);
+        if (rctx && rctx->colormap) {
+            GetRGB32(rctx->colormap, brush->data.pen.pen, 1, rgb);
             r = rgb[0] >> 24;
             g = rgb[1] >> 24;
             b = rgb[2] >> 24;
@@ -3179,17 +3179,17 @@ void OpenGL_BlitFBOToRastPort(struct DrawingBoard *board, struct RastPort *dst_r
  * This is essential for mixed-mode rendering where both OpenGL and
  * CyberGfx draw to the same DrawingBoard.
  */
-BOOL OpenGL_SyncFBOToBitmap(struct RenderPort *rp)
+BOOL OpenGL_SyncFBOToBitmap(struct RenderContext *rctx)
 {
     struct DrawingBoard *board;
     OpenGLFBOData *fbo;
 
-    /* Validate RenderPort */
-    if (!rp) {
+    /* Validate RenderContext */
+    if (!rctx) {
         return FALSE;
     }
 
-    board = rp->target_board;
+    board = rctx->target_board;
 
     /* Validate DrawingBoard */
     if (!board || !board->valid) {
@@ -3239,26 +3239,26 @@ BOOL OpenGL_SyncFBOToBitmap(struct RenderPort *rp)
  * of the FBO needs to be synced (e.g., when flushing a specific dirty region).
  *
  * Parameters:
- *   rp - RenderPort with target DrawingBoard
+ *   rctx - RenderContext with target DrawingBoard
  *   x, y - Top-left corner of region to sync
  *   width, height - Size of region to sync
  */
-static BOOL OpenGL_SyncRegionFBOToBitmap(struct RenderPort *rp,
+static BOOL OpenGL_SyncRegionFBOToBitmap(struct RenderContext *rctx,
                                          WORD x, WORD y, UWORD width, UWORD height)
 {
     struct DrawingBoard *board;
     OpenGLFBOData *fbo;
 
-    D(bug("[ZuneGfx:OpenGL] SyncRegionFBOToBitmap: rp=%p, region=%d,%d %dx%d\n",
-          rp, x, y, width, height));
+    D(bug("[ZuneGfx:OpenGL] SyncRegionFBOToBitmap: rctx=%p, region=%d,%d %dx%d\n",
+          rctx, x, y, width, height));
 
-    /* Validate RenderPort */
-    if (!rp) {
-        D(bug("[ZuneGfx:OpenGL] SyncRegionFBOToBitmap: rp is NULL\n"));
+    /* Validate RenderContext */
+    if (!rctx) {
+        D(bug("[ZuneGfx:OpenGL] SyncRegionFBOToBitmap: rctx is NULL\n"));
         return FALSE;
     }
 
-    board = rp->target_board;
+    board = rctx->target_board;
 
     /* Validate DrawingBoard */
     if (!board || !board->valid) {
@@ -3463,40 +3463,40 @@ static BOOL OpenGLIsAvailable(void)
     return g_opengl_available_cached;
 }
 
-static BOOL OpenGLIsCompatible(struct RenderPort *rp)
+static BOOL OpenGLIsCompatible(struct RenderContext *rctx)
 {
-    if (!rp) {
-        /* NULL rp means checking general compatibility */
+    if (!rctx) {
+        /* NULL rctx means checking general compatibility */
         return OpenGLIsAvailable();
     }
 
-    D(bug("[ZuneGfx:OpenGL] IsCompatible: rp=%p window=%p target_board=%p\n",
-          rp, rp->window, rp->target_board));
-    if (rp->target_board) {
+    D(bug("[ZuneGfx:OpenGL] IsCompatible: rctx=%p window=%p target_board=%p\n",
+          rctx, rctx->window, rctx->target_board));
+    if (rctx->target_board) {
         D(bug("[ZuneGfx:OpenGL] IsCompatible: board->parent_window=%p\n",
-              rp->target_board->parent_window));
+              rctx->target_board->parent_window));
     }
 
     /*
      * NEW ARCHITECTURE: OpenGL compatibility is based on having a Window.
      *
-     * OpenGL requires a Window to create a GL context. The RenderPort should
-     * have rp->window set (via ZuneCreateRenderPortForWindow) for OpenGL to work.
+     * OpenGL requires a Window to create a GL context. The RenderContext should
+     * have rctx->window set (via ZuneCreateRenderContextForWindow) for OpenGL to work.
      *
      * With the new architecture:
-     * - RenderPort is bound to a Window (required for GL context)
+     * - RenderContext is bound to a Window (required for GL context)
      * - DrawingBoards always have BitMap (for legacy compatibility)
      * - OpenGL adds FBO to DrawingBoard for accelerated rendering
      * - Switching targets uses glBindFramebuffer() (fast)
      */
 
-    /* Check if RenderPort has a window - required for GL context */
-    if (rp->window) {
+    /* Check if RenderContext has a window - required for GL context */
+    if (rctx->window) {
         return TRUE;
     }
 
     /* Legacy path: Check for DrawingBoard with parent_window */
-    if (rp->target_board && rp->target_board->parent_window) {
+    if (rctx->target_board && rctx->target_board->parent_window) {
         return TRUE;
     }
 
@@ -3784,20 +3784,20 @@ static BOOL OpenGL_EnsureGlobalContext(struct Window *window)
  *
  * Returns TRUE if switch was successful.
  */
-static BOOL OpenGL_SwitchToWindow(struct RenderPort *rp)
+static BOOL OpenGL_SwitchToWindow(struct RenderContext *rctx)
 {
     struct Window *window = NULL;
     struct RastPort *rastport;
     OpenGLWindowContext *win_ctx;
     UWORD width, height;
 
-    if (!rp || !g_opengl_priv) {
+    if (!rctx || !g_opengl_priv) {
         return FALSE;
     }
 
     /* Get the target window */
-    if (rp->target_rp) {
-        rastport = rp->target_rp;
+    if (rctx->target_rastport) {
+        rastport = rctx->target_rastport;
         if (rastport->Layer && rastport->Layer->Window) {
             window = (struct Window *)rastport->Layer->Window;
         }
@@ -3952,16 +3952,16 @@ fallback_setrast:
  *
  * Returns TRUE if switch was successful.
  */
-static BOOL OpenGL_SwitchToDrawingBoard(struct RenderPort *rp)
+static BOOL OpenGL_SwitchToDrawingBoard(struct RenderContext *rctx)
 {
     struct DrawingBoard *board;
     OpenGLFBOData *fbo;
 
-    if (!rp || !rp->target_board || !g_opengl_priv) {
+    if (!rctx || !rctx->target_board || !g_opengl_priv) {
         return FALSE;
     }
 
-    board = rp->target_board;
+    board = rctx->target_board;
     
     /*
      * CRITICAL: Ensure the global context is current before any GL operations.
@@ -3995,7 +3995,7 @@ static BOOL OpenGL_SwitchToDrawingBoard(struct RenderPort *rp)
      * If no context exists yet, we need to create one first.
      * This requires a window - check multiple sources:
      * 1. DrawingBoard's parent_window (set by user)
-     * 2. RenderPort's target_rp Layer->Window
+     * 2. RenderContext's target_rastport Layer->Window
      */
     if (!g_opengl_priv->context_created) {
         struct Window *window = NULL;
@@ -4004,9 +4004,9 @@ static BOOL OpenGL_SwitchToDrawingBoard(struct RenderPort *rp)
         if (board->parent_window) {
             window = board->parent_window;
         }
-        /* Otherwise, try to get window from RenderPort's target_rp */
-        else if (rp->target_rp && rp->target_rp->Layer && rp->target_rp->Layer->Window) {
-            window = (struct Window *)rp->target_rp->Layer->Window;
+        /* Otherwise, try to get window from RenderContext's target_rastport */
+        else if (rctx->target_rastport && rctx->target_rastport->Layer && rctx->target_rastport->Layer->Window) {
+            window = (struct Window *)rctx->target_rastport->Layer->Window;
         }
 
         if (window) {
@@ -4106,24 +4106,24 @@ static BOOL OpenGL_SwitchToDrawingBoard(struct RenderPort *rp)
 /*
  * OpenGL_SwitchToTarget - Unified function to switch GL context to any target
  *
- * Determines if the RenderPort targets a Window or DrawingBoard and calls
+ * Determines if the RenderContext targets a Window or DrawingBoard and calls
  * the appropriate switching function.
  *
  * Returns TRUE if switch was successful.
  */
-static BOOL OpenGL_SwitchToTarget(struct RenderPort *rp)
+static BOOL OpenGL_SwitchToTarget(struct RenderContext *rctx)
 {
-    if (!rp || !g_opengl_priv) {
+    if (!rctx || !g_opengl_priv) {
         return FALSE;
     }
 
     /* Check if this is a DrawingBoard target */
-    if (rp->target_board) {
-        return OpenGL_SwitchToDrawingBoard(rp);
+    if (rctx->target_board) {
+        return OpenGL_SwitchToDrawingBoard(rctx);
     }
 
     /* Otherwise it's a Window-based RastPort */
-    return OpenGL_SwitchToWindow(rp);
+    return OpenGL_SwitchToWindow(rctx);
 }
 
 /*
@@ -4176,7 +4176,7 @@ static inline void OpenGL_SetColor(struct InternalColor *color)
  * We use a texture-based approach instead of glDrawPixels, which is more
  * reliable across different GL implementations.
  */
-static void OpenGL_SyncFromRastPort(struct RenderPort *rp)
+static void OpenGL_SyncFromRastPort(struct RenderContext *rctx)
 {
     struct Window *window;
     struct RastPort *rastport;
@@ -4186,11 +4186,11 @@ static void OpenGL_SyncFromRastPort(struct RenderPort *rp)
     WORD x_offset, y_offset;
     GLuint texture;
 
-    if (!rp || !rp->target_rp || !CyberGfxBase || !g_opengl_priv) {
+    if (!rctx || !rctx->target_rastport || !CyberGfxBase || !g_opengl_priv) {
         return;
     }
 
-    rastport = rp->target_rp;
+    rastport = rctx->target_rastport;
     if (!rastport->Layer || !rastport->Layer->Window) {
         return;
     }
@@ -4252,13 +4252,13 @@ static void OpenGL_SyncFromRastPort(struct RenderPort *rp)
  * Check if we need to sync from RastPort and do it if necessary.
  * This should be called before any OpenGL drawing operation.
  */
-static void OpenGL_SyncIfNeeded(struct RenderPort *rp)
+static void OpenGL_SyncIfNeeded(struct RenderContext *rctx)
 {
     if (!g_opengl_priv || !g_opengl_priv->needs_sync) {
         return;
     }
 
-//    OpenGL_SyncFromRastPort(rp);
+//    OpenGL_SyncFromRastPort(rctx);
     g_opengl_priv->needs_sync = FALSE;
 }
 
@@ -4268,9 +4268,9 @@ static void OpenGL_SyncIfNeeded(struct RenderPort *rp)
  * In non-batched mode, we need to flush and swap after each operation
  * to make the rendering visible immediately.
  */
-static void OpenGL_FlushIfNotBatching(struct RenderPort *rp)
+static void OpenGL_FlushIfNotBatching(struct RenderContext *rctx)
 {
-    if (!rp || rp->batching_enabled) {
+    if (!rctx || rctx->batching_enabled) {
         return;  /* Don't flush during batching */
     }
 
@@ -4294,33 +4294,33 @@ static void OpenGL_FlushIfNotBatching(struct RenderPort *rp)
 }
 
 /*****************************************************************************/
-/* RenderPort Management                                                     */
+/* RenderContext Management                                                     */
 /*****************************************************************************/
 
-static BOOL OpenGLInitRenderPort(struct RenderPort *rp)
+static BOOL OpenGLInitRenderContext(struct RenderContext *rctx)
 {
-    if (!rp) {
+    if (!rctx) {
         return FALSE;
     }
 
     /*
-     * With the global context approach, we don't need per-RenderPort context.
+     * With the global context approach, we don't need per-RenderContext context.
      * The global context is created on first use and shared across all windows.
      * glASetRast() is used to switch render targets as needed.
      */
-    rp->backend_context = NULL;
+    rctx->backend_context = NULL;
 
     return TRUE;
 }
 
-static void OpenGLCleanupRenderPort(struct RenderPort *rp)
+static void OpenGLCleanupRenderContext(struct RenderContext *rctx)
 {
-    if (!rp) {
+    if (!rctx) {
         return;
     }
 
     /*
-     * With global context, nothing to clean up per-RenderPort.
+     * With global context, nothing to clean up per-RenderContext.
      * The global context is destroyed in OpenGLCleanupBackend().
      */
 }
@@ -4329,7 +4329,7 @@ static void OpenGLCleanupRenderPort(struct RenderPort *rp)
 /* Color Management                                                          */
 /*****************************************************************************/
 
-static BOOL OpenGLPrepareColor(struct RenderPort *rp,
+static BOOL OpenGLPrepareColor(struct RenderContext *rctx,
                                struct InternalColor *color)
 {
     if (!color) {
@@ -4346,7 +4346,7 @@ static BOOL OpenGLPrepareColor(struct RenderPort *rp,
     return TRUE;
 }
 
-static void OpenGLReleaseColor(struct RenderPort *rp,
+static void OpenGLReleaseColor(struct RenderContext *rctx,
                                struct InternalColor *color)
 {
     /* Nothing to release for OpenGL colors */
@@ -4356,42 +4356,42 @@ static void OpenGLReleaseColor(struct RenderPort *rp,
 /* Drawing Operations                                                        */
 /*****************************************************************************/
 
-static void OpenGLDrawPixel(struct RenderPort *rp, WORD x, WORD y,
+static void OpenGLDrawPixel(struct RenderContext *rctx, WORD x, WORD y,
                             struct InternalColor *color, BOOL antialias)
 {
-    if (!rp || !color) {
+    if (!rctx || !color) {
         return;
     }
 
-    if (!OpenGL_SwitchToTarget(rp)) {
-        ZuneFallback_DrawPixel(rp, x, y, color, antialias);
+    if (!OpenGL_SwitchToTarget(rctx)) {
+        ZuneFallback_DrawPixel(rctx, x, y, color, antialias);
         return;
     }
 
-    OpenGL_SyncIfNeeded(rp);
+    OpenGL_SyncIfNeeded(rctx);
     OpenGL_SetColor(color);
 
     glBegin(GL_POINTS);
     glVertex2i(x, y);
     glEnd();
 
-    OpenGL_FlushIfNotBatching(rp);
+    OpenGL_FlushIfNotBatching(rctx);
 }
 
-static void OpenGLDrawLine(struct RenderPort *rp, WORD startX, WORD startY,
+static void OpenGLDrawLine(struct RenderContext *rctx, WORD startX, WORD startY,
                            WORD endX, WORD endY, UWORD width,
                            struct InternalColor *color, BOOL antialias)
 {
-    if (!rp || !color) {
+    if (!rctx || !color) {
         return;
     }
 
-    if (!OpenGL_SwitchToTarget(rp)) {
-        ZuneFallback_DrawLine(rp, startX, startY, endX, endY, width, color, antialias);
+    if (!OpenGL_SwitchToTarget(rctx)) {
+        ZuneFallback_DrawLine(rctx, startX, startY, endX, endY, width, color, antialias);
         return;
     }
 
-    OpenGL_SyncIfNeeded(rp);
+    OpenGL_SyncIfNeeded(rctx);
     OpenGL_SetColor(color);
 
     /* Set line width */
@@ -4419,26 +4419,26 @@ static void OpenGLDrawLine(struct RenderPort *rp, WORD startX, WORD startY,
         glLineWidth(1.0f);
     }
 
-    OpenGL_FlushIfNotBatching(rp);
+    OpenGL_FlushIfNotBatching(rctx);
 }
 
-static void OpenGLDrawRectangle(struct RenderPort *rp, WORD x, WORD y,
+static void OpenGLDrawRectangle(struct RenderContext *rctx, WORD x, WORD y,
                                 UWORD width, UWORD height, UBYTE border_width,
                                 UBYTE corner_radius, struct ZuneBrush *fill_brush,
                                 struct InternalColor *border_color, BOOL filled,
                                 BOOL antialias)
 {
-    if (!rp) {
+    if (!rctx) {
         return;
     }
 
-    if (!OpenGL_SwitchToTarget(rp)) {
-        ZuneFallback_DrawRectangle(rp, x, y, width, height, border_width, corner_radius,
+    if (!OpenGL_SwitchToTarget(rctx)) {
+        ZuneFallback_DrawRectangle(rctx, x, y, width, height, border_width, corner_radius,
                                    fill_brush, border_color, filled, antialias);
         return;
     }
 
-    OpenGL_SyncIfNeeded(rp);
+    OpenGL_SyncIfNeeded(rctx);
 
     /* Clamp corner radius to half of smallest dimension */
     if (corner_radius > width / 2) corner_radius = width / 2;
@@ -4482,7 +4482,7 @@ static void OpenGLDrawRectangle(struct RenderPort *rp, WORD x, WORD y,
                 }
             } else {
                 /* Non-solid brush - convert to texture and draw textured quad */
-                GLuint brush_texture = OpenGL_BrushToTexture(rp, fill_brush, x, y, width, height);
+                GLuint brush_texture = OpenGL_BrushToTexture(rctx, fill_brush, x, y, width, height);
                 if (brush_texture != 0) {
                     glEnable(GL_TEXTURE_2D);
                     glBindTexture(GL_TEXTURE_2D, brush_texture);
@@ -4550,7 +4550,7 @@ static void OpenGLDrawRectangle(struct RenderPort *rp, WORD x, WORD y,
 
             if (use_textured_shader) {
                 /* Non-solid brush: convert to texture and use textured shader */
-                brush_texture = OpenGL_BrushToTexture(rp, fill_brush, x, y, width, height);
+                brush_texture = OpenGL_BrushToTexture(rctx, fill_brush, x, y, width, height);
                 if (brush_texture == 0) {
                     has_fill = FALSE; /* Failed to create texture, skip fill */
                     use_textured_shader = FALSE;
@@ -4847,10 +4847,10 @@ static void OpenGLDrawRectangle(struct RenderPort *rp, WORD x, WORD y,
         }
     }
 
-    OpenGL_FlushIfNotBatching(rp);
+    OpenGL_FlushIfNotBatching(rctx);
 }
 
-static void OpenGLDrawCircle(struct RenderPort *rp, WORD center_x, WORD center_y,
+static void OpenGLDrawCircle(struct RenderContext *rctx, WORD center_x, WORD center_y,
                              UWORD radius, UBYTE border_width,
                              struct ZuneBrush *fill_brush,
                              struct InternalColor *border_color, BOOL filled,
@@ -4861,17 +4861,17 @@ static void OpenGLDrawCircle(struct RenderPort *rp, WORD center_x, WORD center_y
     int i;
     float angle, angle_step;
 
-    if (!rp) {
+    if (!rctx) {
         return;
     }
 
-    if (!OpenGL_SwitchToTarget(rp)) {
-        ZuneFallback_DrawCircle(rp, center_x, center_y, radius, border_width,
+    if (!OpenGL_SwitchToTarget(rctx)) {
+        ZuneFallback_DrawCircle(rctx, center_x, center_y, radius, border_width,
                                 fill_brush, border_color, filled, antialias);
         return;
     }
 
-    OpenGL_SyncIfNeeded(rp);
+    OpenGL_SyncIfNeeded(rctx);
 
     angle_step = 2.0f * 3.14159265f / CIRCLE_SEGMENTS;
 
@@ -4950,19 +4950,19 @@ static void OpenGLDrawCircle(struct RenderPort *rp, WORD center_x, WORD center_y
         }
     }
 
-    OpenGL_FlushIfNotBatching(rp);
+    OpenGL_FlushIfNotBatching(rctx);
     #undef CIRCLE_SEGMENTS
 }
 
-static void OpenGLClearRenderPort(struct RenderPort *rp,
+static void OpenGLClearRenderContext(struct RenderContext *rctx,
                                   struct InternalColor *color)
 {
-    if (!rp || !color) {
+    if (!rctx || !color) {
         return;
     }
 
-    if (!OpenGL_SwitchToTarget(rp)) {
-        ZuneFallback_ClearRenderPort(rp, color);
+    if (!OpenGL_SwitchToTarget(rctx)) {
+        ZuneFallback_ClearRenderContext(rctx, color);
         return;
     }
 
@@ -4981,7 +4981,7 @@ static void OpenGLClearRenderPort(struct RenderPort *rp,
 
     glClear(GL_COLOR_BUFFER_BIT);
 
-    OpenGL_FlushIfNotBatching(rp);
+    OpenGL_FlushIfNotBatching(rctx);
 }
 
 /*****************************************************************************/
@@ -5015,31 +5015,31 @@ static ULONG OpenGLGetPixel(struct DrawingBoard *board, WORD x, WORD y)
 static void OpenGLSetPixel(struct DrawingBoard *board, WORD x, WORD y,
                            struct InternalColor *color)
 {
-    /* TODO: Would need to draw a point via the RenderPort */
+    /* TODO: Would need to draw a point via the RenderContext */
 }
 
 /*****************************************************************************/
 /* Batching Operations                                                       */
 /*****************************************************************************/
 
-static void OpenGLBeginBatch(struct RenderPort *rp)
+static void OpenGLBeginBatch(struct RenderContext *rctx)
 {
     /*
      * OpenGL naturally batches commands. We could use this to
      * defer glASwapBuffers until ZuneEndBatch.
      */
-    if (rp) {
-        rp->batching_enabled = TRUE;
+    if (rctx) {
+        rctx->batching_enabled = TRUE;
     }
 }
 
-static void OpenGLEndBatch(struct RenderPort *rp)
+static void OpenGLEndBatch(struct RenderContext *rctx)
 {
-    if (!rp) {
+    if (!rctx) {
         return;
     }
 
-    rp->batching_enabled = FALSE;
+    rctx->batching_enabled = FALSE;
 
     /* Flush and swap buffers using global context */
     if (g_opengl_priv && g_opengl_priv->gl_context) {
@@ -5048,9 +5048,9 @@ static void OpenGLEndBatch(struct RenderPort *rp)
     }
 }
 
-static void OpenGLFlushBatch(struct RenderPort *rp)
+static void OpenGLFlushBatch(struct RenderContext *rctx)
 {
-    if (!rp) {
+    if (!rctx) {
         return;
     }
 
@@ -5061,20 +5061,20 @@ static void OpenGLFlushBatch(struct RenderPort *rp)
     }
 }
 
-static BOOL OpenGLIsBatching(struct RenderPort *rp)
+static BOOL OpenGLIsBatching(struct RenderContext *rctx)
 {
-    if (!rp) {
+    if (!rctx) {
         return FALSE;
     }
-    return rp->batching_enabled;
+    return rctx->batching_enabled;
 }
 
 /*****************************************************************************/
 /* Blitting Operations                                                       */
 /*****************************************************************************/
 
-static void OpenGLBlitRenderPorts(struct RenderPort *source,
-                                  struct RenderPort *dest, WORD src_x,
+static void OpenGLBlitRenderContexts(struct RenderContext *source,
+                                  struct RenderContext *dest, WORD src_x,
                                   WORD src_y, WORD dest_x, WORD dest_y,
                                   UWORD width, UWORD height)
 {
@@ -5137,7 +5137,7 @@ static void OpenGLBlitRenderPorts(struct RenderPort *source,
     }
 }
 
-static void OpenGLBlitToScreen(struct RenderPort *source,
+static void OpenGLBlitToScreen(struct RenderContext *source,
                                struct RastPort *screen_rp, WORD src_x,
                                WORD src_y, WORD dest_x, WORD dest_y,
                                UWORD width, UWORD height)

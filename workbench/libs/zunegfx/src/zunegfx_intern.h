@@ -77,7 +77,7 @@ struct IntZuneGfxBase {
   struct SignalSemaphore lock;
 
   /* Resource tracking */
-  struct List renderports;   /* List of active RenderPorts */
+  struct List renderports;   /* List of active RenderContexts */
   struct List drawingboards; /* List of active DrawingBoards */
   struct List textures;      /* List of active ZuneTextures */
 };
@@ -91,7 +91,8 @@ typedef enum {
   BATCH_CMD_FILL_RECT,
   BATCH_CMD_DRAW_RECT,
   BATCH_CMD_DRAW_LINE,
-  BATCH_CMD_DRAW_PIXEL
+  BATCH_CMD_DRAW_PIXEL,
+  BATCH_CMD_DRAW_RECT_STYLED
 } BatchCommandType;
 
 /* Batch command structure */
@@ -103,6 +104,7 @@ struct BatchCommand {
   ULONG color;         /* Color value */
   LONG pen;            /* Allocated pen */
   ULONG sortKey;       /* For sorting optimization */
+  UBYTE border_width;  /* Border width for styled outlines */
 };
 
 /* Batch constants */
@@ -172,7 +174,7 @@ struct BatchState {
   struct PenColorCache penColorCache;
 
   BOOL active;
-  struct RenderPort *render_port;
+  struct RenderContext *render_port;
 };
 
 /*****************************************************************************/
@@ -182,7 +184,7 @@ struct BatchState {
 typedef UWORD ZuneBackendType;
 
 /* Batch state management */
-struct BatchState *CreateBatchState(struct RenderPort *rp);
+struct BatchState *CreateBatchState(struct RenderContext *rctx);
 void DestroyBatchState(struct BatchState *batch);
 
 /* Pen cache management */
@@ -201,21 +203,21 @@ void InitPenColorCache(struct PenColorCache *cache);
 void CleanupPenColorCache(struct PenColorCache *cache);
 BOOL GetCachedPenInternalColor(struct PenColorCache *cache, LONG pen, struct ColorMap *cmap, ULONG pixel_format, struct InternalColor *out_color);
 void CachePenInternalColor(struct PenColorCache *cache, LONG pen, struct ColorMap *cmap, ULONG pixel_format, const struct InternalColor *internal_color);
-BOOL ValidateRenderPort(struct RenderPort *rp);
+BOOL ValidateRenderContext(struct RenderContext *rctx);
 BOOL ValidateDrawingBoard(struct DrawingBoard *board);
 
 /* Color management */
-struct InternalColor ZuneColorToInternal(struct RenderPort *rp, ULONG color,
+struct InternalColor ZuneColorToInternal(struct RenderContext *rctx, ULONG color,
                                          ULONG pixel_format);
-BOOL ZuneBrushToInternalColor(struct RenderPort *rp,
+BOOL ZuneBrushToInternalColor(struct RenderContext *rctx,
                               const struct ZuneBrush *brush,
                               struct InternalColor *out_color);
 /* Drawingboard managment */
 BOOL AllocateDrawingBoardBitmap(struct DrawingBoard *board,
                                 ZuneBackendType backend_type,
                                 struct BitMap *friend_bitmap);
-APTR LockDrawingBoardPixelsInternal(struct RenderPort *rp, ULONG *pitch);
-void UnlockDrawingBoardPixelsInternal(struct RenderPort *rp);
+APTR LockDrawingBoardPixelsInternal(struct RenderContext *rctx, ULONG *pitch);
+void UnlockDrawingBoardPixelsInternal(struct RenderContext *rctx);
 
 /* State */
 void CleanupZuneRenderer(struct IntZuneGfxBase *base);

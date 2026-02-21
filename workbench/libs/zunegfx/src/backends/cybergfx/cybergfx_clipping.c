@@ -28,12 +28,12 @@
  * No special setup is needed; clipping is delegated to the RastPort or
  * handled implicitly when we clamp to DrawingBoard bounds.
  *****************************************************************************/
-BOOL CybergfxSetupClipping(struct RenderPort *rp, struct Region *region) {
+BOOL CybergfxSetupClipping(struct RenderContext *rctx, struct Region *region) {
     ENTER_FUNCTION("CybergfxSetupClipping");
     (void)region;
 
-    if (!rp) {
-        D(bug("CybergfxSetupClipping: Invalid RenderPort\n"));
+    if (!rctx) {
+        D(bug("CybergfxSetupClipping: Invalid RenderContext\n"));
         EXIT_FUNCTION("CybergfxSetupClipping");
         return FALSE;
     }
@@ -51,14 +51,14 @@ BOOL CybergfxSetupClipping(struct RenderPort *rp, struct Region *region) {
  * Validates that a pixel write stays inside a DrawingBoard. When rendering
  * to a RastPort we trust the OS clipping and therefore always return TRUE.
  *****************************************************************************/
-BOOL CybergfxClipPixel(struct RenderPort *rp, WORD x, WORD y) {
-    if (!rp) {
+BOOL CybergfxClipPixel(struct RenderContext *rctx, WORD x, WORD y) {
+    if (!rctx) {
         return FALSE;
     }
 
     /* For drawing boards we must stay inside the buffer bounds */
-    if (rp->target_board) {
-        struct DrawingBoard *board = rp->target_board;
+    if (rctx->target_board) {
+        struct DrawingBoard *board = rctx->target_board;
         return (x >= 0 && y >= 0 && x < board->width && y < board->height);
     }
 
@@ -72,9 +72,9 @@ BOOL CybergfxClipPixel(struct RenderPort *rp, WORD x, WORD y) {
  * Clamps a rectangle to the DrawingBoard bounds. For RastPort rendering the
  * rectangle is left untouched because the OS applies clipping later.
  *****************************************************************************/
-BOOL CybergfxClipRectangle(struct RenderPort *rp, WORD x, WORD y, WORD width, WORD height,
+BOOL CybergfxClipRectangle(struct RenderContext *rctx, WORD x, WORD y, WORD width, WORD height,
                           WORD *out_x, WORD *out_y, WORD *out_width, WORD *out_height) {
-    if (!rp || !out_x || !out_y || !out_width || !out_height) {
+    if (!rctx || !out_x || !out_y || !out_width || !out_height) {
         return FALSE;
     }
 
@@ -83,7 +83,7 @@ BOOL CybergfxClipRectangle(struct RenderPort *rp, WORD x, WORD y, WORD width, WO
     }
 
     /* Rendering directly to RastPort - clipping handled by AROS. */
-    if (!rp->target_board) {
+    if (!rctx->target_board) {
         *out_x = x;
         *out_y = y;
         *out_width = width;
@@ -91,7 +91,7 @@ BOOL CybergfxClipRectangle(struct RenderPort *rp, WORD x, WORD y, WORD width, WO
         return TRUE;
     }
 
-    struct DrawingBoard *board = rp->target_board;
+    struct DrawingBoard *board = rctx->target_board;
     WORD left = x;
     WORD top = y;
     WORD right = x + width - 1;
@@ -128,10 +128,10 @@ BOOL CybergfxClipRectangle(struct RenderPort *rp, WORD x, WORD y, WORD width, WO
  * Clears any backend-specific clipping state. For cybergfx, this is mostly
  * a no-op since clipping state is managed by the core library.
  *****************************************************************************/
-void CybergfxClearClipping(struct RenderPort *rp) {
+void CybergfxClearClipping(struct RenderContext *rctx) {
     ENTER_FUNCTION("CybergfxClearClipping");
 
-    if (!rp) {
+    if (!rctx) {
         EXIT_FUNCTION("CybergfxClearClipping");
         return;
     }
@@ -141,7 +141,7 @@ void CybergfxClearClipping(struct RenderPort *rp) {
      * or statistics tracking if needed.
      */
 
-    D(bug("CybergfxClearClipping: Clipping cleared for RenderPort %p\n", rp));
+    D(bug("CybergfxClearClipping: Clipping cleared for RenderContext %p\n", rctx));
 
     EXIT_FUNCTION("CybergfxClearClipping");
 }
@@ -154,13 +154,13 @@ void CybergfxClearClipping(struct RenderPort *rp) {
  * Returns the buffer bounds for DrawingBoards; RastPorts report infinite
  * bounds because the system handles clipping.
  *****************************************************************************/
-BOOL CybergfxGetClipBounds(struct RenderPort *rp, WORD *min_x, WORD *min_y,
+BOOL CybergfxGetClipBounds(struct RenderContext *rctx, WORD *min_x, WORD *min_y,
                           WORD *max_x, WORD *max_y) {
-    if (!rp || !min_x || !min_y || !max_x || !max_y) {
+    if (!rctx || !min_x || !min_y || !max_x || !max_y) {
         return FALSE;
     }
 
-    if (!rp->target_board) {
+    if (!rctx->target_board) {
         /* No explicit bounds; rely on RastPort clipping */
         *min_x = -32768;
         *min_y = -32768;
@@ -171,8 +171,8 @@ BOOL CybergfxGetClipBounds(struct RenderPort *rp, WORD *min_x, WORD *min_y,
 
     *min_x = 0;
     *min_y = 0;
-    *max_x = rp->target_board->width - 1;
-    *max_y = rp->target_board->height - 1;
+    *max_x = rctx->target_board->width - 1;
+    *max_y = rctx->target_board->height - 1;
     return TRUE;
 }
 
@@ -184,20 +184,20 @@ BOOL CybergfxGetClipBounds(struct RenderPort *rp, WORD *min_x, WORD *min_y,
  * Clamps line endpoints to DrawingBoard bounds using Cohen-Sutherland.
  * RastPort rendering skips clipping here.
  *****************************************************************************/
-BOOL CybergfxClipLine(struct RenderPort *rp, WORD *x1, WORD *y1, WORD *x2, WORD *y2) {
-    if (!rp || !x1 || !y1 || !x2 || !y2) {
+BOOL CybergfxClipLine(struct RenderContext *rctx, WORD *x1, WORD *y1, WORD *x2, WORD *y2) {
+    if (!rctx || !x1 || !y1 || !x2 || !y2) {
         return FALSE;
     }
 
-    if (!rp->target_board) {
+    if (!rctx->target_board) {
         /* Nothing to clip when rendering directly to RastPort */
         return TRUE;
     }
 
     WORD xmin = 0;
     WORD ymin = 0;
-    WORD xmax = rp->target_board->width - 1;
-    WORD ymax = rp->target_board->height - 1;
+    WORD xmax = rctx->target_board->width - 1;
+    WORD ymax = rctx->target_board->height - 1;
 
     /* Cohen-Sutherland outcodes */
     #define INSIDE 0  // 0000
@@ -275,9 +275,9 @@ BOOL CybergfxClipLine(struct RenderPort *rp, WORD *x1, WORD *y1, WORD *x2, WORD 
  * Ensures FillPixelArray stays inside DrawingBoard bounds; RastPorts are
  * left to AROS clipping, but coordinates are still validated for boards.
  *****************************************************************************/
-void CybergfxClipFillPixelArray(struct RenderPort *rp, struct RastPort *rastport,
+void CybergfxClipFillPixelArray(struct RenderContext *rctx, struct RastPort *rastport,
                                WORD x, WORD y, WORD width, WORD height, ULONG color) {
-    if (!rp || !rastport) {
+    if (!rctx || !rastport) {
         return;
     }
 
@@ -286,7 +286,7 @@ void CybergfxClipFillPixelArray(struct RenderPort *rp, struct RastPort *rastport
     WORD clipped_width = width;
     WORD clipped_height = height;
 
-    if (!CybergfxClipRectangle(rp, x, y, width, height,
+    if (!CybergfxClipRectangle(rctx, x, y, width, height,
                                &clipped_x, &clipped_y, &clipped_width, &clipped_height)) {
         return;
     }
@@ -302,15 +302,15 @@ void CybergfxClipFillPixelArray(struct RenderPort *rp, struct RastPort *rastport
  * Performs a buffer-safe fill for locked DrawingBoards by clamping to the
  * buffer dimensions. RastPort paths never call this helper.
  *****************************************************************************/
-void CybergfxClipFillPixelArrayDirect(struct RenderPort *rp, ULONG *pixels,
+void CybergfxClipFillPixelArrayDirect(struct RenderContext *rctx, ULONG *pixels,
                                      UWORD pitch_pixels, UWORD buffer_width, UWORD buffer_height,
                                      WORD x, WORD y, WORD width, WORD height, ULONG pixel) {
-    if (!rp || !pixels) {
+    if (!rctx || !pixels) {
         return;
     }
 
     WORD clipped_x, clipped_y, clipped_width, clipped_height;
-    if (!CybergfxClipRectangle(rp, x, y, width, height,
+    if (!CybergfxClipRectangle(rctx, x, y, width, height,
                                &clipped_x, &clipped_y, &clipped_width, &clipped_height)) {
         return;
     }

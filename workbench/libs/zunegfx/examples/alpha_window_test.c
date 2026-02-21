@@ -51,7 +51,7 @@ struct Library *LayersBase;
  */
 void DrawTestPattern(struct Window *win)
 {
-    struct RastPort *rp = win->RPort;
+    struct RastPort *rctx = win->RPort;
     int x, y;
     int w = win->Width - win->BorderLeft - win->BorderRight;
     int h = win->Height - win->BorderTop - win->BorderBottom;
@@ -59,30 +59,30 @@ void DrawTestPattern(struct Window *win)
     int by = win->BorderTop;
     
     /* Fill with semi-transparent looking pattern */
-    SetAPen(rp, 1);  /* Blue-ish */
-    RectFill(rp, bx, by, bx + w - 1, by + h - 1);
+    SetAPen(rctx, 1);  /* Blue-ish */
+    RectFill(rctx, bx, by, bx + w - 1, by + h - 1);
     
     /* Draw a grid pattern */
-    SetAPen(rp, 2);  /* White */
+    SetAPen(rctx, 2);  /* White */
     for (y = 0; y < h; y += 20)
     {
-        Move(rp, bx, by + y);
-        Draw(rp, bx + w - 1, by + y);
+        Move(rctx, bx, by + y);
+        Draw(rctx, bx + w - 1, by + y);
     }
     for (x = 0; x < w; x += 20)
     {
-        Move(rp, bx + x, by);
-        Draw(rp, bx + x, by + h - 1);
+        Move(rctx, bx + x, by);
+        Draw(rctx, bx + x, by + h - 1);
     }
     
     /* Draw text */
-    SetAPen(rp, 1);
-    SetBPen(rp, 0);
-    Move(rp, bx + 10, by + 30);
-    Text(rp, "Alpha Window Test", 17);
+    SetAPen(rctx, 1);
+    SetBPen(rctx, 0);
+    Move(rctx, bx + 10, by + 30);
+    Text(rctx, "Alpha Window Test", 17);
     
-    Move(rp, bx + 10, by + 50);
-    Text(rp, "You should see through this!", 28);
+    Move(rctx, bx + 10, by + 50);
+    Text(rctx, "You should see through this!", 28);
 }
 
 /*

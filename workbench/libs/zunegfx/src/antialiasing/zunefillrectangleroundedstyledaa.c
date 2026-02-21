@@ -21,10 +21,10 @@
  *rectangle with border styling.
  *
  *   SYNOPSIS
- *       ZuneFillRectangleRoundedStyledAA(rp, x, y, width, height,
+ *       ZuneFillRectangleRoundedStyledAA(rctx, x, y, width, height,
  *corner_radius, border_width, fill_color, border_color)
  *
- *       VOID ZuneFillRectangleRoundedStyledAA(struct RenderPort *rp, UWORD x,
+ *       VOID ZuneFillRectangleRoundedStyledAA(struct RenderContext *rctx, UWORD x,
  *UWORD y, UWORD width, UWORD height, UBYTE corner_radius, UBYTE border_width,
  *IPTR fill_color, IPTR border_color)
  *
@@ -34,7 +34,7 @@
  *independently.
  *
  *   INPUTS
- *       rp -- The RenderPort to draw on
+ *       rctx -- The RenderContext to draw on
  *       x -- X coordinate of the rectangle's top-left corner
  *       y -- Y coordinate of the rectangle's top-left corner
  *       width -- Width of the rectangle in pixels
@@ -47,7 +47,7 @@
  ***************************************************************************/
 
 AROS_LH6(VOID, ZuneFillRectangleRoundedStyledAA,
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(struct ZuneRect *, rect, A1),
          AROS_LHA(UBYTE, corner_radius, D0),
          AROS_LHA(UBYTE, border_width, D1),
@@ -58,7 +58,7 @@ AROS_LH6(VOID, ZuneFillRectangleRoundedStyledAA,
 {
   AROS_LIBFUNC_INIT
 
-  if (!rp || !rect) {
+  if (!rctx || !rect) {
     return;
   }
 
@@ -73,9 +73,9 @@ AROS_LH6(VOID, ZuneFillRectangleRoundedStyledAA,
   const UWORD height = rect->height;
 
   struct InternalColor borderColor =
-      ZuneColorToInternal(rp, border_color, rp->pixel_format);
+      ZuneColorToInternal(rctx, border_color, rctx->pixel_format);
 
-  ZUNE_BACKEND_CALL(rp, DrawRectangle, x, y, width, height, border_width,
+  ZUNE_BACKEND_CALL(rctx, DrawRectangle, x, y, width, height, border_width,
                     corner_radius, fill_brush, &borderColor, TRUE, TRUE);
 
   AROS_LIBFUNC_EXIT

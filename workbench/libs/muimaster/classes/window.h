@@ -264,7 +264,7 @@ struct MUIP_Window_SetMenuState {
 
 /* Forward declaration for application opaque custom frame specification */
 struct dt_frame_image;
-struct RenderPort;
+struct RenderContext;
 struct DrawingBoard;
 struct MUI_RenderInfo;
 
@@ -281,7 +281,7 @@ struct MUI_DirtyRect {
 };
 
 BOOL WindowObtainObjectDrawBuffer(struct MUI_RenderInfo *mri, Object *obj, UWORD width, UWORD height, ULONG flags, struct DrawingBoard **board_out,
-                                  struct RenderPort **port_out);
+                                  struct RenderContext **port_out);
 void WindowReleaseObjectDrawBuffer(struct MUI_RenderInfo *mri, Object *obj);
 
 /**************************************************************************
@@ -345,7 +345,7 @@ struct MUI_RenderInfo {
 
     struct dt_frame_image *mri_FrameImage[16];
 
-    struct RenderPort *mri_RenderPort;
+    struct RenderContext *mri_RenderContext;
     struct DrawingBoard *mri_DrawingBoard;
     BOOL mri_BufferDirty;
     UWORD mri_BufferBatchDepth;

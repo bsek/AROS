@@ -11,16 +11,16 @@
 AROS_LH1(BOOL, ZuneIsBatchingEnabled,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
 
          /*  LOCATION */
          struct Library *, ZuneGfxBase, 22, zunegfx)
 
 /*  FUNCTION
-    Checks if batching is currently enabled for the RenderPort.
+    Checks if batching is currently enabled for the RenderContext.
 
 INPUTS
-    rp - RenderPort to check (must not be NULL)
+    rctx - RenderContext to check (must not be NULL)
 
 RESULT
     TRUE if batching is enabled, FALSE otherwise.
@@ -32,10 +32,10 @@ SEE ALSO
 {
   AROS_LIBFUNC_INIT
 
-  if (!ValidateRenderPort(rp))
+  if (!ValidateRenderContext(rctx))
     return FALSE;
 
-  return rp->batching_enabled;
+  return rctx->batching_enabled;
 
   AROS_LIBFUNC_EXIT
 }

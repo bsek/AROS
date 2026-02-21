@@ -36,7 +36,7 @@ struct GfxBase *GfxBase = NULL;
 struct Screen *screen = NULL;
 struct Window *window = NULL;
 struct DrawingBoard *board = NULL;
-struct RenderPort *render_port = NULL;
+struct RenderContext *render_port = NULL;
 struct LayerCompositor *compositor = NULL;
 
 BOOL InitDemo(void);
@@ -162,13 +162,13 @@ BOOL InitDemo(void) {
     inner_width = window->Width - window->BorderLeft - window->BorderRight;
     inner_height = window->Height - window->BorderTop - window->BorderBottom;
 
-    render_port = ZuneCreateRenderPortForWindow(window, screen->ViewPort.ColorMap, BACKEND_OPENGL);
+    render_port = ZuneCreateRenderContextForWindow(window, screen->ViewPort.ColorMap, BACKEND_OPENGL);
     if (!render_port) {
-        printf("ERROR: Cannot create RenderPort\n");
+        printf("ERROR: Cannot create RenderContext\n");
         return FALSE;
     }
 
-    board = ZuneCreateDrawingBoardForRenderPort(render_port, inner_width, inner_height, 0);
+    board = ZuneCreateDrawingBoardForRenderContext(render_port, inner_width, inner_height, 0);
     if (!board) {
         printf("ERROR: Cannot create DrawingBoard\n");
         return FALSE;
@@ -187,7 +187,7 @@ void CleanupDemo(void) {
         board = NULL;
     }
     if (render_port) {
-        ZuneDestroyRenderPort(render_port);
+        ZuneDestroyRenderContext(render_port);
         render_port = NULL;
     }
     if (window) {

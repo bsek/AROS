@@ -2,6 +2,7 @@
 #include <aros/libcall.h>
 #include <exec/types.h>
 
+#include "../backends/backend_interface.h"
 #include "../zunegfx_intern.h"
 #include "batching_intern.h"
 
@@ -11,7 +12,7 @@
 AROS_LH1(void, ZuneFlushBatch,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
 
          /*  LOCATION */
          struct Library *, ZuneGfxBase, 21, zunegfx)
@@ -22,7 +23,7 @@ AROS_LH1(void, ZuneFlushBatch,
     before continuing.
 
 INPUTS
-    rp - RenderPort with active batch session (must not be NULL)
+    rctx - RenderContext with active batch session (must not be NULL)
 
 RESULT
     None
@@ -40,20 +41,26 @@ SEE ALSO
 
   ENTER_FUNCTION("ZuneFlushBatch");
 
-  D(bug("ZuneRenderer: ZuneFlushBatch(rp=%p)\n", rp));
+  D(bug("ZuneRenderer: ZuneFlushBatch(rctx=%p)\n", rctx));
 
-  if (!ValidateRenderPort(rp)) {
-    D(bug("ZuneRenderer: Invalid RenderPort\n"));
+  if (!ValidateRenderContext(rctx)) {
+    D(bug("ZuneRenderer: Invalid RenderContext\n"));
     return;
   }
 
-  if (!rp->batch_state) {
+  if (!rctx->batch_state) {
     D(bug("ZuneRenderer: No batch state available\n"));
     return;
   }
 
-  struct BatchState *batch = (struct BatchState *)rp->batch_state;
+  struct BatchState *batch = (struct BatchState *)rctx->batch_state;
   ZuneInternalBatchFlushState(batch);
+
+  /* Notify the backend (e.g. OpenGL does glFlush + swapbuffers) */
+  ZuneBackend *backend = ZuneGetRenderContextBackend(rctx);
+  if (backend && backend->ops && backend->ops->FlushBatch) {
+    backend->ops->FlushBatch(rctx);
+  }
 
   D(bug("ZuneRenderer: Manual batch flush completed\n"));
 

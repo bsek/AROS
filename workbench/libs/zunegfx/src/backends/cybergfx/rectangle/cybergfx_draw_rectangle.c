@@ -37,21 +37,21 @@ void delta(struct timer *finish, struct timer *start) {
  * Supports both regular and rounded rectangles with comprehensive clipping
  * and optimized rendering paths for different target types.
  *****************************************************************************/
-void CybergfxDrawRectangle(struct RenderPort *rp, WORD x, WORD y, UWORD width, UWORD height, UBYTE border_width, UBYTE border_radius,
+void CybergfxDrawRectangle(struct RenderContext *rctx, WORD x, WORD y, UWORD width, UWORD height, UBYTE border_width, UBYTE border_radius,
                            struct ZuneBrush *fill_brush, struct InternalColor *border_color, BOOL filled, BOOL antialias) {
     ENTER_FUNCTION("CybergfxDrawRectangle");
 
     struct timer start, finish;
 
     CurrentTime(&start.seconds, &start.micros);
-    if (!rp) {
+    if (!rctx) {
         EXIT_FUNCTION("CybergfxDrawRectangle");
         return;
     }
 
     /* Apply clipping to rectangle */
     WORD clipped_x, clipped_y, clipped_width, clipped_height;
-    if (!CybergfxClipRectangle(rp, x, y, width, height, &clipped_x, &clipped_y, &clipped_width, &clipped_height)) {
+    if (!CybergfxClipRectangle(rctx, x, y, width, height, &clipped_x, &clipped_y, &clipped_width, &clipped_height)) {
         /* Rectangle is completely outside clipping region */
         EXIT_FUNCTION("CybergfxDrawRectangle");
         return;
@@ -71,36 +71,36 @@ void CybergfxDrawRectangle(struct RenderPort *rp, WORD x, WORD y, UWORD width, U
     }
 
     if (fill_brush) {
-        PrepareBrushForRendering(rp, fill_brush, x, y, width, height);
+        PrepareBrushForRendering(rctx, fill_brush, x, y, width, height);
     }
 
-    if (rp->target_board && rp->target_board->pixels_locked) {
+    if (rctx->target_board && rctx->target_board->pixels_locked) {
         /* Use direct pixel manipulation for locked DrawingBoard */
         /* Use pack_argb32 for correct format when writing directly to memory */
         ULONG border_pixel = border_color ? pack_argb32(border_color->a, border_color->r, border_color->g, border_color->b) : 0;
         if (border_radius) {
             if (antialias) {
-                CybergfxAARectangleDrawingBoard(rp->target_board, x, y, width, height, border_radius, border_width, fill_brush, border_color,
+                CybergfxAARectangleDrawingBoard(rctx->target_board, x, y, width, height, border_radius, border_width, fill_brush, border_color,
                                                 border_color, filled, border_width > 0);
             } else {
-                CybergfxDrawRoundedRectangleToLockedDrawingBoard(rp, x, y, width, height, border_width, fill_brush, border_pixel, border_radius,
+                CybergfxDrawRoundedRectangleToLockedDrawingBoard(rctx, x, y, width, height, border_width, fill_brush, border_pixel, border_radius,
                                                                  filled);
             }
         } else {
-            CybergfxDrawRectangleToLockedDrawingBoard(rp, x, y, width, height, border_width, fill_brush, border_pixel, filled);
+            CybergfxDrawRectangleToLockedDrawingBoard(rctx, x, y, width, height, border_width, fill_brush, border_pixel, filled);
         }
     } else {
         ULONG border_pixel = border_color ? border_color->original_pixel : 0;
         if (border_radius) {
             if (antialias) {
-                CybergfxAARectangleRasterPort(rp->target_rp, x, y, width, height, border_radius, border_width, fill_brush, border_color, border_color,
+                CybergfxAARectangleRasterPort(rctx->target_rastport, x, y, width, height, border_radius, border_width, fill_brush, border_color, border_color,
                                               filled, border_width > 0);
             } else {
-                CybergfxDrawRoundedRectangleToRasterPort(rp, rp->target_rp, x, y, width, height, border_width, fill_brush, border_pixel,
+                CybergfxDrawRoundedRectangleToRasterPort(rctx, rctx->target_rastport, x, y, width, height, border_width, fill_brush, border_pixel,
                                                          border_radius, filled);
             }
         } else {
-            CybergfxDrawRectangleToRasterPort(rp, rp->target_rp, x, y, width, height, border_width, fill_brush, border_pixel, filled);
+            CybergfxDrawRectangleToRasterPort(rctx, rctx->target_rastport, x, y, width, height, border_width, fill_brush, border_pixel, filled);
         }
     }
 

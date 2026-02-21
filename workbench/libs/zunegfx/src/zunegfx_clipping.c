@@ -19,17 +19,17 @@
 AROS_LH2(void, ZuneSetClipRegion,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(struct Region *, region, A1),
 
          /*  LOCATION */
          struct Library *, ZuneGfxBase, 28, zunegfx)
 
 /*  FUNCTION
-    Sets a clipping region for a RenderPort.
+    Sets a clipping region for a RenderContext.
 
 INPUTS
-    rp - RenderPort to set clipping for
+    rctx - RenderContext to set clipping for
     region - Clipping region to be installed
 
 RESULT
@@ -48,8 +48,8 @@ SEE ALSO
 
   ENTER_FUNCTION("ZuneSetClipRegion");
 
-  if (!ValidateRenderPort(rp)) {
-    D(bug("ZuneRenderer: Invalid RenderPort\n"));
+  if (!ValidateRenderContext(rctx)) {
+    D(bug("ZuneRenderer: Invalid RenderContext\n"));
     EXIT_FUNCTION("ZuneSetClipRegion");
     return;
   }
@@ -61,28 +61,28 @@ SEE ALSO
   }
 
   /* Clear existing region if any */
-  if (rp->clip_region) {
-    DisposeRegion(rp->clip_region);
-    rp->clip_region = NULL;
+  if (rctx->clip_region) {
+    DisposeRegion(rctx->clip_region);
+    rctx->clip_region = NULL;
   }
 
   /* Create new region and copy input */
-  rp->clip_region = NewRegion();
-  if (!rp->clip_region) {
+  rctx->clip_region = NewRegion();
+  if (!rctx->clip_region) {
     D(bug("ZuneRenderer: Failed to allocate new region\n"));
-    rp->clipping_enabled = FALSE;
+    rctx->clipping_enabled = FALSE;
     EXIT_FUNCTION("ZuneSetClipRegion");
     return;
   }
 
-  if (OrRegionRegion(region, rp->clip_region)) {
-    rp->clipping_enabled = TRUE;
+  if (OrRegionRegion(region, rctx->clip_region)) {
+    rctx->clipping_enabled = TRUE;
     D(bug("ZuneRenderer: Clipping region installed successfully\n"));
   } else {
     D(bug("ZuneRenderer: Failed to copy region\n"));
-    DisposeRegion(rp->clip_region);
-    rp->clip_region = NULL;
-    rp->clipping_enabled = FALSE;
+    DisposeRegion(rctx->clip_region);
+    rctx->clip_region = NULL;
+    rctx->clipping_enabled = FALSE;
   }
 
   EXIT_FUNCTION("ZuneSetClipRegion");
@@ -96,16 +96,16 @@ SEE ALSO
 AROS_LH1(void, ZuneClearClipRegion,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
 
          /*  LOCATION */
          struct Library *, ZuneGfxBase, 29, zunegfx)
 
 /*  FUNCTION
-    Clears the clipping region for a RenderPort, disabling clipping.
+    Clears the clipping region for a RenderContext, disabling clipping.
 
 INPUTS
-    rp - RenderPort to clear clipping for
+    rctx - RenderContext to clear clipping for
 
 RESULT
     None
@@ -123,15 +123,15 @@ SEE ALSO
 
   ENTER_FUNCTION("ZuneClearClipRegion");
 
-  if (!ValidateRenderPort(rp)) {
+  if (!ValidateRenderContext(rctx)) {
     EXIT_FUNCTION("ZuneClearClipRegion");
     return;
   }
 
-  rp->clipping_enabled = FALSE;
-  if (rp->clip_region) {
-    DisposeRegion(rp->clip_region);
-    rp->clip_region = NULL;
+  rctx->clipping_enabled = FALSE;
+  if (rctx->clip_region) {
+    DisposeRegion(rctx->clip_region);
+    rctx->clip_region = NULL;
   }
 
   D(bug("ZuneRenderer: Clipping disabled\n"));
@@ -409,24 +409,24 @@ SEE ALSO
 AROS_LH2(BOOL, ZuneCombineRegions,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(struct Region *, region, A1),
 
          /*  LOCATION */
          struct Library *, ZuneGfxBase, 30, zunegfx)
 
 /*  FUNCTION
-    Combines a region with the RenderPort's existing clipping region using OR operation.
+    Combines a region with the RenderContext's existing clipping region using OR operation.
 
 INPUTS
-    rp - RenderPort to modify clipping for
+    rctx - RenderContext to modify clipping for
     region - Region to combine with existing clipping region
 
 RESULT
     TRUE if successful, FALSE if operation failed or invalid parameters.
 
 NOTES
-    If the RenderPort has no existing clipping region, the provided region
+    If the RenderContext has no existing clipping region, the provided region
     becomes the new clipping region. The operation uses OR logic to combine
     the regions, expanding the clippable area.
 
@@ -437,29 +437,29 @@ SEE ALSO
 {
   AROS_LIBFUNC_INIT
 
-  if (!ValidateRenderPort(rp))
+  if (!ValidateRenderContext(rctx))
     return FALSE;
 
   if (!region)
     return FALSE;
 
-  if (!rp->clip_region) {
+  if (!rctx->clip_region) {
     /* No existing region, create a new one by copying the input */
-    rp->clip_region = NewRegion();
-    if (!rp->clip_region)
+    rctx->clip_region = NewRegion();
+    if (!rctx->clip_region)
       return FALSE;
-    if (!OrRegionRegion(region, rp->clip_region)) {
-      DisposeRegion(rp->clip_region);
-      rp->clip_region = NULL;
+    if (!OrRegionRegion(region, rctx->clip_region)) {
+      DisposeRegion(rctx->clip_region);
+      rctx->clip_region = NULL;
       return FALSE;
     }
-    rp->clipping_enabled = TRUE;
+    rctx->clipping_enabled = TRUE;
   } else {
     /* Combine with existing region */
-    return !OrRegionRegion(region, rp->clip_region);
+    return !OrRegionRegion(region, rctx->clip_region);
   }
 
-  D(bug("ZuneRenderer: Combined region with RenderPort clipping\n"));
+  D(bug("ZuneRenderer: Combined region with RenderContext clipping\n"));
 
   return TRUE;
 

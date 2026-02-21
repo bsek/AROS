@@ -21,10 +21,10 @@
  *styling.
  *
  *   SYNOPSIS
- *       ZuneFillCircleStyledAA(rp, centerX, centerY, radius, borderWidth,
+ *       ZuneFillCircleStyledAA(rctx, centerX, centerY, radius, borderWidth,
  *color, borderColor)
  *
- *       VOID ZuneFillCircleStyledAA(struct RenderPort *rp, UWORD centerX,
+ *       VOID ZuneFillCircleStyledAA(struct RenderContext *rctx, UWORD centerX,
  *                                   UWORD centerY, UWORD radius, UBYTE
  *borderWidth, ULONG color, ULONG borderColor)
  *
@@ -33,7 +33,7 @@
  *       around it. Both fill and border colors can be specified independently.
  *
  *   INPUTS
- *       rp -- The RenderPort to draw on
+ *       rctx -- The RenderContext to draw on
  *       centerX -- X coordinate of the circle center
  *       centerY -- Y coordinate of the circle center
  *       radius -- Radius of the circle in pixels
@@ -44,7 +44,7 @@
  ***************************************************************************/
 
 AROS_LH6(VOID, ZuneFillCircleStyledAA,
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(struct ZunePoint *, center, A1),
          AROS_LHA(UWORD, radius, D0),
          AROS_LHA(UBYTE, borderWidth, D1),
@@ -56,7 +56,7 @@ AROS_LH6(VOID, ZuneFillCircleStyledAA,
 {
   AROS_LIBFUNC_INIT
 
-  if (!rp || !center) {
+  if (!rctx || !center) {
     return;
   }
 
@@ -64,9 +64,9 @@ AROS_LH6(VOID, ZuneFillCircleStyledAA,
   const WORD centerY = center->y;
 
   struct InternalColor border_color =
-      ZuneColorToInternal(rp, borderColor, rp->pixel_format);
+      ZuneColorToInternal(rctx, borderColor, rctx->pixel_format);
 
-  ZUNE_BACKEND_CALL(rp, DrawCircle, centerX, centerY, radius, borderWidth, brush, &border_color, TRUE, TRUE);
+  ZUNE_BACKEND_CALL(rctx, DrawCircle, centerX, centerY, radius, borderWidth, brush, &border_color, TRUE, TRUE);
 
   AROS_LIBFUNC_EXIT
 }

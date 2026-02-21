@@ -61,8 +61,8 @@ struct Window *alpha_window = NULL;   /* Foreground (alpha) window */
 
 struct DrawingBoard *bg_board = NULL;
 struct DrawingBoard *alpha_board = NULL;
-struct RenderPort *bg_rp = NULL;
-struct RenderPort *alpha_rp = NULL;
+struct RenderContext *bg_rp = NULL;
+struct RenderContext *alpha_rp = NULL;
 
 struct LayerCompositor *compositor = NULL;
 
@@ -297,14 +297,14 @@ BOOL InitDemo(void) {
     }
     D(bug("[CompositorTest] Background window: %p\n", bg_window));
 
-    /* Create RenderPort for background window */
-    D(bug("[CompositorTest] Creating RenderPort for background window (BACKEND_OPENGL=%d)...\n", BACKEND_OPENGL));
-    bg_rp = ZuneCreateRenderPortForWindow(bg_window, screen->ViewPort.ColorMap, BACKEND_OPENGL);
+    /* Create RenderContext for background window */
+    D(bug("[CompositorTest] Creating RenderContext for background window (BACKEND_OPENGL=%d)...\n", BACKEND_OPENGL));
+    bg_rp = ZuneCreateRenderContextForWindow(bg_window, screen->ViewPort.ColorMap, BACKEND_OPENGL);
     if (!bg_rp) {
-        D(bug("[CompositorTest] ERROR: Cannot create background RenderPort\n"));
+        D(bug("[CompositorTest] ERROR: Cannot create background RenderContext\n"));
         return FALSE;
     }
-    D(bug("[CompositorTest] Background RenderPort: %p, backend_type=%d\n", bg_rp, bg_rp->backend_type));
+    D(bug("[CompositorTest] Background RenderContext: %p, backend_type=%d\n", bg_rp, bg_rp->backend_type));
 
     /*
      * WORKAROUND: Prime the GL context by doing a dummy window-based render.
@@ -317,13 +317,13 @@ BOOL InitDemo(void) {
      */
     D(bug("[CompositorTest] Priming GL context with window render...\n"));
     ZuneSetTarget(bg_rp, NULL);  /* Target window directly */
-    ZuneClearRenderPort(bg_rp, ZUNE_BLACK);
+    ZuneClearRenderContext(bg_rp, ZUNE_BLACK);
     D(bug("[CompositorTest] GL context primed.\n"));
 
     inner_width = bg_window->Width - bg_window->BorderLeft - bg_window->BorderRight;
     inner_height = bg_window->Height - bg_window->BorderTop - bg_window->BorderBottom;
 
-    bg_board = ZuneCreateDrawingBoardForRenderPort(bg_rp, inner_width, inner_height, 0);
+    bg_board = ZuneCreateDrawingBoardForRenderContext(bg_rp, inner_width, inner_height, 0);
     if (!bg_board) {
         D(bug("[CompositorTest] ERROR: Cannot create background DrawingBoard\n"));
         return FALSE;
@@ -380,17 +380,17 @@ BOOL InitDemo(void) {
     D(bug("[CompositorTest] Alpha window: %p, Layer: %p\n", alpha_window, alpha_window->WLayer));
 
     /* Test: Use OpenGL for both windows to see if shared contexts work */
-    alpha_rp = ZuneCreateRenderPortForWindow(alpha_window, screen->ViewPort.ColorMap, BACKEND_OPENGL);
+    alpha_rp = ZuneCreateRenderContextForWindow(alpha_window, screen->ViewPort.ColorMap, BACKEND_OPENGL);
     if (!alpha_rp) {
-        D(bug("[CompositorTest] ERROR: Cannot create alpha RenderPort\n"));
+        D(bug("[CompositorTest] ERROR: Cannot create alpha RenderContext\n"));
         return FALSE;
     }
-    D(bug("[CompositorTest] Alpha RenderPort: %p, backend_type=%d\n", alpha_rp, alpha_rp->backend_type));
+    D(bug("[CompositorTest] Alpha RenderContext: %p, backend_type=%d\n", alpha_rp, alpha_rp->backend_type));
 
     inner_width = alpha_window->Width - alpha_window->BorderLeft - alpha_window->BorderRight;
     inner_height = alpha_window->Height - alpha_window->BorderTop - alpha_window->BorderBottom;
 
-    alpha_board = ZuneCreateDrawingBoardForRenderPort(alpha_rp, inner_width, inner_height, ZUNE_DRAWINGBOARD_ALPHA);
+    alpha_board = ZuneCreateDrawingBoardForRenderContext(alpha_rp, inner_width, inner_height, ZUNE_DRAWINGBOARD_ALPHA);
     if (!alpha_board) {
         D(bug("[CompositorTest] ERROR: Cannot create alpha DrawingBoard\n"));
         return FALSE;
@@ -429,7 +429,7 @@ BOOL InitDemo(void) {
          */
         D(bug("[CompositorTest] Registering alpha window with compositor...\n"));
 
-        /* Get the GL context from the RenderPort if available */
+        /* Get the GL context from the RenderContext if available */
         APTR gl_context = NULL;  /* TODO: Get from alpha_rp->backend_data */
 
         struct CompositorWindow *cw = ZuneCompositorRegisterWindow(
@@ -465,7 +465,7 @@ void CleanupDemo(void) {
     }
 
     if (alpha_rp) {
-        ZuneDestroyRenderPort(alpha_rp);
+        ZuneDestroyRenderContext(alpha_rp);
         alpha_rp = NULL;
     }
 
@@ -475,7 +475,7 @@ void CleanupDemo(void) {
     }
 
     if (bg_rp) {
-        ZuneDestroyRenderPort(bg_rp);
+        ZuneDestroyRenderContext(bg_rp);
         bg_rp = NULL;
     }
 

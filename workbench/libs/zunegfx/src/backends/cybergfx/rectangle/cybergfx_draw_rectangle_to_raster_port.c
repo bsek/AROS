@@ -12,7 +12,7 @@
  * Draws a regular rectangle to a RastPort using CyberGraphics operations.
  * This function handles both filled and outline rectangles with clipping.
  *****************************************************************************/
-void CybergfxDrawRectangleToRasterPort(struct RenderPort *renderport,
+void CybergfxDrawRectangleToRasterPort(struct RenderContext *renderport,
                                        struct RastPort *rp, UWORD x, UWORD y,
                                        UWORD width, UWORD height,
                                        UBYTE border_width,

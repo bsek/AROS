@@ -258,7 +258,7 @@ void zune_penspec_drawdirect(struct MUI_PenSpec_intern *psi,
                 psi, psi->p_pen, left, top, right, bottom));
     }
 
-    if (mri->mri_RenderPort && rp == mri->mri_RenderPort->target_rp) {
+    if (mri->mri_RenderContext && rp == mri->mri_RenderContext->target_rastport) {
       struct ZuneRect rect = {
           .x = (WORD)left,
           .y = (WORD)top,
@@ -267,7 +267,7 @@ void zune_penspec_drawdirect(struct MUI_PenSpec_intern *psi,
       };
 
       D(bug("Calling DrawRectangle with rect: [%d,%d,%d,%d]\n", rect.x, rect.y, rect.width, rect.height));
-      ZuneFillRectangle(mri->mri_RenderPort, &rect, ZUNE_BRUSH_PEN(psi->p_pen));
+      ZuneFillRectangle(mri->mri_RenderContext, &rect, ZUNE_BRUSH_PEN(psi->p_pen));
       return;
     }
 

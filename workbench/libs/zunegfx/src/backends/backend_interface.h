@@ -75,62 +75,62 @@ typedef struct ZuneBackendOps {
   void (*CleanupBackend)(ZuneBackendContext *ctx); /* Cleanup backend */
   BOOL (*IsAvailable)(void); /* Check if backend is available */
   BOOL(*IsCompatible)
-  (struct RenderPort
-       *rp); /* Check if RenderPort is compatible with this backend */
+  (struct RenderContext
+       *rctx); /* Check if RenderContext is compatible with this backend */
   ULONG (*GetPixelFormat)(struct BitMap *bitmap);
 
-  /* RenderPort lifecycle management */
-  BOOL(*InitRenderPort)
-  (struct RenderPort *rp); /* Initialize RenderPort for this backend */
-  void (*CleanupRenderPort)(
-      struct RenderPort *rp); /* Cleanup RenderPort resources */
+  /* RenderContext lifecycle management */
+  BOOL(*InitRenderContext)
+  (struct RenderContext *rctx); /* Initialize RenderContext for this backend */
+  void (*CleanupRenderContext)(
+      struct RenderContext *rctx); /* Cleanup RenderContext resources */
 
   /* Color management */
-  BOOL (*PrepareColor)(struct RenderPort *rp, struct InternalColor *color);
-  void (*ReleaseColor)(struct RenderPort *rp, struct InternalColor *color);
+  BOOL (*PrepareColor)(struct RenderContext *rctx, struct InternalColor *color);
+  void (*ReleaseColor)(struct RenderContext *rctx, struct InternalColor *color);
 
   /* Core drawing primitives - unified interface */
-  void (*DrawPixel)(struct RenderPort *rp, WORD x, WORD y,
+  void (*DrawPixel)(struct RenderContext *rctx, WORD x, WORD y,
                     struct InternalColor *color, BOOL antialias);
 
-  void (*DrawLine)(struct RenderPort *rp, WORD start_x, WORD start_y,
+  void (*DrawLine)(struct RenderContext *rctx, WORD start_x, WORD start_y,
                    WORD end_x, WORD end_y, UWORD line_width,
                    struct InternalColor *color, BOOL antialias);
 
-  void (*DrawRectangle)(struct RenderPort *rp, WORD x, WORD y, UWORD width,
+  void (*DrawRectangle)(struct RenderContext *rctx, WORD x, WORD y, UWORD width,
                         UWORD height, UBYTE border_width, UBYTE corner_radius,
                         struct ZuneBrush *fill_brush,
                         struct InternalColor *border_color, BOOL filled,
                         BOOL antialias);
 
-  void (*DrawCircle)(struct RenderPort *rp, WORD center_x, WORD center_y,
+  void (*DrawCircle)(struct RenderContext *rctx, WORD center_x, WORD center_y,
                      UWORD radius, UBYTE borderWidth,
                      struct ZuneBrush *fill_brush,
                      struct InternalColor *border_color, BOOL filled,
                      BOOL antialias);
 
   /* Surface operations */
-  void (*ClearRenderPort)(struct RenderPort *rp, struct InternalColor *color);
+  void (*ClearRenderContext)(struct RenderContext *rctx, struct InternalColor *color);
 
-  /* Direct pixel access (when RenderPort targets DrawingBoard) */
-  APTR (*LockPixels)(struct DrawingBoard *rp, ULONG *pitch_out);
-  void (*UnlockPixels)(struct DrawingBoard *rp);
-  ULONG (*GetPixel)(struct DrawingBoard *rp, WORD x, WORD y);
-  void (*SetPixel)(struct DrawingBoard *rp, WORD x, WORD y,
+  /* Direct pixel access (when RenderContext targets DrawingBoard) */
+  APTR (*LockPixels)(struct DrawingBoard *board, ULONG *pitch_out);
+  void (*UnlockPixels)(struct DrawingBoard *board);
+  ULONG (*GetPixel)(struct DrawingBoard *board, WORD x, WORD y);
+  void (*SetPixel)(struct DrawingBoard *board, WORD x, WORD y,
                    struct InternalColor *color);
 
   /* Performance optimization */
-  void (*BeginBatch)(struct RenderPort *rp); /* Begin batching operations */
-  void (*EndBatch)(struct RenderPort *rp);   /* End and flush batch */
-  void (*FlushBatch)(struct RenderPort *rp); /* Flush current batch */
-  BOOL (*IsBatching)(struct RenderPort *rp); /* Check if batching is active */
+  void (*BeginBatch)(struct RenderContext *rctx); /* Begin batching operations */
+  void (*EndBatch)(struct RenderContext *rctx);   /* End and flush batch */
+  void (*FlushBatch)(struct RenderContext *rctx); /* Flush current batch */
+  BOOL (*IsBatching)(struct RenderContext *rctx); /* Check if batching is active */
 
   /* Blitting operations */
-  void (*BlitRenderPorts)(struct RenderPort *source, struct RenderPort *dest,
+  void (*BlitRenderContexts)(struct RenderContext *source, struct RenderContext *dest,
                           WORD src_x, WORD src_y, WORD dest_x, WORD dest_y,
                           UWORD width, UWORD height);
 
-  void (*BlitToScreen)(struct RenderPort *source, struct RastPort *screen_rp,
+  void (*BlitToScreen)(struct RenderContext *source, struct RastPort *screen_rp,
                        WORD src_x, WORD src_y, WORD dest_x, WORD dest_y,
                        UWORD width, UWORD height);
 
@@ -144,7 +144,7 @@ typedef struct ZuneBackendOps {
   BOOL(*UpdateTexture)
   (struct ZuneTexture *texture, APTR data, UWORD x, UWORD y, UWORD width,
    UWORD height);
-  void (*DrawTexture)(struct RenderPort *rp, struct ZuneTexture *texture,
+  void (*DrawTexture)(struct RenderContext *rctx, struct ZuneTexture *texture,
                       WORD dest_x, WORD dest_y, UWORD dest_width,
                       UWORD dest_height, WORD src_x, WORD src_y,
                       UWORD src_width, UWORD src_height,
@@ -160,17 +160,17 @@ typedef struct ZuneBackendOps {
   BOOL (*SupportsTextureFormat)(ULONG format);
 
   /* Clipping support */
-  BOOL (*SetupClipping)(struct RenderPort *rp, struct Region *region);
-  void (*ClearClipping)(struct RenderPort *rp); // For hardware-based backends
+  BOOL (*SetupClipping)(struct RenderContext *rctx, struct Region *region);
+  void (*ClearClipping)(struct RenderContext *rctx); // For hardware-based backends
 
   /* RastPort copy (Sync RastPort into DrawingBoard) */
-  void (*CopyFromRastPort)(struct RenderPort *rp, struct RastPort *src_rp,
+  void (*CopyFromRastPort)(struct RenderContext *rctx, struct RastPort *src_rp,
                            WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
                            UWORD width, UWORD height);
-  BOOL (*CopyFromDrawingBoard)(struct RenderPort *rp); /* Sync entire backend buffer to bitmap */
+  BOOL (*CopyFromDrawingBoard)(struct RenderContext *rctx); /* Sync entire backend buffer to bitmap */
   
   /* Region-based sync (more efficient than full sync) */
-  BOOL (*CopyRegionFromDrawingBoard)(struct RenderPort *rp, 
+  BOOL (*CopyRegionFromDrawingBoard)(struct RenderContext *rctx, 
                                      WORD x, WORD y, UWORD width, UWORD height);
 
   /* Future extension slots */
@@ -197,7 +197,7 @@ typedef struct ZuneBackend {
 /* Backend registration and discovery */
 BOOL ZuneRegisterBackend(ZuneBackend *backend);
 void ZuneUnregisterBackend(ZuneBackend *backend);
-ZuneBackend *ZuneFindBestBackend(struct RenderPort *rp);
+ZuneBackend *ZuneFindBestBackend(struct RenderContext *rctx);
 ZuneBackend *ZuneFindBackendByType(ZuneBackendType type);
 
 /* Backend lifecycle */
@@ -210,29 +210,29 @@ CONST_STRPTR ZuneGetBackendName(ZuneBackend *backend);
 BOOL ZuneIsBackendAvailable(ZuneBackendType type);
 
 /* Software fallback operations (used when a backend omits an op) */
-void ZuneFallback_DrawPixel(struct RenderPort *rp, WORD x, WORD y,
+void ZuneFallback_DrawPixel(struct RenderContext *rctx, WORD x, WORD y,
                             struct InternalColor *color, BOOL antialias);
-void ZuneFallback_DrawLine(struct RenderPort *rp, WORD start_x, WORD start_y,
+void ZuneFallback_DrawLine(struct RenderContext *rctx, WORD start_x, WORD start_y,
                            WORD end_x, WORD end_y, UWORD line_width,
                            struct InternalColor *color, BOOL antialias);
-void ZuneFallback_DrawRectangle(struct RenderPort *rp, WORD x, WORD y,
+void ZuneFallback_DrawRectangle(struct RenderContext *rctx, WORD x, WORD y,
                                 UWORD width, UWORD height, UBYTE border_width,
                                 UBYTE corner_radius,
                                 struct ZuneBrush *fill_brush,
                                 struct InternalColor *border_color, BOOL filled,
                                 BOOL antialias);
-void ZuneFallback_DrawCircle(struct RenderPort *rp, WORD center_x,
+void ZuneFallback_DrawCircle(struct RenderContext *rctx, WORD center_x,
                              WORD center_y, UWORD radius, UBYTE border_width,
                              struct ZuneBrush *fill_brush,
                              struct InternalColor *border_color, BOOL filled,
                              BOOL antialias);
-void ZuneFallback_ClearRenderPort(struct RenderPort *rp,
+void ZuneFallback_ClearRenderContext(struct RenderContext *rctx,
                                   struct InternalColor *color);
-void ZuneFallback_BlitRenderPorts(struct RenderPort *source,
-                                  struct RenderPort *dest, WORD src_x,
+void ZuneFallback_BlitRenderContexts(struct RenderContext *source,
+                                  struct RenderContext *dest, WORD src_x,
                                   WORD src_y, WORD dest_x, WORD dest_y,
                                   UWORD width, UWORD height);
-void ZuneFallback_BlitToScreen(struct RenderPort *source,
+void ZuneFallback_BlitToScreen(struct RenderContext *source,
                                struct RastPort *screen_rp, WORD src_x,
                                WORD src_y, WORD dest_x, WORD dest_y,
                                UWORD width, UWORD height);
@@ -241,59 +241,59 @@ void ZuneFallback_UnlockPixels(struct DrawingBoard *board);
 ULONG ZuneFallback_GetPixel(struct DrawingBoard *board, WORD x, WORD y);
 void ZuneFallback_SetPixel(struct DrawingBoard *board, WORD x, WORD y,
                            struct InternalColor *color);
-BOOL ZuneFallback_CopyFromDrawingBoard(struct RenderPort *rp);
-void ZuneFallback_DrawTexture(struct RenderPort *rp,
+BOOL ZuneFallback_CopyFromDrawingBoard(struct RenderContext *rctx);
+void ZuneFallback_DrawTexture(struct RenderContext *rctx,
                               struct ZuneTexture *texture, WORD dest_x,
                               WORD dest_y, UWORD dest_width, UWORD dest_height,
                               WORD src_x, WORD src_y, UWORD src_width,
                               UWORD src_height, struct InternalColor *tint);
 
-/* RenderPort-backend binding */
-ZuneBackend *ZuneGetRenderPortBackend(struct RenderPort *rp);
-BOOL ZuneBindRenderPortToBackend(struct RenderPort *rp, ZuneBackend *backend);
-void ZuneUnbindRenderPortFromBackend(struct RenderPort *rp);
+/* RenderContext-backend binding */
+ZuneBackend *ZuneGetRenderContextBackend(struct RenderContext *rctx);
+BOOL ZuneBindRenderContextToBackend(struct RenderContext *rctx, ZuneBackend *backend);
+void ZuneUnbindRenderContextFromBackend(struct RenderContext *rctx);
 
 /*****************************************************************************/
 /* Backend Helper Macros */
 /*****************************************************************************/
 
 /* Safe backend operation call without extra args */
-#define ZUNE_BACKEND_CALL_NO_ARGS(rp, op)                                      \
+#define ZUNE_BACKEND_CALL_NO_ARGS(rctx, op)                                      \
   do {                                                                         \
-    ZuneBackend *backend = ZuneGetRenderPortBackend(rp);                       \
+    ZuneBackend *backend = ZuneGetRenderContextBackend(rctx);                       \
     if (backend && backend->ops && backend->ops->op) {                         \
-      backend->ops->op(rp);                                                    \
+      backend->ops->op(rctx);                                                    \
     } else {                                                                   \
-      ZuneFallback_##op(rp);                                                   \
+      ZuneFallback_##op(rctx);                                                   \
     }                                                                          \
   } while (0)
 
-#define ZUNE_BACKEND_CALL_NO_ARGS_RET(rp, op, default_ret)                     \
+#define ZUNE_BACKEND_CALL_NO_ARGS_RET(rctx, op, default_ret)                     \
   ({                                                                           \
-    ZuneBackend *backend = ZuneGetRenderPortBackend(rp);                       \
+    ZuneBackend *backend = ZuneGetRenderContextBackend(rctx);                       \
     (backend && backend->ops && backend->ops->op)                              \
-        ? backend->ops->op(rp)                                                 \
-        : ZuneFallback_##op(rp);                                               \
+        ? backend->ops->op(rctx)                                                 \
+        : ZuneFallback_##op(rctx);                                               \
   })
 
 /* Safe backend operation call */
-#define ZUNE_BACKEND_CALL(rp, op, ...)                                         \
+#define ZUNE_BACKEND_CALL(rctx, op, ...)                                         \
   do {                                                                         \
-    ZuneBackend *backend = ZuneGetRenderPortBackend(rp);                       \
+    ZuneBackend *backend = ZuneGetRenderContextBackend(rctx);                       \
     if (backend && backend->ops && backend->ops->op) {                         \
-      backend->ops->op(rp, __VA_ARGS__);                                       \
+      backend->ops->op(rctx, __VA_ARGS__);                                       \
     } else {                                                                   \
-      ZuneFallback_##op(rp, __VA_ARGS__);                                      \
+      ZuneFallback_##op(rctx, __VA_ARGS__);                                      \
     }                                                                          \
   } while (0)
 
 /* Safe backend operation call with return value */
-#define ZUNE_BACKEND_CALL_RET(rp, op, default_ret, ...)                        \
+#define ZUNE_BACKEND_CALL_RET(rctx, op, default_ret, ...)                        \
   ({                                                                           \
-    ZuneBackend *backend = ZuneGetRenderPortBackend(rp);                       \
+    ZuneBackend *backend = ZuneGetRenderContextBackend(rctx);                       \
     (backend && backend->ops && backend->ops->op)                              \
-        ? backend->ops->op(rp, __VA_ARGS__)                                    \
-        : ZuneFallback_##op(rp, __VA_ARGS__);                                  \
+        ? backend->ops->op(rctx, __VA_ARGS__)                                    \
+        : ZuneFallback_##op(rctx, __VA_ARGS__);                                  \
   })
 
 /* Check if backend supports capability */
@@ -301,10 +301,10 @@ void ZuneUnbindRenderPortFromBackend(struct RenderPort *rp);
   ((backend) && (backend)->ops && (backend)->ops->GetCapabilities &&           \
    ((backend)->ops->GetCapabilities() & (cap)) != 0)
 
-/* Check if RenderPort's backend supports capability */
-#define RENDERPORT_HAS_CAP(rp, cap)                                            \
+/* Check if RenderContext's backend supports capability */
+#define RENDERCONTEXT_HAS_CAP(rctx, cap)                                            \
   ({                                                                           \
-    ZuneBackend *backend = ZuneGetRenderPortBackend(rp);                       \
+    ZuneBackend *backend = ZuneGetRenderContextBackend(rctx);                       \
     BACKEND_HAS_CAP(backend, cap);                                             \
   })
 

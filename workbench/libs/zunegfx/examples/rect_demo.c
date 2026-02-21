@@ -43,8 +43,8 @@ struct GfxBase *GfxBase = NULL;
 struct Screen *screen = NULL;
 struct Window *window = NULL;
 struct DrawingBoard *demo_board = NULL;
-struct RenderPort *demo_rp = NULL;
-struct RenderPort *window_rp = NULL;
+struct RenderContext *demo_rp = NULL;
+struct RenderContext *window_rp = NULL;
 
 /* Function prototypes */
 BOOL InitDemo(void);
@@ -82,13 +82,13 @@ static ULONG SampleDrawingBoardPixel(WORD x, WORD y) {
 
   if (demo_board->rastport) {
     UBYTE px[4] = {0};
-    struct RastPort *rp = demo_board->rastport;
-    if (ReadPixelArray(px, 0, 0, sizeof(px), rp, x, y, 1, 1, RECTFMT_ARGB) ==
+    struct RastPort *rctx = demo_board->rastport;
+    if (ReadPixelArray(px, 0, 0, sizeof(px), rctx, x, y, 1, 1, RECTFMT_ARGB) ==
         1) {
       return ((ULONG)px[0] << 24) | ((ULONG)px[1] << 16) |
              ((ULONG)px[2] << 8) | (ULONG)px[3];
     }
-    return ReadPixel(rp, x, y);
+    return ReadPixel(rctx, x, y);
   }
 
   return 0;
@@ -114,7 +114,7 @@ int main(void) {
 
   /* Test unlocked rectangle drawing - works with both CyberGfx and OpenGL backends */
   printf("\n1. Testing unlocked DrawingBoard rectangle drawing...\n");
-  ZuneClearRenderPort(demo_rp, ZUNE_DARKGRAY);
+  ZuneClearRenderContext(demo_rp, ZUNE_DARKGRAY);
   DemoUnlockedRectangles();
   /* Show results */
   ShowResults("Unlocked rectangles");
@@ -122,9 +122,9 @@ int main(void) {
 
   /* Test unlocked anti-aliased rectangle drawing */
   printf("\n2. Testing unlocked DrawingBoard anti-aliased rectangle drawing...\n");
-  printf("  Calling ZuneClearRenderPort(demo_rp, ZUNE_DARKGRAY)...\n");
-  ZuneClearRenderPort(demo_rp, ZUNE_DARKGRAY);
-  printf("  ZuneClearRenderPort done, calling DemoUnlockedAARectangles...\n");
+  printf("  Calling ZuneClearRenderContext(demo_rp, ZUNE_DARKGRAY)...\n");
+  ZuneClearRenderContext(demo_rp, ZUNE_DARKGRAY);
+  printf("  ZuneClearRenderContext done, calling DemoUnlockedAARectangles...\n");
   DemoUnlockedAARectangles();
   printf("  DemoUnlockedAARectangles done, calling ShowResults...\n");
   ShowResults("Unlocked AA rectangles");
@@ -132,28 +132,28 @@ int main(void) {
 
   /* Test unlocked circle drawing */
   printf("\n3. Testing unlocked DrawingBoard circle drawing...\n");
-  ZuneClearRenderPort(demo_rp, ZUNE_DARKGRAY);
+  ZuneClearRenderContext(demo_rp, ZUNE_DARKGRAY);
   DemoUnlockedCircles();
   ShowResults("Unlocked circles");
   getchar();
 
   /* Test unlocked anti-aliased circle drawing */
   printf("\n4. Testing unlocked DrawingBoard anti-aliased circle drawing...\n");
-  ZuneClearRenderPort(demo_rp, ZUNE_DARKGRAY);
+  ZuneClearRenderContext(demo_rp, ZUNE_DARKGRAY);
   DemoUnlockedAACircles();
   ShowResults("Unlocked AA circles");
   getchar();
 
   /* Test unlocked line drawing */
   printf("\n5. Testing unlocked DrawingBoard line drawing...\n");
-  ZuneClearRenderPort(demo_rp, ZUNE_DARKGRAY);
+  ZuneClearRenderContext(demo_rp, ZUNE_DARKGRAY);
   DemoUnlockedLines();
   ShowResults("Unlocked lines");
   getchar();
 
   /* Test unlocked anti-aliased line drawing */
   printf("\n6. Testing unlocked DrawingBoard anti-aliased line drawing...\n");
-  ZuneClearRenderPort(demo_rp, ZUNE_DARKGRAY);
+  ZuneClearRenderContext(demo_rp, ZUNE_DARKGRAY);
   DemoUnlockedAALines();
   ShowResults("Unlocked AA lines");
   getchar();
@@ -211,15 +211,15 @@ BOOL InitDemo(void) {
     return FALSE;
   }
 
-  /* Create RenderPort bound to window first (new API) */
-  window_rp = ZuneCreateRenderPortForWindow(window, screen->ViewPort.ColorMap, BACKEND_CYBERGFX);
+  /* Create RenderContext bound to window first (new API) */
+  window_rp = ZuneCreateRenderContextForWindow(window, screen->ViewPort.ColorMap, BACKEND_CYBERGFX);
   if (!window_rp) {
-    printf("ERROR: Cannot create Window RenderPort\n");
+    printf("ERROR: Cannot create Window RenderContext\n");
     return FALSE;
   }
 
-  /* Create DrawingBoard under the RenderPort */
-  demo_board = ZuneCreateDrawingBoardForRenderPort(window_rp, DEMO_WIDTH, DEMO_HEIGHT, 0);
+  /* Create DrawingBoard under the RenderContext */
+  demo_board = ZuneCreateDrawingBoardForRenderContext(window_rp, DEMO_WIDTH, DEMO_HEIGHT, 0);
   if (!demo_board) {
     printf("ERROR: Cannot create DrawingBoard\n");
     return FALSE;
@@ -239,7 +239,7 @@ BOOL InitDemo(void) {
 
 void CleanupDemo(void) {
   if (demo_rp) {
-    ZuneDestroyRenderPort(demo_rp);
+    ZuneDestroyRenderContext(demo_rp);
     demo_rp = NULL;
   }
 
@@ -1175,10 +1175,10 @@ void DemoTextures(void) {
 
   /* Use the existing window_rp to create a temp DrawingBoard */
   struct DrawingBoard *temp_board =
-      ZuneCreateDrawingBoardForRenderPort(window_rp, 128, 128, 0);
+      ZuneCreateDrawingBoardForRenderContext(window_rp, 128, 128, 0);
   if (temp_board) {
     /* Use window_rp with ZuneSetTarget to render to temp_board */
-    struct RenderPort *temp_rp = window_rp;
+    struct RenderContext *temp_rp = window_rp;
     ZuneSetTarget(temp_rp, temp_board);
 
     if (temp_rp) {
@@ -1216,7 +1216,7 @@ void DemoTextures(void) {
       }
     }
 
-    /* Don't destroy window_rp - it's our main RenderPort! Just destroy temp_board */
+    /* Don't destroy window_rp - it's our main RenderContext! Just destroy temp_board */
     ZuneDestroyDrawingBoard(temp_board);
   }
 
@@ -1445,13 +1445,13 @@ void ShowResults(const char *label) {
 
   /*
    * Blit from demo_rp (which has demo_board as target) to window_rp.
-   * The source RenderPort's backend is used to sync the DrawingBoard
+   * The source RenderContext's backend is used to sync the DrawingBoard
    * before blitting, ensuring correct behavior across different backends.
    */
   ZuneSetTarget(window_rp, NULL);
 
   /* Blit DrawingBoard to window */
-  BlitDrawingBoardToRenderPortRects(demo_rp, window_rp, 0, 0, 0, 0,
+  BlitDrawingBoardToRenderContextRects(demo_rp, window_rp, 0, 0, 0, 0,
                                     DEMO_WIDTH, DEMO_HEIGHT);
 
   /* Switch back to DrawingBoard for next drawing operations */

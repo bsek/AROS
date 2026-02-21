@@ -2,6 +2,7 @@
 #include <aros/libcall.h>
 #include <exec/types.h>
 
+#include "../backends/backend_interface.h"
 #include "../zunegfx_intern.h"
 #include "batching_intern.h"
 
@@ -11,7 +12,7 @@
 AROS_LH1(void, ZuneEndBatch,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
 
          /*  LOCATION */
          struct Library *, ZuneGfxBase, 20, zunegfx)
@@ -20,14 +21,14 @@ AROS_LH1(void, ZuneEndBatch,
     Ends a batch rendering session and flushes all pending operations.
 
 INPUTS
-    rp - RenderPort with active batch session (must not be NULL)
+    rctx - RenderContext with active batch session (must not be NULL)
 
 RESULT
     None
 
 NOTES
     This function automatically flushes any pending batch operations
-    and disables batching mode for the RenderPort.
+    and disables batching mode for the RenderContext.
 
 SEE ALSO
     ZuneBeginBatch(), ZuneFlushBatch()
@@ -38,19 +39,19 @@ SEE ALSO
 
   ENTER_FUNCTION("ZuneEndBatch");
 
-  D(bug("ZuneRenderer: ZuneEndBatch(rp=%p)\n", rp));
+  D(bug("ZuneRenderer: ZuneEndBatch(rctx=%p)\n", rctx));
 
-  if (!ValidateRenderPort(rp)) {
-    D(bug("ZuneRenderer: Invalid RenderPort\n"));
+  if (!ValidateRenderContext(rctx)) {
+    D(bug("ZuneRenderer: Invalid RenderContext\n"));
     return;
   }
 
-  if (!rp->batch_state) {
+  if (!rctx->batch_state) {
     D(bug("ZuneRenderer: No batch state available\n"));
     return;
   }
 
-  struct BatchState *batch = (struct BatchState *)rp->batch_state;
+  struct BatchState *batch = (struct BatchState *)rctx->batch_state;
 
   /* Flush any pending operations */
   if (batch->immediate.count > 0 || batch->deferred.count > 0) {
@@ -58,7 +59,13 @@ SEE ALSO
   }
 
   batch->active = FALSE;
-  rp->batching_enabled = FALSE;
+  rctx->batching_enabled = FALSE;
+
+  /* Notify the backend (e.g. OpenGL does glFlush + swapbuffers) */
+  ZuneBackend *backend = ZuneGetRenderContextBackend(rctx);
+  if (backend && backend->ops && backend->ops->EndBatch) {
+    backend->ops->EndBatch(rctx);
+  }
 
   D(bug("ZuneRenderer: Batch session ended\n"));
 

@@ -10,7 +10,7 @@
  * Draws a rectangle directly to a locked DrawingBoard's pixel buffer.
  * This provides optimal performance for direct pixel access operations.
  *****************************************************************************/
-void CybergfxDrawRectangleToLockedDrawingBoard(struct RenderPort *renderport,
+void CybergfxDrawRectangleToLockedDrawingBoard(struct RenderContext *renderport,
                                                WORD x, WORD y, UWORD width,
                                                UWORD height, UBYTE border_width,
                                                struct ZuneBrush *fill_brush,

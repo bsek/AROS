@@ -21,7 +21,7 @@
 #endif
 
 struct DrawingBoard;
-struct RenderPort;
+struct RenderContext;
 
 /*** Name *******************************************************************/
 #define MUIC_Area                   "Area.mui"

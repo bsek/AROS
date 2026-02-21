@@ -20,9 +20,9 @@
  *       ZuneDrawLineAA -- Draw an antialiased line with default width.
  *
  *   SYNOPSIS
- *       ZuneDrawLineAA(rp, startX, startY, endX, endY, color)
+ *       ZuneDrawLineAA(rctx, startX, startY, endX, endY, color)
  *
- *       VOID ZuneDrawLineAA(struct RenderPort *rp, UWORD startX, UWORD startY,
+ *       VOID ZuneDrawLineAA(struct RenderContext *rctx, UWORD startX, UWORD startY,
  *                           UWORD endX, UWORD endY, ULONG color)
  *
  *   FUNCTION
@@ -30,7 +30,7 @@
  *       specified color. Uses a default line width of 1 pixel.
  *
  *   INPUTS
- *       rp -- The RenderPort to draw on
+ *       rctx -- The RenderContext to draw on
  *       startX -- X coordinate of the line start point
  *       startY -- Y coordinate of the line start point
  *       endX -- X coordinate of the line end point
@@ -39,7 +39,7 @@
  *
  ***************************************************************************/
 
-AROS_LH4(VOID, ZuneDrawLineAA, AROS_LHA(struct RenderPort *, rp, A0),
+AROS_LH4(VOID, ZuneDrawLineAA, AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(struct ZunePoint *, start, A1),
          AROS_LHA(struct ZunePoint *, end, A2),
          AROS_LHA(ULONG, color, D0),
@@ -48,7 +48,7 @@ AROS_LH4(VOID, ZuneDrawLineAA, AROS_LHA(struct RenderPort *, rp, A0),
 {
   AROS_LIBFUNC_INIT
 
-  if (!rp || !start || !end) {
+  if (!rctx || !start || !end) {
     return;
   }
 
@@ -58,9 +58,9 @@ AROS_LH4(VOID, ZuneDrawLineAA, AROS_LHA(struct RenderPort *, rp, A0),
   const WORD endY = end->y;
 
   struct InternalColor internal_color =
-      ZuneColorToInternal(rp, color, rp->pixel_format);
+      ZuneColorToInternal(rctx, color, rctx->pixel_format);
 
-  ZUNE_BACKEND_CALL(rp, DrawLine, startX, startY, endX, endY, (UWORD)1,
+  ZUNE_BACKEND_CALL(rctx, DrawLine, startX, startY, endX, endY, (UWORD)1,
                     &internal_color, TRUE);
 
   AROS_LIBFUNC_EXIT
