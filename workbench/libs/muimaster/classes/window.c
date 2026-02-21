@@ -237,11 +237,11 @@ static void ResetDrawBufferEntry(struct DrawBufferEntry *entry) {
         return;
 
     if (entry->board) {
-        DestroyDrawingBoard(entry->port, entry->board);
+        ZuneDestroyDrawingBoard(entry->port, entry->board);
         entry->board = NULL;
     }
     if (entry->port) {
-        DestroyRenderPort(entry->port);
+        ZuneDestroyRenderPort(entry->port);
         entry->port = NULL;
     }
     entry->width = 0;
@@ -305,15 +305,15 @@ BOOL WindowObtainObjectDrawBuffer(struct MUI_RenderInfo *mri, Object *obj, UWORD
          * New API: Create RenderPort first (bound to window), then DrawingBoard.
          * The RenderPort selects the best backend (OpenGL if available).
          */
-        entry->port = CreateRenderPortForWindow(mri->mri_Window, mri->mri_Colormap, BACKEND_OPENGL);
+        entry->port = ZuneCreateRenderPortForWindow(mri->mri_Window, mri->mri_Colormap, BACKEND_OPENGL);
         if (!entry->port) {
             RemoveDrawBufferEntry(data, entry);
             return FALSE;
         }
 
-        entry->board = CreateDrawingBoardForRenderPort(entry->port, width, height, flags);
+        entry->board = ZuneCreateDrawingBoardForRenderPort(entry->port, width, height, flags);
         if (!entry->board) {
-            DestroyRenderPort(entry->port);
+            ZuneDestroyRenderPort(entry->port);
             entry->port = NULL;
             RemoveDrawBufferEntry(data, entry);
             return FALSE;
@@ -712,7 +712,7 @@ static void CleanupRenderInfo(Object *obj, struct MUI_WindowData *data, struct M
     mri->mri_DrawInfo = NULL;
 
     if (mri->mri_RenderPort) {
-        DestroyRenderPort(mri->mri_RenderPort);
+        ZuneDestroyRenderPort(mri->mri_RenderPort);
     }
 
     /* If a custom screen has been opened by zune, close it as soon as zero
@@ -3228,7 +3228,7 @@ static void InstallBackbuffer(struct IClass *cl, Object *obj) {
 
     /* Create main RenderPort for this window - always needed for zunegfx */
     if (!mri->mri_RenderPort) {
-        mri->mri_RenderPort = CreateRenderPortForWindow(win, mri->mri_Colormap, BACKEND_CYBERGFX);
+        mri->mri_RenderPort = ZuneCreateRenderPortForWindow(win, mri->mri_Colormap, BACKEND_CYBERGFX);
         if (!mri->mri_RenderPort) {
             D(bug("Failed to create RenderPort for window\n"));
             return;
@@ -3266,12 +3266,12 @@ static void InstallBackbuffer(struct IClass *cl, Object *obj) {
 
     /* Create DrawingBoard for double buffering via RenderPort.
      * Pass 0 for flags to use friend_bitmap for colormap inheritance (pen drawing). */
-    mri->mri_DrawingBoard = CreateDrawingBoardForRenderPort(mri->mri_RenderPort, buffer_width, buffer_height, 0);
+    mri->mri_DrawingBoard = ZuneCreateDrawingBoardForRenderPort(mri->mri_RenderPort, buffer_width, buffer_height, 0);
 
     if (mri->mri_DrawingBoard && mri->mri_DrawingBoard->bitmap && mri->mri_DrawingBoard->rastport) {
         /*
          * DrawingBoard already has its own allocated RastPort from
-         * CreateDrawingBoardForRenderPort(). We just use it directly.
+         * ZuneCreateDrawingBoardForRenderPort(). We just use it directly.
          */
         D(bug("InstallBackbuffer: Setup complete\n"));
         D(bug("  mri_DrawingBoard->rastport: %p\n", mri->mri_DrawingBoard->rastport));
@@ -3287,7 +3287,7 @@ static void InstallBackbuffer(struct IClass *cl, Object *obj) {
         /* DrawingBoard creation failed - continue without double buffering */
         D(bug("DrawingBoard creation failed, using direct rendering\n"));
         if (mri->mri_DrawingBoard) {
-            DestroyDrawingBoard(mri->mri_RenderPort, mri->mri_DrawingBoard);
+            ZuneDestroyDrawingBoard(mri->mri_RenderPort, mri->mri_DrawingBoard);
             mri->mri_DrawingBoard = NULL;
         }
     }
@@ -3337,7 +3337,7 @@ static void ClearDoubleBuffer(struct MUI_RenderInfo *mri) {
         return;
 
     if (mri->mri_DrawingBoard && mri->mri_RenderPort) {
-        ClearDrawingBoard(mri->mri_RenderPort, ZUNE_COLOR_ARGB32(0, 0, 0, 0));
+        ZuneClearDrawingBoard(mri->mri_RenderPort, ZUNE_COLOR_ARGB32(0, 0, 0, 0));
         D(bug("Cleared DrawingBoard buffer\n"));
         mri->mri_BufferDirty = TRUE;
     }
@@ -3565,13 +3565,13 @@ static void DeinstallBackbuffer(struct IClass *cl, Object *obj) {
 
     /* Cleanup DrawingBoard first (it may reference the RenderPort) */
     if (mri->mri_DrawingBoard) {
-        DestroyDrawingBoard(mri->mri_RenderPort, mri->mri_DrawingBoard);
+        ZuneDestroyDrawingBoard(mri->mri_RenderPort, mri->mri_DrawingBoard);
         mri->mri_DrawingBoard = NULL;
     }
 
     /* Then cleanup RenderPort */
     if (mri->mri_RenderPort) {
-        DestroyRenderPort(mri->mri_RenderPort);
+        ZuneDestroyRenderPort(mri->mri_RenderPort);
         mri->mri_RenderPort = NULL;
     }
 }

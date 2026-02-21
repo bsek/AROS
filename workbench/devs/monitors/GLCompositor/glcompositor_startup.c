@@ -21,6 +21,7 @@
 struct Library *OOPBase;
 struct Library *UtilityBase;
 struct Library *GLBase;
+struct Library *ZuneGfxBase;
 
 /* Attr bases */
 OOP_AttrBase HiddPixFmtAttrBase;
@@ -106,6 +107,10 @@ int main(void)
                             GLBase = OpenLibrary("gl.library", 20);
                             if (!GLBase)
                                 GLBase = OpenLibrary("mesa3dgl.library", 20);
+
+                            /* Open zunegfx for layer compositor functions.
+                             * Non-fatal: layer compositing is optional. */
+                            ZuneGfxBase = OpenLibrary("zunegfx.library", 0);
 
                             /* Stay resident */
                             struct Process *me = (struct Process *)FindTask(NULL);

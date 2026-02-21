@@ -43,6 +43,7 @@
 
 #include <GL/gl.h>
 #include <GL/gla.h>
+#include <proto/zunegfx.h>
 
 #include "glcompositor_intern.h"
 
@@ -169,26 +170,18 @@ static struct LayerCompositor *GetOrCreateLayerCompositor(
             return entry->compositor;
     }
 
-    /* Not found — create a new one if GPU is available */
-    if (!compdata->gpu.available || !compdata->gpu.gl_context)
+    /* Not found — create a new one if GPU and zunegfx are available */
+    if (!compdata->gpu.available || !compdata->gpu.gl_context || !ZuneGfxBase)
         return NULL;
 
     /* Create LayerCompositor with shared GL context */
-    {
-        extern struct LayerCompositor *CreateLayerCompositorSharedInternal(
-            struct Screen *screen, APTR masterGLContext);
-
-        comp = CreateLayerCompositorSharedInternal(screen, compdata->gpu.gl_context);
-    }
+    comp = ZuneCreateLayerCompositorShared(screen, compdata->gpu.gl_context);
 
     if (!comp)
         return NULL;
 
     /* Activate it immediately */
-    {
-        extern BOOL ActivateLayerCompositorInternal(struct LayerCompositor *comp);
-        ActivateLayerCompositorInternal(comp);
-    }
+    ZuneActivateLayerCompositor(comp);
 
     /* Add to cache */
     entry = AllocMem(sizeof(struct LayerCompositorCacheEntry), MEMF_ANY | MEMF_CLEAR);
@@ -709,13 +702,12 @@ static void ShutdownGPUCompositor(struct HIDDCompositorData *compdata)
     /* Destroy all cached LayerCompositors */
     {
         struct LayerCompositorCacheEntry *entry, *next;
-        extern void DestroyLayerCompositorInternal(struct LayerCompositor *comp);
 
         ForeachNodeSafe(&compdata->layer_compositor_cache, entry, next)
         {
             D(bug("[GLCompositor] %s: Destroying LayerCompositor %p for screen %p\n",
                   __func__, entry->compositor, entry->screen));
-            DestroyLayerCompositorInternal(entry->compositor);
+            ZuneDestroyLayerCompositor(entry->compositor);
             Remove((struct Node *)entry);
             FreeMem(entry, sizeof(struct LayerCompositorCacheEntry));
         }
@@ -1145,10 +1137,9 @@ static VOID GPUCompositorRedrawVisibleRegions(struct HIDDCompositorData *compdat
         /* LayerCompositor delegation: if this screen has a LayerCompositor,
          * delegate per-window rendering to it instead of drawing the
          * screen bitmap as a single texture. */
-        if (n->layer_compositor)
+        if (n->layer_compositor && ZuneGfxBase)
         {
-            extern void CompositorUpdateInternal(struct LayerCompositor *comp);
-            CompositorUpdateInternal(n->layer_compositor);
+            ZuneCompositorUpdate(n->layer_compositor);
 
             /* Restore our GL context after the LayerCompositor used its own */
             glAMakeCurrent(compdata->gpu.gl_context);

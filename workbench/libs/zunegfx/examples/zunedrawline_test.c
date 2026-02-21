@@ -175,12 +175,12 @@ BOOL InitTest(void)
 void CleanupTest(void)
 {
     if (test_rp) {
-        DestroyRenderPort(test_rp);
+        ZuneDestroyRenderPort(test_rp);
         test_rp = NULL;
     }
 
     if (test_board) {
-        DestroyDrawingBoard(test_board);
+        ZuneDestroyDrawingBoard(test_board);
         test_board = NULL;
     }
 
@@ -220,7 +220,7 @@ void TestZuneDrawLineBasic(void)
     printf("  Testing basic ZuneDrawLine calls...\n");
     
     /* Clear the DrawingBoard */
-    ClearDrawingBoard(test_rp, ZUNE_BLACK);
+    ZuneClearDrawingBoard(test_rp, ZUNE_BLACK);
     
     printf("  Drawing basic line patterns...\n");
     
@@ -254,10 +254,10 @@ void TestZuneDrawLineLocked(void)
     ULONG pitch;
 
     /* Clear the DrawingBoard */
-    ClearDrawingBoard(test_rp, ZUNE_BLACK);
+    ZuneClearDrawingBoard(test_rp, ZUNE_BLACK);
     
     printf("  Locking DrawingBoard pixels...\n");
-    pixels = LockDrawingBoardPixels(test_rp, &pitch);
+    pixels = ZuneLockDrawingBoardPixels(test_rp, &pitch);
     if (!pixels) {
         printf("  ERROR: Cannot lock DrawingBoard pixels\n");
         return;
@@ -269,14 +269,14 @@ void TestZuneDrawLineLocked(void)
     TestZuneDrawLinePatterns(TRUE, 0, 0);
 
     /* Unlock pixels */
-    UnlockDrawingBoardPixels(test_rp);
+    ZuneUnlockDrawingBoardPixels(test_rp);
     printf("  Locked ZuneDrawLine test completed\n");
 }
 
 void TestZuneDrawLineUnlocked(void)
 {
     /* Clear the DrawingBoard */
-    ClearDrawingBoard(test_rp, ZUNE_BLACK);
+    ZuneClearDrawingBoard(test_rp, ZUNE_BLACK);
     
     printf("  Using unlocked DrawingBoard (WriteRGBPixel path)...\n");
 

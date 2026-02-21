@@ -77,7 +77,7 @@ static ULONG SampleDrawingBoardPixel(WORD x, WORD y) {
     struct ZunePoint point;
     point.x = x;
     point.y = y;
-    return GetPixel(demo_rp, &point);
+    return ZuneGetPixel(demo_rp, &point);
   }
 
   if (demo_board->rastport) {
@@ -114,7 +114,7 @@ int main(void) {
 
   /* Test unlocked rectangle drawing - works with both CyberGfx and OpenGL backends */
   printf("\n1. Testing unlocked DrawingBoard rectangle drawing...\n");
-  ClearRenderPort(demo_rp, ZUNE_DARKGRAY);
+  ZuneClearRenderPort(demo_rp, ZUNE_DARKGRAY);
   DemoUnlockedRectangles();
   /* Show results */
   ShowResults("Unlocked rectangles");
@@ -122,9 +122,9 @@ int main(void) {
 
   /* Test unlocked anti-aliased rectangle drawing */
   printf("\n2. Testing unlocked DrawingBoard anti-aliased rectangle drawing...\n");
-  printf("  Calling ClearRenderPort(demo_rp, ZUNE_DARKGRAY)...\n");
-  ClearRenderPort(demo_rp, ZUNE_DARKGRAY);
-  printf("  ClearRenderPort done, calling DemoUnlockedAARectangles...\n");
+  printf("  Calling ZuneClearRenderPort(demo_rp, ZUNE_DARKGRAY)...\n");
+  ZuneClearRenderPort(demo_rp, ZUNE_DARKGRAY);
+  printf("  ZuneClearRenderPort done, calling DemoUnlockedAARectangles...\n");
   DemoUnlockedAARectangles();
   printf("  DemoUnlockedAARectangles done, calling ShowResults...\n");
   ShowResults("Unlocked AA rectangles");
@@ -132,28 +132,28 @@ int main(void) {
 
   /* Test unlocked circle drawing */
   printf("\n3. Testing unlocked DrawingBoard circle drawing...\n");
-  ClearRenderPort(demo_rp, ZUNE_DARKGRAY);
+  ZuneClearRenderPort(demo_rp, ZUNE_DARKGRAY);
   DemoUnlockedCircles();
   ShowResults("Unlocked circles");
   getchar();
 
   /* Test unlocked anti-aliased circle drawing */
   printf("\n4. Testing unlocked DrawingBoard anti-aliased circle drawing...\n");
-  ClearRenderPort(demo_rp, ZUNE_DARKGRAY);
+  ZuneClearRenderPort(demo_rp, ZUNE_DARKGRAY);
   DemoUnlockedAACircles();
   ShowResults("Unlocked AA circles");
   getchar();
 
   /* Test unlocked line drawing */
   printf("\n5. Testing unlocked DrawingBoard line drawing...\n");
-  ClearRenderPort(demo_rp, ZUNE_DARKGRAY);
+  ZuneClearRenderPort(demo_rp, ZUNE_DARKGRAY);
   DemoUnlockedLines();
   ShowResults("Unlocked lines");
   getchar();
 
   /* Test unlocked anti-aliased line drawing */
   printf("\n6. Testing unlocked DrawingBoard anti-aliased line drawing...\n");
-  ClearRenderPort(demo_rp, ZUNE_DARKGRAY);
+  ZuneClearRenderPort(demo_rp, ZUNE_DARKGRAY);
   DemoUnlockedAALines();
   ShowResults("Unlocked AA lines");
   getchar();
@@ -212,14 +212,14 @@ BOOL InitDemo(void) {
   }
 
   /* Create RenderPort bound to window first (new API) */
-  window_rp = CreateRenderPortForWindow(window, screen->ViewPort.ColorMap, BACKEND_CYBERGFX);
+  window_rp = ZuneCreateRenderPortForWindow(window, screen->ViewPort.ColorMap, BACKEND_CYBERGFX);
   if (!window_rp) {
     printf("ERROR: Cannot create Window RenderPort\n");
     return FALSE;
   }
 
   /* Create DrawingBoard under the RenderPort */
-  demo_board = CreateDrawingBoardForRenderPort(window_rp, DEMO_WIDTH, DEMO_HEIGHT, 0);
+  demo_board = ZuneCreateDrawingBoardForRenderPort(window_rp, DEMO_WIDTH, DEMO_HEIGHT, 0);
   if (!demo_board) {
     printf("ERROR: Cannot create DrawingBoard\n");
     return FALSE;
@@ -232,19 +232,19 @@ BOOL InitDemo(void) {
   ZuneSetTarget(demo_rp, demo_board);
 
   /* Clear the DrawingBoard */
-  ClearDrawingBoard(demo_rp, ZUNE_DARKGRAY);
+  ZuneClearDrawingBoard(demo_rp, ZUNE_DARKGRAY);
 
   return TRUE;
 }
 
 void CleanupDemo(void) {
   if (demo_rp) {
-    DestroyRenderPort(demo_rp);
+    ZuneDestroyRenderPort(demo_rp);
     demo_rp = NULL;
   }
 
   if (demo_board) {
-    DestroyDrawingBoard(demo_board);
+    ZuneDestroyDrawingBoard(demo_board);
     demo_board = NULL;
   }
 
@@ -286,7 +286,7 @@ void DemoLockedRectangles(void) {
   printf("  Locking DrawingBoard pixels...\n");
 
   /* Lock the DrawingBoard for direct pixel access */
-  pixels = LockDrawingBoardPixels(demo_rp, &pitch);
+  pixels = ZuneLockDrawingBoardPixels(demo_rp, &pitch);
   if (!pixels) {
     printf("  ERROR: Cannot lock DrawingBoard pixels\n");
     return;
@@ -372,7 +372,7 @@ void DemoLockedRectangles(void) {
     }
 
     locked_pattern_texture =
-        CreateTextureFromData(demo_rp, locked_pattern_pixels, locked_pattern_width,
+        ZuneCreateTextureFromData(demo_rp, locked_pattern_pixels, locked_pattern_width,
                               locked_pattern_height, 32,
                               ZUNE_TEXTURE_FORMAT_ARGB32, locked_pattern_pitch,
                               ZUNE_TEXTURE_WRAPPING);
@@ -396,7 +396,7 @@ void DemoLockedRectangles(void) {
   }
 
   if (locked_pattern_texture) {
-    DestroyTexture(demo_rp, locked_pattern_texture);
+    ZuneDestroyTexture(demo_rp, locked_pattern_texture);
   }
   if (locked_pattern_pixels) {
     FreeMem(locked_pattern_pixels, locked_pattern_size);
@@ -433,7 +433,7 @@ void DemoLockedRectangles(void) {
   printf("  All rectangles drawn using locked pixel access\n");
 
   /* Unlock the pixels */
-  UnlockDrawingBoardPixels(demo_rp);
+  ZuneUnlockDrawingBoardPixels(demo_rp);
 
   printf("  Pixels unlocked\n");
 }
@@ -517,7 +517,7 @@ void DemoUnlockedRectangles(void) {
     }
 
     pattern_texture =
-        CreateTextureFromData(demo_rp, pattern_pixels, pattern_width, pattern_height, 32,
+        ZuneCreateTextureFromData(demo_rp, pattern_pixels, pattern_width, pattern_height, 32,
                               ZUNE_TEXTURE_FORMAT_ARGB32, pattern_pitch,
                               ZUNE_TEXTURE_WRAPPING);
   }
@@ -540,7 +540,7 @@ void DemoUnlockedRectangles(void) {
   }
 
   if (pattern_texture) {
-    DestroyTexture(demo_rp, pattern_texture);
+    ZuneDestroyTexture(demo_rp, pattern_texture);
   }
   if (pattern_pixels) {
     FreeMem(pattern_pixels, pattern_size);
@@ -635,7 +635,7 @@ void DemoLockedAARectangles(void) {
   printf("  Locking DrawingBoard pixels...\n");
 
   /* Lock the DrawingBoard for direct pixel access */
-  pixels = LockDrawingBoardPixels(demo_rp, &pitch);
+  pixels = ZuneLockDrawingBoardPixels(demo_rp, &pitch);
   if (!pixels) {
     printf("  ERROR: Cannot lock DrawingBoard pixels\n");
     return;
@@ -704,7 +704,7 @@ void DemoLockedAARectangles(void) {
   printf("  All AA rectangles drawn using locked pixel access\n");
 
   /* Unlock the pixels */
-  UnlockDrawingBoardPixels(demo_rp);
+  ZuneUnlockDrawingBoardPixels(demo_rp);
 
   printf("  Pixels unlocked\n");
 }
@@ -716,7 +716,7 @@ void DemoLockedCircles(void) {
   printf("  Locking DrawingBoard pixels...\n");
 
   /* Lock the DrawingBoard for direct pixel access */
-  pixels = LockDrawingBoardPixels(demo_rp, &pitch);
+  pixels = ZuneLockDrawingBoardPixels(demo_rp, &pitch);
   if (!pixels) {
     printf("  ERROR: Cannot lock DrawingBoard pixels\n");
     return;
@@ -761,7 +761,7 @@ void DemoLockedCircles(void) {
   printf("  All circles drawn using locked pixel access\n");
 
   /* Unlock the pixels */
-  UnlockDrawingBoardPixels(demo_rp);
+  ZuneUnlockDrawingBoardPixels(demo_rp);
 
   printf("  Pixels unlocked\n");
 }
@@ -861,7 +861,7 @@ void DemoLockedAACircles(void) {
   printf("  Locking DrawingBoard pixels...\n");
 
   /* Lock the DrawingBoard for direct pixel access */
-  pixels = LockDrawingBoardPixels(demo_rp, &pitch);
+  pixels = ZuneLockDrawingBoardPixels(demo_rp, &pitch);
   if (!pixels) {
     printf("  ERROR: Cannot lock DrawingBoard pixels\n");
     return;
@@ -913,7 +913,7 @@ void DemoLockedAACircles(void) {
   printf("  All AA circles drawn using locked pixel access\n");
 
   /* Unlock the pixels */
-  UnlockDrawingBoardPixels(demo_rp);
+  ZuneUnlockDrawingBoardPixels(demo_rp);
 
   printf("  Pixels unlocked\n");
 }
@@ -925,7 +925,7 @@ void DemoLockedLines() {
   printf("  Locking DrawingBoard pixels...\n");
 
   /* Lock the DrawingBoard for direct pixel access */
-  pixels = LockDrawingBoardPixels(demo_rp, &pitch);
+  pixels = ZuneLockDrawingBoardPixels(demo_rp, &pitch);
   if (!pixels) {
     printf("  ERROR: Cannot lock DrawingBoard pixels\n");
     return;
@@ -964,7 +964,7 @@ void DemoLockedLines() {
   ZuneDrawLineStyledPoints(demo_rp, 450, 350, 550, 250, 6, ZUNE_YELLOW);
 
   /* Unlock the pixels */
-  UnlockDrawingBoardPixels(demo_rp);
+  ZuneUnlockDrawingBoardPixels(demo_rp);
 
   printf("  Pixels unlocked\n");
 }
@@ -1012,7 +1012,7 @@ void DemoLockedAALines() {
   printf("  Locking DrawingBoard pixels...\n");
 
   /* Lock the DrawingBoard for direct pixel access */
-  pixels = LockDrawingBoardPixels(demo_rp, &pitch);
+  pixels = ZuneLockDrawingBoardPixels(demo_rp, &pitch);
   if (!pixels) {
     printf("  ERROR: Cannot lock DrawingBoard pixels\n");
     return;
@@ -1044,7 +1044,7 @@ void DemoLockedAALines() {
   // ZuneDrawLineStyledAAPoints(demo_rp, 410, 250, 560, 350, 5, ZUNE_CYAN);
 
   /* Unlock the pixels */
-  UnlockDrawingBoardPixels(demo_rp);
+  ZuneUnlockDrawingBoardPixels(demo_rp);
 
   printf("  Pixels unlocked\n");
 }
@@ -1112,7 +1112,7 @@ void DemoTextures(void) {
     }
 
     ULONG pitch = texture_width * 4; /* 4 bytes per pixel for ARGB32 */
-    test_texture = CreateTextureFromData(
+    test_texture = ZuneCreateTextureFromData(
         demo_rp, pixel_data, texture_width, texture_height, 32,
         ZUNE_TEXTURE_FORMAT_ARGB32, pitch, ZUNE_TEXTURE_HARDWARE);
 
@@ -1175,7 +1175,7 @@ void DemoTextures(void) {
 
   /* Use the existing window_rp to create a temp DrawingBoard */
   struct DrawingBoard *temp_board =
-      CreateDrawingBoardForRenderPort(window_rp, 128, 128, 0);
+      ZuneCreateDrawingBoardForRenderPort(window_rp, 128, 128, 0);
   if (temp_board) {
     /* Use window_rp with ZuneSetTarget to render to temp_board */
     struct RenderPort *temp_rp = window_rp;
@@ -1183,7 +1183,7 @@ void DemoTextures(void) {
 
     if (temp_rp) {
       /* Draw some content on the temporary board */
-      ClearDrawingBoard(temp_rp, ZUNE_DARKGRAY);
+      ZuneClearDrawingBoard(temp_rp, ZUNE_DARKGRAY);
       ZuneDrawRectangleXYWH(temp_rp, 10, 10, 50, 50,
                             ZUNE_BRUSH_SOLID(ZUNE_RED));
       ZuneDrawCircleAt(temp_rp, 90, 90, 25, ZUNE_BRUSH_SOLID(ZUNE_GREEN));
@@ -1191,7 +1191,7 @@ void DemoTextures(void) {
 
       /* Create texture from the DrawingBoard */
       board_texture =
-          CreateTextureFromDrawingBoard(temp_rp, ZUNE_TEXTURE_HARDWARE);
+          ZuneCreateTextureFromDrawingBoard(temp_rp, ZUNE_TEXTURE_HARDWARE);
 
       if (board_texture) {
         printf("  DrawingBoard texture created successfully\n");
@@ -1217,7 +1217,7 @@ void DemoTextures(void) {
     }
 
     /* Don't destroy window_rp - it's our main RenderPort! Just destroy temp_board */
-    DestroyDrawingBoard(temp_board);
+    ZuneDestroyDrawingBoard(temp_board);
   }
 
   /* Test 3: Texture pixel manipulation */
@@ -1225,7 +1225,7 @@ void DemoTextures(void) {
     printf("  Testing texture pixel manipulation...\n");
 
     ULONG pitch = 0;
-    APTR lock_handle = LockTexturePixels(demo_rp, test_texture, &pitch);
+    APTR lock_handle = ZuneLockTexturePixels(demo_rp, test_texture, &pitch);
     if (lock_handle) {
       /* Modify some pixels directly */
       {
@@ -1234,21 +1234,21 @@ void DemoTextures(void) {
         struct ZunePoint p3 = {33, 33};
         struct ZunePoint p4 = {32, 31};
         struct ZunePoint p5 = {32, 33};
-        SetTexturePixel(demo_rp, test_texture, &p1, ZUNE_WHITE);
-        SetTexturePixel(demo_rp, test_texture, &p2, ZUNE_WHITE);
-        SetTexturePixel(demo_rp, test_texture, &p3, ZUNE_WHITE);
-        SetTexturePixel(demo_rp, test_texture, &p4, ZUNE_WHITE);
-        SetTexturePixel(demo_rp, test_texture, &p5, ZUNE_WHITE);
+        ZuneSetTexturePixel(demo_rp, test_texture, &p1, ZUNE_WHITE);
+        ZuneSetTexturePixel(demo_rp, test_texture, &p2, ZUNE_WHITE);
+        ZuneSetTexturePixel(demo_rp, test_texture, &p3, ZUNE_WHITE);
+        ZuneSetTexturePixel(demo_rp, test_texture, &p4, ZUNE_WHITE);
+        ZuneSetTexturePixel(demo_rp, test_texture, &p5, ZUNE_WHITE);
       }
 
       /* Test getting pixel colors */
       {
         struct ZunePoint p = {10, 10};
-        ULONG pixel_color = GetTexturePixel(demo_rp, test_texture, &p);
+        ULONG pixel_color = ZuneGetTexturePixel(demo_rp, test_texture, &p);
         printf("  Pixel at (10,10): ARGB=0x%08X\n", (unsigned int)pixel_color);
       }
 
-      UnlockTexturePixels(demo_rp, test_texture);
+      ZuneUnlockTexturePixels(demo_rp, test_texture);
 
       /* Draw the modified texture */
       {
@@ -1281,7 +1281,7 @@ void DemoTextures(void) {
     /* Update the texture with new data */
     {
       struct ZuneRect update_rect = {0, 0, texture_width, texture_height};
-      if (UpdateTextureData(demo_rp, test_texture, pixel_data, &update_rect)) {
+      if (ZuneUpdateTextureData(demo_rp, test_texture, pixel_data, &update_rect)) {
         printf("  Texture data updated successfully\n");
 
         /* Draw the updated texture */
@@ -1297,12 +1297,12 @@ void DemoTextures(void) {
 
   /* Cleanup */
   if (test_texture) {
-    DestroyTexture(demo_rp, test_texture);
+    ZuneDestroyTexture(demo_rp, test_texture);
     printf("  Test texture destroyed\n");
   }
 
   if (board_texture) {
-    DestroyTexture(demo_rp, board_texture);
+    ZuneDestroyTexture(demo_rp, board_texture);
     printf("  DrawingBoard texture destroyed\n");
   }
 
@@ -1348,7 +1348,7 @@ void DemoTexturesTiled(void) {
     }
 
     ULONG pitch = tile_width * 4; /* 4 bytes per pixel for ARGB32 */
-    tile_texture = CreateTextureFromData(
+    tile_texture = ZuneCreateTextureFromData(
         demo_rp, pixel_data, tile_width, tile_height, 32, ZUNE_TEXTURE_FORMAT_ARGB32,
         pitch, ZUNE_TEXTURE_HARDWARE | ZUNE_TEXTURE_WRAPPING);
 
@@ -1429,7 +1429,7 @@ void DemoTexturesTiled(void) {
 
   /* Cleanup */
   if (tile_texture) {
-    DestroyTexture(demo_rp, tile_texture);
+    ZuneDestroyTexture(demo_rp, tile_texture);
     printf("  Tile texture destroyed\n");
   }
 
@@ -1471,12 +1471,12 @@ void PerformanceTest(void) {
   printf("  Testing rectangle drawing performance...\n");
 
   /* Clear the board */
-  ClearDrawingBoard(demo_rp, ZUNE_BLACK);
+  ZuneClearDrawingBoard(demo_rp, ZUNE_BLACK);
 
   /* Test locked rectangle performance */
   printf("    Testing locked rectangle drawing performance...\n");
 
-  APTR pixels = LockDrawingBoardPixels(demo_rp, NULL);
+  APTR pixels = ZuneLockDrawingBoardPixels(demo_rp, NULL);
   if (pixels) {
     start_time = 0; /* Would use timer.device in real implementation */
 
@@ -1490,12 +1490,12 @@ void PerformanceTest(void) {
     end_time = 0; /* Would use timer.device in real implementation */
     locked_time = end_time - start_time;
 
-    UnlockDrawingBoardPixels(demo_rp);
+    ZuneUnlockDrawingBoardPixels(demo_rp);
     printf("    Locked rectangle drawing completed\n");
   }
 
   /* Clear and test unlocked rectangle performance */
-  ClearDrawingBoard(demo_rp, ZUNE_BLACK);
+  ZuneClearDrawingBoard(demo_rp, ZUNE_BLACK);
   printf("    Testing unlocked rectangle drawing performance...\n");
 
   start_time = 0; /* Would use timer.device in real implementation */
@@ -1516,12 +1516,12 @@ void PerformanceTest(void) {
   printf("  Testing line drawing performance...\n");
 
   /* Clear the board */
-  ClearDrawingBoard(demo_rp, ZUNE_BLACK);
+  ZuneClearDrawingBoard(demo_rp, ZUNE_BLACK);
 
   /* Test locked line performance */
   printf("    Testing locked line drawing performance...\n");
 
-  pixels = LockDrawingBoardPixels(demo_rp, NULL);
+  pixels = ZuneLockDrawingBoardPixels(demo_rp, NULL);
   if (pixels) {
     start_time = 0; /* Would use timer.device in real implementation */
 
@@ -1538,12 +1538,12 @@ void PerformanceTest(void) {
     end_time = 0; /* Would use timer.device in real implementation */
     locked_time = end_time - start_time;
 
-    UnlockDrawingBoardPixels(demo_rp);
+    ZuneUnlockDrawingBoardPixels(demo_rp);
     printf("    Locked line drawing completed\n");
   }
 
   /* Clear and test unlocked line performance */
-  ClearDrawingBoard(demo_rp, ZUNE_BLACK);
+  ZuneClearDrawingBoard(demo_rp, ZUNE_BLACK);
   printf("    Testing unlocked line drawing performance...\n");
 
   start_time = 0; /* Would use timer.device in real implementation */
@@ -1566,12 +1566,12 @@ void PerformanceTest(void) {
   printf("  Testing styled line drawing performance...\n");
 
   /* Clear the board */
-  ClearDrawingBoard(demo_rp, ZUNE_BLACK);
+  ZuneClearDrawingBoard(demo_rp, ZUNE_BLACK);
 
   /* Test locked styled line performance */
   printf("    Testing locked styled line drawing performance...\n");
 
-  pixels = LockDrawingBoardPixels(demo_rp, NULL);
+  pixels = ZuneLockDrawingBoardPixels(demo_rp, NULL);
   if (pixels) {
     start_time = 0; /* Would use timer.device in real implementation */
 
@@ -1589,12 +1589,12 @@ void PerformanceTest(void) {
     end_time = 0; /* Would use timer.device in real implementation */
     locked_time = end_time - start_time;
 
-    UnlockDrawingBoardPixels(demo_rp);
+    ZuneUnlockDrawingBoardPixels(demo_rp);
     printf("    Locked styled line drawing completed\n");
   }
 
   /* Clear and test unlocked styled line performance */
-  ClearDrawingBoard(demo_rp, ZUNE_BLACK);
+  ZuneClearDrawingBoard(demo_rp, ZUNE_BLACK);
   printf("    Testing unlocked styled line drawing performance...\n");
 
   start_time = 0; /* Would use timer.device in real implementation */

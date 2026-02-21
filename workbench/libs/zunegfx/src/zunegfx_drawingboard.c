@@ -304,7 +304,7 @@ APTR LockDrawingBoardPixelsInternal(struct RenderPort *rp, ULONG *pitch) {
 
 void UnlockDrawingBoardPixelsInternal(struct RenderPort *rp) {
   if (!rp) {
-    D(bug("ZuneRenderer: UnlockDrawingBoardPixels called with NULL RenderPort\n"));
+    D(bug("ZuneRenderer: ZuneUnlockDrawingBoardPixels called with NULL RenderPort\n"));
     return;
   }
   if (!ValidateDrawingBoard(rp->target_board)) {
@@ -356,7 +356,7 @@ void RemoveDrawingBoardFromList(struct IntZuneGfxBase *base,
 /*****************************************************************************
 
     NAME */
-AROS_LH4(struct DrawingBoard *, CreateDrawingBoardForRenderPort,
+AROS_LH4(struct DrawingBoard *, ZuneCreateDrawingBoardForRenderPort,
 
          /*  SYNOPSIS */
          AROS_LHA(struct RenderPort *, rp, A0),
@@ -379,7 +379,7 @@ AROS_LH4(struct DrawingBoard *, CreateDrawingBoardForRenderPort,
 
     Flags control bitmap allocation:
     - ZUNE_DRAWINGBOARD_LINEARMEM: Force linear memory for direct pixel access.
-      This enables LockDrawingBoardPixels() to work, but the bitmap won't
+      This enables ZuneLockDrawingBoardPixels() to work, but the bitmap won't
       inherit colormap from the window (legacy pen drawing may not work).
     - Without LINEARMEM: Bitmap inherits colormap from window for legacy
       pen drawing, but may not support direct pixel locking.
@@ -394,9 +394,9 @@ RESULT
     Pointer to new DrawingBoard, or NULL if creation failed.
 
 NOTES
-    Use ZUNE_DRAWINGBOARD_LINEARMEM when you need LockDrawingBoardPixels().
+    Use ZUNE_DRAWINGBOARD_LINEARMEM when you need ZuneLockDrawingBoardPixels().
     Use 0 for legacy pen drawing compatibility.
-    The DrawingBoard must be freed with DestroyDrawingBoard().
+    The DrawingBoard must be freed with ZuneDestroyDrawingBoard().
     The RenderPort must remain valid for the lifetime of the DrawingBoard.
 
 *****************************************************************************/
@@ -407,21 +407,21 @@ NOTES
   struct DrawingBoard *board;
   UBYTE depth;
 
-  ENTER_FUNCTION("CreateDrawingBoardForRenderPort");
+  ENTER_FUNCTION("ZuneCreateDrawingBoardForRenderPort");
 
-  D(bug("ZuneRenderer: CreateDrawingBoardForRenderPort(rp=%p, %dx%d, flags=0x%08x)\n",
+  D(bug("ZuneRenderer: ZuneCreateDrawingBoardForRenderPort(rp=%p, %dx%d, flags=0x%08x)\n",
         rp, width, height, flags));
 
   /* Validate parameters */
   if (!rp || !rp->valid) {
     D(bug("ZuneRenderer: Invalid RenderPort\n"));
-    EXIT_FUNCTION("CreateDrawingBoardForRenderPort");
+    EXIT_FUNCTION("ZuneCreateDrawingBoardForRenderPort");
     return NULL;
   }
 
   if (width == 0 || height == 0) {
     D(bug("ZuneRenderer: Invalid dimensions\n"));
-    EXIT_FUNCTION("CreateDrawingBoardForRenderPort");
+    EXIT_FUNCTION("ZuneCreateDrawingBoardForRenderPort");
     return NULL;
   }
 
@@ -448,7 +448,7 @@ NOTES
   board = AllocVec(sizeof(struct DrawingBoard), MEMF_CLEAR | MEMF_PUBLIC);
   if (!board) {
     D(bug("ZuneRenderer: Failed to allocate DrawingBoard\n"));
-    EXIT_FUNCTION("CreateDrawingBoardForRenderPort");
+    EXIT_FUNCTION("ZuneCreateDrawingBoardForRenderPort");
     return NULL;
   }
 
@@ -481,7 +481,7 @@ NOTES
   if (!AllocateDrawingBoardBitmap(board, rp->backend_type, friend_bitmap)) {
     D(bug("ZuneRenderer: Failed to allocate DrawingBoard bitmap\n"));
     FreeVec(board);
-    EXIT_FUNCTION("CreateDrawingBoardForRenderPort");
+    EXIT_FUNCTION("ZuneCreateDrawingBoardForRenderPort");
     return NULL;
   }
 
@@ -506,7 +506,7 @@ NOTES
   D(bug("ZuneRenderer: DrawingBoard created for RenderPort, bitmap=%p\n",
         board->bitmap));
 
-  EXIT_FUNCTION("CreateDrawingBoardForRenderPort");
+  EXIT_FUNCTION("ZuneCreateDrawingBoardForRenderPort");
   return board;
 
   AROS_LIBFUNC_EXIT
@@ -518,7 +518,7 @@ NOTES
 /*****************************************************************************
 
     NAME */
-AROS_LH2(void, DestroyDrawingBoard,
+AROS_LH2(void, ZuneDestroyDrawingBoard,
 
          /*  SYNOPSIS */
          AROS_LHA(struct RenderPort *, rp, A0),
@@ -551,9 +551,9 @@ SEE ALSO
 
   struct IntZuneGfxBase *base = ZRB(ZuneGfxBase);
 
-  ENTER_FUNCTION("DestroyDrawingBoard");
+  ENTER_FUNCTION("ZuneDestroyDrawingBoard");
 
-  D(bug("ZuneRenderer: DestroyDrawingBoard(rp=%p, board=%p)\n", rp, board));
+  D(bug("ZuneRenderer: ZuneDestroyDrawingBoard(rp=%p, board=%p)\n", rp, board));
 
   if (!board) {
     D(bug("ZuneRenderer: NULL DrawingBoard, nothing to destroy\n"));
@@ -574,7 +574,7 @@ SEE ALSO
 
   D(bug("ZuneRenderer: DrawingBoard destroyed\n"));
 
-  EXIT_FUNCTION("DestroyDrawingBoard");
+  EXIT_FUNCTION("ZuneDestroyDrawingBoard");
 
   AROS_LIBFUNC_EXIT
 }
@@ -582,7 +582,7 @@ SEE ALSO
 /*****************************************************************************
 
     NAME */
-AROS_LH2(void, ClearDrawingBoard,
+AROS_LH2(void, ZuneClearDrawingBoard,
 
          /*  SYNOPSIS */
          AROS_LHA(struct RenderPort *, rp, A0),
@@ -606,15 +606,15 @@ NOTES
     based on the backend and whether pixels are currently locked.
 
 SEE ALSO
-    ClearRenderPort(), FastFillRect()
+    ZuneClearRenderPort(), FastFillRect()
 
 *****************************************************************************/
 {
   AROS_LIBFUNC_INIT
 
-  ENTER_FUNCTION("ClearDrawingBoard");
+  ENTER_FUNCTION("ZuneClearDrawingBoard");
 
-  D(bug("ZuneRenderer: ClearDrawingBoard(board=%p, color=0x%08x)\n",
+  D(bug("ZuneRenderer: ZuneClearDrawingBoard(board=%p, color=0x%08x)\n",
         rp->target_board, color));
 
   if (!ValidateDrawingBoard(rp->target_board)) {
@@ -623,7 +623,7 @@ SEE ALSO
   }
 
   /*
-   * Use ClearRenderPort which is more efficient than DrawRectangle:
+   * Use ZuneClearRenderPort which is more efficient than DrawRectangle:
    * - OpenGL: Uses glClear() which is hardware-optimized
    * - CyberGfx: Uses optimized fill operations
    */
@@ -633,7 +633,7 @@ SEE ALSO
 
   D(bug("ZuneRenderer: DrawingBoard cleared\n"));
 
-  EXIT_FUNCTION("ClearDrawingBoard");
+  EXIT_FUNCTION("ZuneClearDrawingBoard");
 
   AROS_LIBFUNC_EXIT
 }
@@ -645,7 +645,7 @@ SEE ALSO
 /*****************************************************************************
 
     NAME */
-AROS_LH2(APTR, LockDrawingBoardPixels,
+AROS_LH2(APTR, ZuneLockDrawingBoardPixels,
 
          /*  SYNOPSIS */
          AROS_LHA(struct RenderPort *, rp, A0), AROS_LHA(ULONG *, pitch, A1),
@@ -666,20 +666,20 @@ RESULT
     Pointer to pixel buffer, or NULL if locking failed.
 
 NOTES
-    The DrawingBoard must be unlocked with UnlockDrawingBoardPixels().
+    The DrawingBoard must be unlocked with ZuneUnlockDrawingBoardPixels().
     Only one lock is allowed per DrawingBoard at a time.
     This function only works with CyberGraphics bitmaps.
 
 SEE ALSO
-    UnlockDrawingBoardPixels(), GetPixel(), SetPixel(), FastFillRect()
+    ZuneUnlockDrawingBoardPixels(), ZuneGetPixel(), ZuneSetPixel(), FastFillRect()
 
 *****************************************************************************/
 {
   AROS_LIBFUNC_INIT
 
-  ENTER_FUNCTION("LockDrawingBoardPixels");
+  ENTER_FUNCTION("ZuneLockDrawingBoardPixels");
 
-  D(bug("ZuneRenderer: LockDrawingBoardPixels(board=%p)\n", rp->target_board));
+  D(bug("ZuneRenderer: ZuneLockDrawingBoardPixels(board=%p)\n", rp->target_board));
 
   return LockDrawingBoardPixelsInternal(rp, pitch);
 
@@ -689,7 +689,7 @@ SEE ALSO
 /*****************************************************************************
 
     NAME */
-AROS_LH1(void, UnlockDrawingBoardPixels,
+AROS_LH1(void, ZuneUnlockDrawingBoardPixels,
 
          /*  SYNOPSIS */
          AROS_LHA(struct RenderPort *, rp, A0),
@@ -699,7 +699,7 @@ AROS_LH1(void, UnlockDrawingBoardPixels,
 
 /*  FUNCTION
     Unlocks the DrawingBoard pixel buffer previously locked with
-    LockDrawingBoardPixels().
+    ZuneLockDrawingBoardPixels().
 
 INPUTS
     board - DrawingBoard to unlock (must not be NULL)
@@ -708,21 +708,21 @@ RESULT
     None
 
 NOTES
-    This function must be called for every successful LockDrawingBoardPixels().
+    This function must be called for every successful ZuneLockDrawingBoardPixels().
     After unlocking, the pixel buffer pointer is no longer valid.
 
 SEE ALSO
-    LockDrawingBoardPixels()
+    ZuneLockDrawingBoardPixels()
 
 *****************************************************************************/
 {
   AROS_LIBFUNC_INIT
 
-  ENTER_FUNCTION("UnlockDrawingBoardPixels");
+  ENTER_FUNCTION("ZuneUnlockDrawingBoardPixels");
 
   UnlockDrawingBoardPixelsInternal(rp);
 
-  EXIT_FUNCTION("UnlockDrawingBoardPixels");
+  EXIT_FUNCTION("ZuneUnlockDrawingBoardPixels");
 
   AROS_LIBFUNC_EXIT
 }
@@ -734,7 +734,7 @@ SEE ALSO
 /*****************************************************************************
 
     NAME */
-AROS_LH2(ULONG, GetPixel,
+AROS_LH2(ULONG, ZuneGetPixel,
 
          /*  SYNOPSIS */
          AROS_LHA(struct RenderPort *, rp, A0),
@@ -755,18 +755,18 @@ RESULT
     Pixel value in ARGB format, or 0 if failed.
 
 NOTES
-    The DrawingBoard must be locked with LockDrawingBoardPixels().
+    The DrawingBoard must be locked with ZuneLockDrawingBoardPixels().
     Coordinates are not bounds-checked for performance.
 
 SEE ALSO
-    SetPixel(), LockDrawingBoardPixels()
+    ZuneSetPixel(), ZuneLockDrawingBoardPixels()
 
 *****************************************************************************/
 {
   AROS_LIBFUNC_INIT
 
   if (!rp || !point) {
-    D(bug("GetPixel: Invalid parameters (rp=%p, point=%p)\n", rp, point));
+    D(bug("ZuneGetPixel: Invalid parameters (rp=%p, point=%p)\n", rp, point));
     return 0;
   }
 
@@ -778,7 +778,7 @@ SEE ALSO
 /*****************************************************************************
 
     NAME */
-AROS_LH3(void, SetPixel,
+AROS_LH3(void, ZuneSetPixel,
 
          /*  SYNOPSIS */
          AROS_LHA(struct RenderPort *, rp, A0),
@@ -799,11 +799,11 @@ RESULT
     None
 
 NOTES
-    The DrawingBoard must be locked with LockDrawingBoardPixels().
+    The DrawingBoard must be locked with ZuneLockDrawingBoardPixels().
     Coordinates are not bounds-checked for performance.
 
 SEE ALSO
-    GetPixel(), LockDrawingBoardPixels(), FastFillRect()
+    ZuneGetPixel(), ZuneLockDrawingBoardPixels(), FastFillRect()
 
 *****************************************************************************/
 {
@@ -1227,7 +1227,7 @@ NOTES
     The RenderPort must have both a valid target_board and window reference.
 
 SEE ALSO
-    ZuneBlit(), ZuneCapture(), CreateDrawingBoardForRenderPort()
+    ZuneBlit(), ZuneCapture(), ZuneCreateDrawingBoardForRenderPort()
 
 *****************************************************************************/
 {
@@ -1269,7 +1269,7 @@ SEE ALSO
       D(bug("ZuneRenderer: ZunePresent - backend->ops=%p, name=%s\n", 
             backend->ops, backend->ops->name ? (const char *)backend->ops->name : "NULL"));
       if (backend->ops->FlushBatch) {
-        D(bug("ZuneRenderer: ZunePresent - calling FlushBatch\n"));
+        D(bug("ZuneRenderer: ZunePresent - calling ZuneFlushBatch\n"));
         backend->ops->FlushBatch(rp);
       }
       if (backend->ops->CopyRegionFromDrawingBoard) {
@@ -1369,7 +1369,7 @@ NOTES
     For CyberGfx backend, this copies directly to the DrawingBoard's bitmap.
 
 SEE ALSO
-    ZuneBlit(), ZunePresent(), CreateDrawingBoardForRenderPort()
+    ZuneBlit(), ZunePresent(), ZuneCreateDrawingBoardForRenderPort()
 
 *****************************************************************************/
 {
@@ -1451,7 +1451,7 @@ NOTES
     4. FillPixelArray(board->rastport, ...) // CyberGfx sees OpenGL content
 
 SEE ALSO
-    CreateDrawingBoardForRenderPort(), ZuneSetTarget(), ZunePresent()
+    ZuneCreateDrawingBoardForRenderPort(), ZuneSetTarget(), ZunePresent()
 
 *****************************************************************************/
 {
@@ -1511,7 +1511,7 @@ NOTES
     4. ZuneFillRectangle(...)               // OpenGL sees bitmap content
 
 SEE ALSO
-    ZuneSync(), CreateDrawingBoardForRenderPort(), ZuneSetTarget()
+    ZuneSync(), ZuneCreateDrawingBoardForRenderPort(), ZuneSetTarget()
 
 *****************************************************************************/
 {

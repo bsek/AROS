@@ -266,7 +266,7 @@ static struct ZuneTexture *CreateTextureFromDatatypeInternal(APTR dt_handle, ULO
     UBYTE mask = 0;
 
     if (!dt_obj) {
-        D(bug("ZuneRenderer: CreateTextureFromDatatype - missing datatype object (handle=%p)\n", dt_handle));
+        D(bug("ZuneRenderer: ZuneCreateTextureFromDatatype - missing datatype object (handle=%p)\n", dt_handle));
         return NULL;
     }
 
@@ -275,22 +275,22 @@ static struct ZuneTexture *CreateTextureFromDatatypeInternal(APTR dt_handle, ULO
         tex_w = bmhd->bmh_Width;
         tex_h = bmhd->bmh_Height;
         mask = bmhd->bmh_Masking;
-        D(bug("ZuneRenderer: CreateTextureFromDatatype - from bmhd: %dx%d, mask=%d\n", tex_w, tex_h, mask));
+        D(bug("ZuneRenderer: ZuneCreateTextureFromDatatype - from bmhd: %dx%d, mask=%d\n", tex_w, tex_h, mask));
     } else if (bm) {
         tex_w = GetBitMapAttr(bm, BMA_WIDTH);
         tex_h = GetBitMapAttr(bm, BMA_HEIGHT);
-        D(bug("ZuneRenderer: CreateTextureFromDatatype - from bitmap: %dx%d\n", tex_w, tex_h));
+        D(bug("ZuneRenderer: ZuneCreateTextureFromDatatype - from bitmap: %dx%d\n", tex_w, tex_h));
     }
 
     if (tex_w <= 0 || tex_h <= 0) {
-        D(bug("ZuneRenderer: CreateTextureFromDatatype - invalid dimensions %dx%d\n", tex_w, tex_h));
+        D(bug("ZuneRenderer: ZuneCreateTextureFromDatatype - invalid dimensions %dx%d\n", tex_w, tex_h));
         return NULL;
     }
 
     size_t buf_size = (size_t)tex_w * (size_t)tex_h * 4;
     ULONG *pixels = AllocVec(buf_size, MEMF_ANY);
     if (!pixels) {
-        D(bug("ZuneRenderer: CreateTextureFromDatatype - failed to alloc %lu bytes\n", (ULONG)buf_size));
+        D(bug("ZuneRenderer: ZuneCreateTextureFromDatatype - failed to alloc %lu bytes\n", (ULONG)buf_size));
         return NULL;
     }
 
@@ -307,7 +307,7 @@ static struct ZuneTexture *CreateTextureFromDatatypeInternal(APTR dt_handle, ULO
 
     DoMethodA(dt_obj, (Msg)&pa);
 
-    D(bug("ZuneRenderer: CreateTextureFromDatatype - after PDTM_READPIXELARRAY:\n"));
+    D(bug("ZuneRenderer: ZuneCreateTextureFromDatatype - after PDTM_READPIXELARRAY:\n"));
     D(bug("  First 4 pixels: %08lx %08lx %08lx %08lx\n",
           (unsigned long)pixels[0], (unsigned long)pixels[1],
           (unsigned long)pixels[2], (unsigned long)pixels[3]));
@@ -338,7 +338,7 @@ static struct ZuneTexture *CreateTextureFromDatatypeInternal(APTR dt_handle, ULO
     struct ZuneTexture *tex = CreateTextureFromDataInternal(pixels, (UWORD)tex_w, (UWORD)tex_h, 32, ZUNE_TEXTURE_FORMAT_ARGB32, tex_w * 4, flags);
 
     if (!tex) {
-        D(bug("ZuneRenderer: CreateTextureFromDatatype - CreateTextureFromDataInternal failed\n"));
+        D(bug("ZuneRenderer: ZuneCreateTextureFromDatatype - CreateTextureFromDataInternal failed\n"));
     }
 
     FreeVec(pixels);
@@ -454,7 +454,7 @@ void UnlockTexturePixelsInternal(struct ZuneTexture *texture) {
 /*****************************************************************************
 
     NAME */
-AROS_LH6(struct ZuneTexture *, CreateTexture,
+AROS_LH6(struct ZuneTexture *, ZuneCreateTexture,
 
          /*  SYNOPSIS */
          AROS_LHA(struct RenderPort *, rp, A0),
@@ -478,11 +478,11 @@ RESULT
     Pointer to new ZuneTexture structure, or NULL if creation failed.
 
 NOTES
-    The created texture must be freed with DestroyTexture().
+    The created texture must be freed with ZuneDestroyTexture().
     Texture data is initially undefined.
 
 SEE ALSO
-    CreateTextureFromData(), CreateTextureFromDrawingBoard(), DestroyTexture()
+    ZuneCreateTextureFromData(), ZuneCreateTextureFromDrawingBoard(), ZuneDestroyTexture()
 
 *****************************************************************************/
 {
@@ -491,9 +491,9 @@ SEE ALSO
     struct IntZuneGfxBase *base = ZRB(ZuneGfxBase);
     struct ZuneTexture *texture;
 
-    ENTER_FUNCTION("CreateTexture");
+    ENTER_FUNCTION("ZuneCreateTexture");
 
-    D(bug("ZuneRenderer: CreateTexture(rp=%p, width=%d, height=%d, depth=%d, "
+    D(bug("ZuneRenderer: ZuneCreateTexture(rp=%p, width=%d, height=%d, depth=%d, "
           "format=0x%08x, flags=0x%08x)\n",
           rp, width, height, depth, format, flags));
 
@@ -523,7 +523,7 @@ SEE ALSO
 
     D(bug("ZuneRenderer: Texture created successfully (%p)\n", texture));
 
-    EXIT_FUNCTION("CreateTexture");
+    EXIT_FUNCTION("ZuneCreateTexture");
     return texture;
 
     AROS_LIBFUNC_EXIT
@@ -532,7 +532,7 @@ SEE ALSO
 /*****************************************************************************
 
     NAME */
-AROS_LH8(struct ZuneTexture *, CreateTextureFromData,
+AROS_LH8(struct ZuneTexture *, ZuneCreateTextureFromData,
 
          /*  SYNOPSIS */
          AROS_LHA(struct RenderPort *, rp, A0),
@@ -560,10 +560,10 @@ RESULT
 
 NOTES
     The source data is copied into the texture's internal buffer.
-    The created texture must be freed with DestroyTexture().
+    The created texture must be freed with ZuneDestroyTexture().
 
 SEE ALSO
-    CreateTexture(), CreateTextureFromDrawingBoard(), DestroyTexture()
+    ZuneCreateTexture(), ZuneCreateTextureFromDrawingBoard(), ZuneDestroyTexture()
 
 *****************************************************************************/
 {
@@ -572,9 +572,9 @@ SEE ALSO
     struct IntZuneGfxBase *base = ZRB(ZuneGfxBase);
     struct ZuneTexture *texture = NULL;
 
-    ENTER_FUNCTION("CreateTextureFromData");
+    ENTER_FUNCTION("ZuneCreateTextureFromData");
 
-    D(bug("ZuneRenderer: CreateTextureFromData(rp=%p, data=%p, width=%d, height=%d, "
+    D(bug("ZuneRenderer: ZuneCreateTextureFromData(rp=%p, data=%p, width=%d, height=%d, "
           "depth=%d, format=0x%08x, pitch=%d, flags=0x%08x)\n",
           rp, data, width, height, depth, format, pitch, flags));
 
@@ -590,7 +590,7 @@ SEE ALSO
         AddTextureToList(base, texture);
     }
 
-    EXIT_FUNCTION("CreateTextureFromData");
+    EXIT_FUNCTION("ZuneCreateTextureFromData");
     return texture;
 
     AROS_LIBFUNC_EXIT
@@ -599,7 +599,7 @@ SEE ALSO
 /*****************************************************************************
 
     NAME */
-AROS_LH2(struct ZuneTexture *, CreateTextureFromDrawingBoard,
+AROS_LH2(struct ZuneTexture *, ZuneCreateTextureFromDrawingBoard,
 
          /*  SYNOPSIS */
          AROS_LHA(struct RenderPort *, rp, A0), AROS_LHA(ULONG, flags, D0),
@@ -619,10 +619,10 @@ RESULT
 
 NOTES
     The DrawingBoard's pixel data is copied into the texture.
-    The created texture must be freed with DestroyTexture().
+    The created texture must be freed with ZuneDestroyTexture().
 
 SEE ALSO
-    CreateTexture(), CreateTextureFromData(), DestroyTexture()
+    ZuneCreateTexture(), ZuneCreateTextureFromData(), ZuneDestroyTexture()
 
 *****************************************************************************/
 {
@@ -630,11 +630,11 @@ SEE ALSO
 
     struct IntZuneGfxBase *base = ZRB(ZuneGfxBase);
 
-    ENTER_FUNCTION("CreateTextureFromDrawingBoard");
+    ENTER_FUNCTION("ZuneCreateTextureFromDrawingBoard");
 
     struct DrawingBoard *board = rp->target_board;
 
-    D(bug("ZuneRenderer: CreateTextureFromDrawingBoard(board=%p, flags=0x%08x)\n", board, flags));
+    D(bug("ZuneRenderer: ZuneCreateTextureFromDrawingBoard(board=%p, flags=0x%08x)\n", board, flags));
 
     ULONG pitch;
     APTR pixels = LockDrawingBoardPixelsInternal(rp, &pitch);
@@ -662,7 +662,7 @@ SEE ALSO
 
     D(bug("ZuneRenderer: Texture created from DrawingBoard %s (%p)\n", texture ? "successfully" : "failed", texture));
 
-    EXIT_FUNCTION("CreateTextureFromDrawingBoard");
+    EXIT_FUNCTION("ZuneCreateTextureFromDrawingBoard");
     return texture;
 
     AROS_LIBFUNC_EXIT
@@ -671,7 +671,7 @@ SEE ALSO
 /*****************************************************************************
 
     NAME */
-AROS_LH3(struct ZuneTexture *, CreateTextureFromDatatype,
+AROS_LH3(struct ZuneTexture *, ZuneCreateTextureFromDatatype,
 
          /*  SYNOPSIS */
          AROS_LHA(struct RenderPort *, rp, A0),
@@ -692,7 +692,7 @@ RESULT
     Pointer to new ZuneTexture structure, or NULL if creation failed.
 
 SEE ALSO
-    CreateTexture(), CreateTextureFromData(), DestroyTexture()
+    ZuneCreateTexture(), ZuneCreateTextureFromData(), ZuneDestroyTexture()
 
 *****************************************************************************/
 {
@@ -719,7 +719,7 @@ SEE ALSO
 /*****************************************************************************
 
     NAME */
-AROS_LH4(struct ZuneTexture *, CreateTextureFromFile,
+AROS_LH4(struct ZuneTexture *, ZuneCreateTextureFromFile,
 
          /*  SYNOPSIS */
          AROS_LHA(struct RenderPort *, rp, A0),
@@ -765,12 +765,12 @@ NOTES
     - Alpha channel is automatically detected and preserved
     - The DataTypes object is freed immediately after pixel extraction,
       so no reference to it is kept
-    - The texture must be freed with DestroyTexture() when no longer needed
+    - The texture must be freed with ZuneDestroyTexture() when no longer needed
     - For tiled backgrounds, include ZUNE_TEXTURE_WRAPPING in flags
 
 EXAMPLE
     // Load a background image for tiling
-    struct ZuneTexture *bg = CreateTextureFromFile(
+    struct ZuneTexture *bg = ZuneCreateTextureFromFile(
         rp,
         "THEME:backgrounds/window.png",
         screen,
@@ -778,11 +778,11 @@ EXAMPLE
 
     if (bg) {
         // Use texture...
-        DestroyTexture(rp, bg);
+        ZuneDestroyTexture(rp, bg);
     }
 
 SEE ALSO
-    CreateTextureFromDatatype(), CreateTexture(), DestroyTexture(),
+    ZuneCreateTextureFromDatatype(), ZuneCreateTexture(), ZuneDestroyTexture(),
     ZuneDrawTextureTiled()
 
 *****************************************************************************/
@@ -795,13 +795,13 @@ SEE ALSO
     struct Process *myproc;
     APTR oldwindowptr;
 
-    ENTER_FUNCTION("CreateTextureFromFile");
+    ENTER_FUNCTION("ZuneCreateTextureFromFile");
 
-    // D(bug("ZuneRenderer: CreateTextureFromFile(rp=%p, filename=%s, screen=%p, flags=0x%08x)\n",
+    // D(bug("ZuneRenderer: ZuneCreateTextureFromFile(rp=%p, filename=%s, screen=%p, flags=0x%08x)\n",
     //       rp, filename ? filename : "(null)", screen, flags));
 
     if (!filename) {
-        D(bug("ZuneRenderer: CreateTextureFromFile - NULL filename\n"));
+        D(bug("ZuneRenderer: ZuneCreateTextureFromFile - NULL filename\n"));
         return NULL;
     }
 
@@ -822,7 +822,7 @@ SEE ALSO
     myproc->pr_WindowPtr = oldwindowptr;
 
     if (!dt_obj) {
-        D(bug("ZuneRenderer: CreateTextureFromFile - Failed to load '%s'\n", filename));
+        D(bug("ZuneRenderer: ZuneCreateTextureFromFile - Failed to load '%s'\n", filename));
         return NULL;
     }
 
@@ -843,14 +843,14 @@ SEE ALSO
         }
         AddTextureToList(base, texture);
 
-        D(bug("ZuneRenderer: CreateTextureFromFile - Success: %dx%d texture from '%s'\n",
+        D(bug("ZuneRenderer: ZuneCreateTextureFromFile - Success: %dx%d texture from '%s'\n",
               texture->width, texture->height, filename));
     } else {
-        D(bug("ZuneRenderer: CreateTextureFromFile - Failed to create texture from '%s'\n",
+        D(bug("ZuneRenderer: ZuneCreateTextureFromFile - Failed to create texture from '%s'\n",
               filename));
     }
 
-    EXIT_FUNCTION("CreateTextureFromFile");
+    EXIT_FUNCTION("ZuneCreateTextureFromFile");
     return texture;
 
     AROS_LIBFUNC_EXIT
@@ -859,7 +859,7 @@ SEE ALSO
 /*****************************************************************************
 
     NAME */
-AROS_LH2(void, DestroyTexture,
+AROS_LH2(void, ZuneDestroyTexture,
 
          /*  SYNOPSIS */
          AROS_LHA(struct RenderPort *, rp, A0),
@@ -883,7 +883,7 @@ NOTES
     It is safe to pass NULL to this function.
 
 SEE ALSO
-    CreateTexture(), CreateTextureFromData(), CreateTextureFromDrawingBoard()
+    ZuneCreateTexture(), ZuneCreateTextureFromData(), ZuneCreateTextureFromDrawingBoard()
 
 *****************************************************************************/
 {
@@ -891,9 +891,9 @@ SEE ALSO
 
     struct IntZuneGfxBase *base = ZRB(ZuneGfxBase);
 
-    ENTER_FUNCTION("DestroyTexture");
+    ENTER_FUNCTION("ZuneDestroyTexture");
 
-    D(bug("ZuneRenderer: DestroyTexture(rp=%p, texture=%p)\n", rp, texture));
+    D(bug("ZuneRenderer: ZuneDestroyTexture(rp=%p, texture=%p)\n", rp, texture));
 
     if (!texture) {
         D(bug("ZuneRenderer: NULL texture, nothing to destroy\n"));
@@ -931,7 +931,7 @@ SEE ALSO
 
     D(bug("ZuneRenderer: Texture destroyed\n"));
 
-    EXIT_FUNCTION("DestroyTexture");
+    EXIT_FUNCTION("ZuneDestroyTexture");
 
     AROS_LIBFUNC_EXIT
 }
@@ -943,7 +943,7 @@ SEE ALSO
 /*****************************************************************************
 
     NAME */
-AROS_LH4(BOOL, UpdateTextureData,
+AROS_LH4(BOOL, ZuneUpdateTextureData,
 
          /*  SYNOPSIS */
          AROS_LHA(struct RenderPort *, rp, A0),
@@ -970,7 +970,7 @@ NOTES
     The update region must be within texture bounds.
 
 SEE ALSO
-    LockTexturePixels(), UnlockTexturePixels(), SetTexturePixel()
+    ZuneLockTexturePixels(), ZuneUnlockTexturePixels(), ZuneSetTexturePixel()
 
 *****************************************************************************/
 {
@@ -979,9 +979,9 @@ SEE ALSO
     ULONG row, bytes_per_pixel;
     UBYTE *src_ptr, *dst_ptr;
 
-    ENTER_FUNCTION("UpdateTextureData");
+    ENTER_FUNCTION("ZuneUpdateTextureData");
 
-    D(bug("ZuneRenderer: UpdateTextureData(rp=%p, texture=%p, data=%p, rect=%p)\n", rp, texture, data, rect));
+    D(bug("ZuneRenderer: ZuneUpdateTextureData(rp=%p, texture=%p, data=%p, rect=%p)\n", rp, texture, data, rect));
 
     if (!texture || !data || !rect) {
         D(bug("ZuneRenderer: Invalid parameters\n"));
@@ -996,7 +996,7 @@ SEE ALSO
     ZuneBackend *backend = GetTextureBackend(rp, texture);
     if (backend && backend->ops && backend->ops->UpdateTexture) {
         if (backend->ops->UpdateTexture(texture, data, rect->x, rect->y, rect->width, rect->height)) {
-            EXIT_FUNCTION("UpdateTextureData");
+            EXIT_FUNCTION("ZuneUpdateTextureData");
             return TRUE;
         }
     }
@@ -1023,7 +1023,7 @@ SEE ALSO
 
     D(bug("ZuneRenderer: Texture data updated successfully (CPU fallback)\n"));
 
-    EXIT_FUNCTION("UpdateTextureData");
+    EXIT_FUNCTION("ZuneUpdateTextureData");
     return TRUE;
 
     AROS_LIBFUNC_EXIT
@@ -1032,7 +1032,7 @@ SEE ALSO
 /*****************************************************************************
 
     NAME */
-AROS_LH3(APTR, LockTexturePixels,
+AROS_LH3(APTR, ZuneLockTexturePixels,
 
          /*  SYNOPSIS */
          AROS_LHA(struct RenderPort *, rp, A0),
@@ -1054,19 +1054,19 @@ RESULT
     Pointer to pixel data, or NULL if locking failed
 
 NOTES
-    Always call UnlockTexturePixels() when finished with direct access.
+    Always call ZuneUnlockTexturePixels() when finished with direct access.
     Do not call other texture functions while pixels are locked.
 
 SEE ALSO
-    UnlockTexturePixels(), UpdateTextureData()
+    ZuneUnlockTexturePixels(), ZuneUpdateTextureData()
 
 *****************************************************************************/
 {
     AROS_LIBFUNC_INIT
 
-    ENTER_FUNCTION("LockTexturePixels");
+    ENTER_FUNCTION("ZuneLockTexturePixels");
 
-    D(bug("ZuneRenderer: LockTexturePixels(rp=%p, texture=%p, pitch=%p)\n", rp, texture, pitch));
+    D(bug("ZuneRenderer: ZuneLockTexturePixels(rp=%p, texture=%p, pitch=%p)\n", rp, texture, pitch));
 
     if (!texture) {
         D(bug("ZuneRenderer: Invalid texture\n"));
@@ -1098,7 +1098,7 @@ SEE ALSO
 
     D(bug("ZuneRenderer: Texture pixels locked (pitch=%d)\n", texture->pitch));
 
-    EXIT_FUNCTION("LockTexturePixels");
+    EXIT_FUNCTION("ZuneLockTexturePixels");
     return texture->pixel_data;
 
     AROS_LIBFUNC_EXIT
@@ -1107,7 +1107,7 @@ SEE ALSO
 /*****************************************************************************
 
     NAME */
-AROS_LH2(void, UnlockTexturePixels,
+AROS_LH2(void, ZuneUnlockTexturePixels,
 
          /*  SYNOPSIS */
          AROS_LHA(struct RenderPort *, rp, A0),
@@ -1117,7 +1117,7 @@ AROS_LH2(void, UnlockTexturePixels,
          struct Library *, ZuneGfxBase, 79, zunegfx)
 
 /*  FUNCTION
-    Unlocks texture pixels previously locked with LockTexturePixels().
+    Unlocks texture pixels previously locked with ZuneLockTexturePixels().
 
 INPUTS
     rp - RenderPort context (used to select backend, may be NULL)
@@ -1127,24 +1127,24 @@ RESULT
     None
 
 NOTES
-    Must be called for every successful LockTexturePixels() call.
+    Must be called for every successful ZuneLockTexturePixels() call.
 
 SEE ALSO
-    LockTexturePixels(), UpdateTextureData()
+    ZuneLockTexturePixels(), ZuneUpdateTextureData()
 
 *****************************************************************************/
 {
     AROS_LIBFUNC_INIT
 
-    ENTER_FUNCTION("UnlockTexturePixels");
+    ENTER_FUNCTION("ZuneUnlockTexturePixels");
 
-    D(bug("ZuneRenderer: UnlockTexturePixels(rp=%p, texture=%p)\n", rp, texture));
+    D(bug("ZuneRenderer: ZuneUnlockTexturePixels(rp=%p, texture=%p)\n", rp, texture));
 
     ZuneBackend *backend = GetTextureBackend(rp, texture);
     if (backend && backend->ops && backend->ops->UnlockTexturePixels) {
         backend->ops->UnlockTexturePixels(texture);
         D(bug("ZuneRenderer: Texture pixels unlocked (backend)\n"));
-        EXIT_FUNCTION("UnlockTexturePixels");
+        EXIT_FUNCTION("ZuneUnlockTexturePixels");
         return;
     }
 
@@ -1152,7 +1152,7 @@ SEE ALSO
 
     D(bug("ZuneRenderer: Texture pixels unlocked\n"));
 
-    EXIT_FUNCTION("UnlockTexturePixels");
+    EXIT_FUNCTION("ZuneUnlockTexturePixels");
 
     AROS_LIBFUNC_EXIT
 }
@@ -1160,7 +1160,7 @@ SEE ALSO
 /*****************************************************************************
 
     NAME */
-AROS_LH3(ULONG, GetTexturePixel,
+AROS_LH3(ULONG, ZuneGetTexturePixel,
 
          /*  SYNOPSIS */
          AROS_LHA(struct RenderPort *, rp, A0),
@@ -1185,13 +1185,13 @@ NOTES
     Coordinates must be within texture bounds.
 
 SEE ALSO
-    SetTexturePixel(), LockTexturePixels()
+    ZuneSetTexturePixel(), ZuneLockTexturePixels()
 
 *****************************************************************************/
 {
     AROS_LIBFUNC_INIT
 
-    ENTER_FUNCTION("GetTexturePixel");
+    ENTER_FUNCTION("ZuneGetTexturePixel");
 
     if (!texture || !point) {
         return 0;
@@ -1245,7 +1245,7 @@ SEE ALSO
     } break;
     }
 
-    EXIT_FUNCTION("GetTexturePixel");
+    EXIT_FUNCTION("ZuneGetTexturePixel");
     return color;
 
     AROS_LIBFUNC_EXIT
@@ -1254,7 +1254,7 @@ SEE ALSO
 /*****************************************************************************
 
     NAME */
-AROS_LH4(void, SetTexturePixel,
+AROS_LH4(void, ZuneSetTexturePixel,
 
          /*  SYNOPSIS */
          AROS_LHA(struct RenderPort *, rp, A0),
@@ -1281,13 +1281,13 @@ NOTES
     Coordinates must be within texture bounds.
 
 SEE ALSO
-    GetTexturePixel(), UpdateTextureData()
+    ZuneGetTexturePixel(), ZuneUpdateTextureData()
 
 *****************************************************************************/
 {
     AROS_LIBFUNC_INIT
 
-    ENTER_FUNCTION("SetTexturePixel");
+    ENTER_FUNCTION("ZuneSetTexturePixel");
 
     if (!texture || !point) {
         return;
@@ -1310,7 +1310,7 @@ SEE ALSO
                                           .g = (color >> 8) & 0xFF,
                                           .b = color & 0xFF,
                                       }));
-        EXIT_FUNCTION("SetTexturePixel");
+        EXIT_FUNCTION("ZuneSetTexturePixel");
         return;
     }
 
@@ -1348,7 +1348,7 @@ SEE ALSO
     } break;
     }
 
-    EXIT_FUNCTION("SetTexturePixel");
+    EXIT_FUNCTION("ZuneSetTexturePixel");
 
     AROS_LIBFUNC_EXIT
 }

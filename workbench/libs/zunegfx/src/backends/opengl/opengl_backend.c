@@ -2474,8 +2474,23 @@ static GLAContext TryHeadlessContext(void)
 BOOL OpenGL_PreInitializeShaders(void)
 {
     GLAContext preinit_ctx;
+    struct Task *this_task;
+    IPTR stack_size;
 
     D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Initializing...\n"));
+
+    /* GL context creation and Mesa internals require significant stack space.
+     * If the stack is too small, skip pre-init entirely — shaders will be
+     * initialized later when called from a context with sufficient stack. */
+    this_task = FindTask(NULL);
+    if (this_task) {
+        stack_size = (IPTR)this_task->tc_SPUpper - (IPTR)this_task->tc_SPLower;
+        if (stack_size < ZUNEGFX_SHADER_SAFESTACK) {
+            D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Stack too small (%ld < %ld), deferring\n",
+                  (LONG)stack_size, (LONG)ZUNEGFX_SHADER_SAFESTACK));
+            return FALSE;
+        }
+    }
 
     /* Strategy 1: Use a headless GL context (no window needed) */
     preinit_ctx = TryHeadlessContext();
@@ -2567,6 +2582,10 @@ BOOL OpenGL_PreInitializeShaders(void)
         D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Stored as master context, pipe_screen=%p, sharing=%d\n",
               pipe_screen, g_opengl_priv->shared_contexts_supported));
     }
+
+    /* Unbind our context so we don't interfere with other GL users
+     * (e.g. GLCompositor which may already have a context current) */
+    glAMakeCurrent(NULL);
 
     D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Done (compositor_shared=%d)\n",
           g_using_compositor_context));
@@ -3462,7 +3481,7 @@ static BOOL OpenGLIsCompatible(struct RenderPort *rp)
      * NEW ARCHITECTURE: OpenGL compatibility is based on having a Window.
      *
      * OpenGL requires a Window to create a GL context. The RenderPort should
-     * have rp->window set (via CreateRenderPortForWindow) for OpenGL to work.
+     * have rp->window set (via ZuneCreateRenderPortForWindow) for OpenGL to work.
      *
      * With the new architecture:
      * - RenderPort is bound to a Window (required for GL context)
@@ -5007,7 +5026,7 @@ static void OpenGLBeginBatch(struct RenderPort *rp)
 {
     /*
      * OpenGL naturally batches commands. We could use this to
-     * defer glASwapBuffers until EndBatch.
+     * defer glASwapBuffers until ZuneEndBatch.
      */
     if (rp) {
         rp->batching_enabled = TRUE;

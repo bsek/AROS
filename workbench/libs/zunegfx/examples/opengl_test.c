@@ -124,13 +124,13 @@ BOOL InitDemo(void) {
 
     /* Create and activate layer compositor for this screen */
     printf("Creating layer compositor...\n");
-    compositor = CreateLayerCompositor(screen);
+    compositor = ZuneCreateLayerCompositor(screen);
     if (compositor) {
-        if (ActivateLayerCompositor(compositor)) {
+        if (ZuneActivateLayerCompositor(compositor)) {
             printf("Layer compositor ACTIVATED\n");
         } else {
             printf("WARNING: Failed to activate compositor\n");
-            DestroyLayerCompositor(compositor);
+            ZuneDestroyLayerCompositor(compositor);
             compositor = NULL;
         }
     } else {
@@ -162,13 +162,13 @@ BOOL InitDemo(void) {
     inner_width = window->Width - window->BorderLeft - window->BorderRight;
     inner_height = window->Height - window->BorderTop - window->BorderBottom;
 
-    render_port = CreateRenderPortForWindow(window, screen->ViewPort.ColorMap, BACKEND_OPENGL);
+    render_port = ZuneCreateRenderPortForWindow(window, screen->ViewPort.ColorMap, BACKEND_OPENGL);
     if (!render_port) {
         printf("ERROR: Cannot create RenderPort\n");
         return FALSE;
     }
 
-    board = CreateDrawingBoardForRenderPort(render_port, inner_width, inner_height, 0);
+    board = ZuneCreateDrawingBoardForRenderPort(render_port, inner_width, inner_height, 0);
     if (!board) {
         printf("ERROR: Cannot create DrawingBoard\n");
         return FALSE;
@@ -183,11 +183,11 @@ BOOL InitDemo(void) {
 
 void CleanupDemo(void) {
     if (board) {
-        DestroyDrawingBoard(render_port, board);
+        ZuneDestroyDrawingBoard(render_port, board);
         board = NULL;
     }
     if (render_port) {
-        DestroyRenderPort(render_port);
+        ZuneDestroyRenderPort(render_port);
         render_port = NULL;
     }
     if (window) {
@@ -195,8 +195,8 @@ void CleanupDemo(void) {
         window = NULL;
     }
     if (compositor) {
-        DeactivateLayerCompositor(compositor);
-        DestroyLayerCompositor(compositor);
+        ZuneDeactivateLayerCompositor(compositor);
+        ZuneDestroyLayerCompositor(compositor);
         compositor = NULL;
     }
     if (screen) {
@@ -220,7 +220,7 @@ void Test1_OpenGLOnly(void) {
     ZuneSetTarget(render_port, board);
 
     printf("1. Clearing background...\n");
-    ClearDrawingBoard(render_port, ZUNE_COLOR_RGB24(30, 30, 40));
+    ZuneClearDrawingBoard(render_port, ZUNE_COLOR_RGB24(30, 30, 40));
 
     printf("2. Drawing 3 OpenGL rectangles...\n");
     ZuneFillRectangleRoundedAAXYWH(render_port, 50, 150, 100, 100, 15,
@@ -271,7 +271,7 @@ void Test3_OpenGLThenCyberGfx(void) {
     ZuneSetTarget(render_port, board);
 
     printf("1. OpenGL clears background...\n");
-    ClearDrawingBoard(render_port, ZUNE_COLOR_RGB24(30, 30, 40));
+    ZuneClearDrawingBoard(render_port, ZUNE_COLOR_RGB24(30, 30, 40));
 
     printf("2. ZuneSync (copy FBO to bitmap)...\n");
     ZuneSync(render_port);

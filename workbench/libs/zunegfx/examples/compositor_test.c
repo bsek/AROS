@@ -124,13 +124,13 @@ int main(void) {
      */
     D(bug("[CompositorTest] Initializing background board GL state...\n"));
     ZuneSetTarget(bg_rp, bg_board);
-    ClearDrawingBoard(bg_rp, ZUNE_BLACK);
+    ZuneClearDrawingBoard(bg_rp, ZUNE_BLACK);
     ZuneSync(bg_rp);
     D(bug("[CompositorTest] Background board initialized.\n"));
 
     D(bug("[CompositorTest] Initializing alpha board GL state...\n"));
     ZuneSetTarget(alpha_rp, alpha_board);
-    ClearDrawingBoard(alpha_rp, ZUNE_COLOR_ARGB32(0, 0, 0, 0));
+    ZuneClearDrawingBoard(alpha_rp, ZUNE_COLOR_ARGB32(0, 0, 0, 0));
     ZuneSync(alpha_rp);
     D(bug("[CompositorTest] Alpha board initialized.\n"));
 
@@ -178,7 +178,7 @@ int main(void) {
                             DrawBackgroundWindow();
                             DrawAlphaWindow();
                             if (compositor)
-                                CompositorRefresh(compositor);
+                                ZuneCompositorRefresh(compositor);
                             break;
                     }
                     break;
@@ -299,7 +299,7 @@ BOOL InitDemo(void) {
 
     /* Create RenderPort for background window */
     D(bug("[CompositorTest] Creating RenderPort for background window (BACKEND_OPENGL=%d)...\n", BACKEND_OPENGL));
-    bg_rp = CreateRenderPortForWindow(bg_window, screen->ViewPort.ColorMap, BACKEND_OPENGL);
+    bg_rp = ZuneCreateRenderPortForWindow(bg_window, screen->ViewPort.ColorMap, BACKEND_OPENGL);
     if (!bg_rp) {
         D(bug("[CompositorTest] ERROR: Cannot create background RenderPort\n"));
         return FALSE;
@@ -317,13 +317,13 @@ BOOL InitDemo(void) {
      */
     D(bug("[CompositorTest] Priming GL context with window render...\n"));
     ZuneSetTarget(bg_rp, NULL);  /* Target window directly */
-    ClearRenderPort(bg_rp, ZUNE_BLACK);
+    ZuneClearRenderPort(bg_rp, ZUNE_BLACK);
     D(bug("[CompositorTest] GL context primed.\n"));
 
     inner_width = bg_window->Width - bg_window->BorderLeft - bg_window->BorderRight;
     inner_height = bg_window->Height - bg_window->BorderTop - bg_window->BorderBottom;
 
-    bg_board = CreateDrawingBoardForRenderPort(bg_rp, inner_width, inner_height, 0);
+    bg_board = ZuneCreateDrawingBoardForRenderPort(bg_rp, inner_width, inner_height, 0);
     if (!bg_board) {
         D(bug("[CompositorTest] ERROR: Cannot create background DrawingBoard\n"));
         return FALSE;
@@ -380,7 +380,7 @@ BOOL InitDemo(void) {
     D(bug("[CompositorTest] Alpha window: %p, Layer: %p\n", alpha_window, alpha_window->WLayer));
 
     /* Test: Use OpenGL for both windows to see if shared contexts work */
-    alpha_rp = CreateRenderPortForWindow(alpha_window, screen->ViewPort.ColorMap, BACKEND_OPENGL);
+    alpha_rp = ZuneCreateRenderPortForWindow(alpha_window, screen->ViewPort.ColorMap, BACKEND_OPENGL);
     if (!alpha_rp) {
         D(bug("[CompositorTest] ERROR: Cannot create alpha RenderPort\n"));
         return FALSE;
@@ -390,7 +390,7 @@ BOOL InitDemo(void) {
     inner_width = alpha_window->Width - alpha_window->BorderLeft - alpha_window->BorderRight;
     inner_height = alpha_window->Height - alpha_window->BorderTop - alpha_window->BorderBottom;
 
-    alpha_board = CreateDrawingBoardForRenderPort(alpha_rp, inner_width, inner_height, ZUNE_DRAWINGBOARD_ALPHA);
+    alpha_board = ZuneCreateDrawingBoardForRenderPort(alpha_rp, inner_width, inner_height, ZUNE_DRAWINGBOARD_ALPHA);
     if (!alpha_board) {
         D(bug("[CompositorTest] ERROR: Cannot create alpha DrawingBoard\n"));
         return FALSE;
@@ -400,7 +400,7 @@ BOOL InitDemo(void) {
      * Create the Layer Compositor for this screen AFTER windows are created.
      * This enables hardware-accelerated compositing for alpha windows.
      *
-     * We use CreateLayerCompositorShared() with the zunegfx master GL context
+     * We use ZuneCreateLayerCompositorShared() with the zunegfx master GL context
      * to ensure the compositor shares the same pipe_screen as zunegfx windows.
      * This is critical for first-run scenarios where Mesa hasn't cached the
      * pipe_screen yet.
@@ -409,7 +409,7 @@ BOOL InitDemo(void) {
     {
         APTR masterGLContext = ZuneGetMasterGLContext();
         D(bug("[CompositorTest] Got zunegfx master GL context: %p\n", masterGLContext));
-        compositor = CreateLayerCompositorShared(screen, masterGLContext);
+        compositor = ZuneCreateLayerCompositorShared(screen, masterGLContext);
     }
     if (!compositor) {
         D(bug("[CompositorTest] WARNING: Cannot create compositor - alpha windows may not work correctly\n"));
@@ -417,7 +417,7 @@ BOOL InitDemo(void) {
         D(bug("[CompositorTest] Compositor created: %p\n", compositor));
 
         /* Activate the compositor */
-        if (ActivateLayerCompositor(compositor)) {
+        if (ZuneActivateLayerCompositor(compositor)) {
             D(bug("[CompositorTest] Compositor activated!\n"));
         } else {
             D(bug("[CompositorTest] WARNING: Failed to activate compositor\n"));
@@ -432,7 +432,7 @@ BOOL InitDemo(void) {
         /* Get the GL context from the RenderPort if available */
         APTR gl_context = NULL;  /* TODO: Get from alpha_rp->backend_data */
 
-        struct CompositorWindow *cw = CompositorRegisterWindow(
+        struct CompositorWindow *cw = ZuneCompositorRegisterWindow(
             compositor,
             alpha_window,
             gl_context,
@@ -453,29 +453,29 @@ BOOL InitDemo(void) {
 void CleanupDemo(void) {
     if (compositor) {
         if (alpha_window)
-            CompositorUnregisterWindow(compositor, alpha_window);
-        DeactivateLayerCompositor(compositor);
-        DestroyLayerCompositor(compositor);
+            ZuneCompositorUnregisterWindow(compositor, alpha_window);
+        ZuneDeactivateLayerCompositor(compositor);
+        ZuneDestroyLayerCompositor(compositor);
         compositor = NULL;
     }
 
     if (alpha_board && alpha_rp) {
-        DestroyDrawingBoard(alpha_rp, alpha_board);
+        ZuneDestroyDrawingBoard(alpha_rp, alpha_board);
         alpha_board = NULL;
     }
 
     if (alpha_rp) {
-        DestroyRenderPort(alpha_rp);
+        ZuneDestroyRenderPort(alpha_rp);
         alpha_rp = NULL;
     }
 
     if (bg_board && bg_rp) {
-        DestroyDrawingBoard(bg_rp, bg_board);
+        ZuneDestroyDrawingBoard(bg_rp, bg_board);
         bg_board = NULL;
     }
 
     if (bg_rp) {
-        DestroyRenderPort(bg_rp);
+        ZuneDestroyRenderPort(bg_rp);
         bg_rp = NULL;
     }
 
@@ -534,7 +534,7 @@ void DrawBackgroundWindow(void) {
     ZuneSetTarget(bg_rp, bg_board);
 
     /* Clear to a nice gradient-like pattern */
-    ClearDrawingBoard(bg_rp, ZUNE_COLOR_RGB24(40, 80, 120));
+    ZuneClearDrawingBoard(bg_rp, ZUNE_COLOR_RGB24(40, 80, 120));
 
     /* Draw a grid pattern to make transparency visible */
     for (int y = 0; y < bg_board->height; y += 40) {
@@ -579,7 +579,7 @@ void DrawAlphaWindow(void) {
     ZuneSetTarget(alpha_rp, alpha_board);
 
     /* Clear to semi-transparent background */
-    ClearDrawingBoard(alpha_rp, ZUNE_COLOR_ARGB32(current_alpha, 255, 200, 100));
+    ZuneClearDrawingBoard(alpha_rp, ZUNE_COLOR_ARGB32(current_alpha, 255, 200, 100));
 
     /* Draw some shapes with varying alpha */
     ZuneFillRectangleRoundedAAXYWH(alpha_rp, 20, 20, 100, 80, 15,
@@ -605,7 +605,7 @@ void DrawAlphaWindow(void) {
 
     /* Mark dirty for compositor */
     if (compositor)
-        CompositorMarkWindowDirty(compositor, alpha_window);
+        ZuneCompositorMarkWindowDirty(compositor, alpha_window);
 }
 
 /*
@@ -617,7 +617,7 @@ void UpdateAlphaValue(UBYTE new_alpha) {
 
     /* Update compositor registration */
     if (compositor) {
-        CompositorSetWindowAlpha(compositor, alpha_window, current_alpha);
+        ZuneCompositorSetWindowAlpha(compositor, alpha_window, current_alpha);
     }
 
     /* Redraw the alpha window and composite */
@@ -626,7 +626,7 @@ void UpdateAlphaValue(UBYTE new_alpha) {
 
     /* Trigger compositor update */
     if (compositor) {
-        CompositorUpdate(compositor);
+        ZuneCompositorUpdate(compositor);
     }
 }
 

@@ -2,16 +2,18 @@
 include $(SRCDIR)/config/aros.cfg
 
 #MM- workbench-devs-monitors: devs-monitors-glcompositor
+#MM  devs-monitors-glcompositor : workbench-libs-zunegfx-includes linklibs-zunegfx
 
 FILES   := glcompositor_class glcompositor_startup glcompositor_shaders displaymode
 EXEDIR  := $(AROSDIR)/Devs/Monitors
 EXENAME := GLCompositor
 
-USER_INCLUDES := -I$(SRCDIR)/workbench/devs/monitors/include
+USER_INCLUDES := -I$(SRCDIR)/workbench/devs/monitors/include \
+                 -I$(SRCDIR)/workbench/libs/zunegfx/include
 USER_CPPFLAGS := -DDEBUG=1
 
 %build_prog mmake=devs-monitors-glcompositor \
            progname=$(EXENAME) targetdir=$(EXEDIR) \
-           files="$(FILES)" uselibs="GL"
+           files="$(FILES)" uselibs="GL zunegfx"
 
 %common

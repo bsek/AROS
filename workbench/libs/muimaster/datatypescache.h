@@ -58,7 +58,7 @@ struct dt_node
     UWORD mode;                         /* MODE_DEFAULT or MODE_PROP */
 
     /* MODE_DEFAULT: ZuneTexture-based rendering (new path) */
-    struct ZuneTexture *texture;        /* Primary storage - loaded via CreateTextureFromFile */
+    struct ZuneTexture *texture;        /* Primary storage - loaded via ZuneCreateTextureFromFile */
 
     /* Legacy fields for backwards compatibility during transition */
     Object *o;                          /* DataTypes object (legacy, NULL for new path) */

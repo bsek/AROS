@@ -249,7 +249,7 @@ static BOOL frame_renderer_background_to_brush(struct MUI_ImageSpec_intern *back
             cached = TRUE;
         } else if (node->o) {
             /* Legacy fallback: create texture from DataTypes object */
-            tex = CreateTextureFromDatatype(NULL, (APTR)node->o, ZUNE_TEXTURE_WRAPPING);
+            tex = ZuneCreateTextureFromDatatype(NULL, (APTR)node->o, ZUNE_TEXTURE_WRAPPING);
             if (tex) {
                 node->texture = tex;
                 tex->ref_count++; /* retain while brush is in use */
@@ -405,7 +405,7 @@ BOOL zune_frame_try_renderer(Object *obj, struct MUI_AreaData *data, const struc
             };
 
             ULONG pitch;
-            APTR lock = LockDrawingBoardPixels(buffer_port, &pitch);
+            APTR lock = ZuneLockDrawingBoardPixels(buffer_port, &pitch);
 
             if (lock) {
               D(bug("Locking drawingboard succeeded!\n"));
@@ -420,7 +420,7 @@ BOOL zune_frame_try_renderer(Object *obj, struct MUI_AreaData *data, const struc
             }
 
             if (lock) {
-                UnlockDrawingBoardPixels(buffer_port);
+                ZuneUnlockDrawingBoardPixels(buffer_port);
             }
 
             /* Blit result back to screen */
@@ -456,7 +456,7 @@ BOOL zune_frame_try_renderer(Object *obj, struct MUI_AreaData *data, const struc
             /* If border_width == 0, no frame to draw - return FALSE to use normal path */
             if (border_width == 0) {
                 if (fill_brush_storage.texture) {
-                    DestroyTexture(NULL, fill_brush_storage.texture);
+                    ZuneDestroyTexture(NULL, fill_brush_storage.texture);
                 }
                 return FALSE;
             }
@@ -464,7 +464,7 @@ BOOL zune_frame_try_renderer(Object *obj, struct MUI_AreaData *data, const struc
     }
 
     if (fill_brush_storage.texture) {
-        DestroyTexture(NULL, fill_brush_storage.texture);
+        ZuneDestroyTexture(NULL, fill_brush_storage.texture);
         fill_brush_storage.texture = NULL;
     }
 

@@ -63,7 +63,8 @@ BACKEND_FILES := \
         src/backends/opengl/opengl_backend
 
 COMPOSITOR_FILES := \
-        src/layer_compositor
+        src/layer_compositor \
+        src/zunegfx_compositor
 
 ROOT_FILES := \
         zunegfx_init
