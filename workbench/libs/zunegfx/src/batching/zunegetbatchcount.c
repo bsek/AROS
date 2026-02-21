@@ -8,7 +8,7 @@
 /*****************************************************************************
 
     NAME */
-AROS_LH1(ULONG, GetBatchCount,
+AROS_LH1(ULONG, ZuneGetBatchCount,
 
          /*  SYNOPSIS */
          AROS_LHA(struct RenderPort *, rp, A0),
@@ -26,7 +26,7 @@ RESULT
     Number of batched operations, or 0 if batching is not active.
 
 SEE ALSO
-    BeginBatch(), FlushBatch()
+    ZuneBeginBatch(), ZuneFlushBatch()
 
 *****************************************************************************/
 {

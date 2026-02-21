@@ -351,9 +351,9 @@ struct ZuneBrush {
                                    color)                                      \
   ZuneDrawLineStyledAA((rp), ZUNE_POINT_PTR((startX), (startY)),               \
                        ZUNE_POINT_PTR((endX), (endY)), (width), (color))
-#define GetPixelAt(rp, x, y) GetPixel((rp), ZUNE_POINT_PTR((x), (y)))
+#define GetPixelAt(rp, x, y) ZuneGetPixel((rp), ZUNE_POINT_PTR((x), (y)))
 #define SetPixelAt(rp, x, y, color)                                            \
-  SetPixel((rp), ZUNE_POINT_PTR((x), (y)), (color))
+  ZuneSetPixel((rp), ZUNE_POINT_PTR((x), (y)), (color))
 
 /*
  * Blit helper macros - set target before blitting for convenience
@@ -510,7 +510,7 @@ struct ZuneTexture {
 /*****************************************************************************/
 
 /*
- * CreateRenderPortForWindow - Create a RenderPort bound to a Window
+ * ZuneCreateRenderPortForWindow - Create a RenderPort bound to a Window
  *
  * This is the primary way to create a RenderPort. The RenderPort is bound
  * to the window and automatically selects the best backend if backend_type is NULL
@@ -518,21 +518,21 @@ struct ZuneTexture {
  *
  * The window reference is required for OpenGL to create a GL context.
  */
-struct RenderPort *CreateRenderPortForWindow(struct Window *window,
+struct RenderPort *ZuneCreateRenderPortForWindow(struct Window *window,
                                              struct ColorMap *colormap,
                                              UWORD backend_type);
 
 /*
- * CreateDrawingBoardForRenderPort - Create DrawingBoard bound to a RenderPort
+ * ZuneCreateDrawingBoardForRenderPort - Create DrawingBoard bound to a RenderPort
  *
  * The DrawingBoard always has a BitMap for legacy compatibility (SetAPen, etc).
  * If OpenGL is active, an FBO is also created for accelerated rendering.
  */
-struct DrawingBoard *CreateDrawingBoardForRenderPort(struct RenderPort *rp,
+struct DrawingBoard *ZuneCreateDrawingBoardForRenderPort(struct RenderPort *rp,
                                                      UWORD width, UWORD height, ULONG flags);
 
-void DestroyRenderPort(struct RenderPort *rp);
-void ClearRenderPort(struct RenderPort *rp, ULONG color);
+void ZuneDestroyRenderPort(struct RenderPort *rp);
+void ZuneClearRenderPort(struct RenderPort *rp, ULONG color);
 
 /*****************************************************************************/
 /* DrawingBoard Management */
@@ -549,8 +549,8 @@ void ClearRenderPort(struct RenderPort *rp, ULONG color);
  */
 BOOL ZuneSetTarget(struct RenderPort *rp, struct DrawingBoard *board);
 
-void DestroyDrawingBoard(struct RenderPort *rp, struct DrawingBoard *board);
-void ClearDrawingBoard(struct RenderPort *rp, ULONG color);
+void ZuneDestroyDrawingBoard(struct RenderPort *rp, struct DrawingBoard *board);
+void ZuneClearDrawingBoard(struct RenderPort *rp, ULONG color);
 
 /* Note: SyncDrawingBoard has been removed. Use ZunePresent() or ZuneBlit()
  * instead - they automatically sync the backend buffer before blitting. */
@@ -655,20 +655,20 @@ void ZuneDrawLineStyledAA(struct RenderPort *rp, struct ZunePoint *start,
 /* Direct Pixel Access */
 /*****************************************************************************/
 
-APTR LockDrawingBoardPixels(struct RenderPort *rp, ULONG *pitch);
-void UnlockDrawingBoardPixels(struct RenderPort *rp);
-ULONG GetPixel(struct RenderPort *rp, struct ZunePoint *point);
-void SetPixel(struct RenderPort *rp, struct ZunePoint *point, ULONG color);
+APTR ZuneLockDrawingBoardPixels(struct RenderPort *rp, ULONG *pitch);
+void ZuneUnlockDrawingBoardPixels(struct RenderPort *rp);
+ULONG ZuneGetPixel(struct RenderPort *rp, struct ZunePoint *point);
+void ZuneSetPixel(struct RenderPort *rp, struct ZunePoint *point, ULONG color);
 
 /*****************************************************************************/
 /* Performance and Batching */
 /*****************************************************************************/
 
-void BeginBatch(struct RenderPort *rp);
-void EndBatch(struct RenderPort *rp);
-void FlushBatch(struct RenderPort *rp);
-BOOL IsBatchingEnabled(struct RenderPort *rp);
-ULONG GetBatchCount(struct RenderPort *rp);
+void ZuneBeginBatch(struct RenderPort *rp);
+void ZuneEndBatch(struct RenderPort *rp);
+void ZuneFlushBatch(struct RenderPort *rp);
+BOOL ZuneIsBatchingEnabled(struct RenderPort *rp);
+ULONG ZuneGetBatchCount(struct RenderPort *rp);
 
 /*****************************************************************************/
 /* Blitting and Surface Operations */
@@ -738,35 +738,35 @@ BOOL ZuneReload(struct RenderPort *rp);
 /* Texture Management */
 /*****************************************************************************/
 
-struct ZuneTexture *CreateTexture(struct RenderPort *rp, UWORD width,
+struct ZuneTexture *ZuneCreateTexture(struct RenderPort *rp, UWORD width,
                                   UWORD height, UBYTE depth, ULONG format,
                                   ULONG flags);
-struct ZuneTexture *CreateTextureFromData(struct RenderPort *rp, APTR data,
+struct ZuneTexture *ZuneCreateTextureFromData(struct RenderPort *rp, APTR data,
                                           UWORD width, UWORD height,
                                           UBYTE depth, ULONG format,
                                           ULONG pitch, ULONG flags);
-struct ZuneTexture *CreateTextureFromDrawingBoard(struct RenderPort *rp,
+struct ZuneTexture *ZuneCreateTextureFromDrawingBoard(struct RenderPort *rp,
                                                   ULONG flags);
-struct ZuneTexture *CreateTextureFromDatatype(struct RenderPort *rp,
+struct ZuneTexture *ZuneCreateTextureFromDatatype(struct RenderPort *rp,
                                               APTR dt_object, ULONG flags);
-struct ZuneTexture *CreateTextureFromFile(struct RenderPort *rp,
+struct ZuneTexture *ZuneCreateTextureFromFile(struct RenderPort *rp,
                                           CONST_STRPTR filename,
                                           struct Screen *screen,
                                           ULONG flags);
-void DestroyTexture(struct RenderPort *rp, struct ZuneTexture *texture);
+void ZuneDestroyTexture(struct RenderPort *rp, struct ZuneTexture *texture);
 
 /*****************************************************************************/
 /* Texture Data Operations */
 /*****************************************************************************/
 
-BOOL UpdateTextureData(struct RenderPort *rp, struct ZuneTexture *texture,
+BOOL ZuneUpdateTextureData(struct RenderPort *rp, struct ZuneTexture *texture,
                        APTR data, struct ZuneRect *rect);
-APTR LockTexturePixels(struct RenderPort *rp, struct ZuneTexture *texture,
+APTR ZuneLockTexturePixels(struct RenderPort *rp, struct ZuneTexture *texture,
                        ULONG *pitch);
-void UnlockTexturePixels(struct RenderPort *rp, struct ZuneTexture *texture);
-ULONG GetTexturePixel(struct RenderPort *rp, struct ZuneTexture *texture,
+void ZuneUnlockTexturePixels(struct RenderPort *rp, struct ZuneTexture *texture);
+ULONG ZuneGetTexturePixel(struct RenderPort *rp, struct ZuneTexture *texture,
                       struct ZunePoint *point);
-void SetTexturePixel(struct RenderPort *rp, struct ZuneTexture *texture,
+void ZuneSetTexturePixel(struct RenderPort *rp, struct ZuneTexture *texture,
                      struct ZunePoint *point, ULONG color);
 
 /*****************************************************************************/
@@ -809,9 +809,9 @@ struct Region *ZuneCreateRoundedRectRegion(struct ZuneRect *rect,
 /* Color Utilities */
 /*****************************************************************************/
 
-ULONG RGBToColor(UBYTE r, UBYTE g, UBYTE b);
-ULONG ARGBToColor(UBYTE a, UBYTE r, UBYTE g, UBYTE b);
-ULONG BlendColors(ULONG color1, ULONG color2, UBYTE alpha);
+ULONG ZuneRGBToColor(UBYTE r, UBYTE g, UBYTE b);
+ULONG ZuneARGBToColor(UBYTE a, UBYTE r, UBYTE g, UBYTE b);
+ULONG ZuneBlendColors(ULONG color1, ULONG color2, UBYTE alpha);
 
 /*****************************************************************************/
 /* Cache Utilities */

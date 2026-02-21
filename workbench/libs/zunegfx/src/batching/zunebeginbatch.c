@@ -8,7 +8,7 @@
 /*****************************************************************************
 
     NAME */
-AROS_LH1(void, BeginBatch,
+AROS_LH1(void, ZuneBeginBatch,
 
          /*  SYNOPSIS */
          AROS_LHA(struct RenderPort *, rp, A0),
@@ -18,7 +18,7 @@ AROS_LH1(void, BeginBatch,
 
 /*  FUNCTION
     Begins a batch rendering session. All subsequent drawing operations
-    will be batched together for improved performance until EndBatch()
+    will be batched together for improved performance until ZuneEndBatch()
     is called.
 
 INPUTS
@@ -33,15 +33,15 @@ NOTES
     flushed when the color changes or the batch buffer is full.
 
 SEE ALSO
-    EndBatch(), FlushBatch(), IsBatchingEnabled()
+    ZuneEndBatch(), ZuneFlushBatch(), ZuneIsBatchingEnabled()
 
 *****************************************************************************/
 {
   AROS_LIBFUNC_INIT
 
-  ENTER_FUNCTION("BeginBatch");
+  ENTER_FUNCTION("ZuneBeginBatch");
 
-  D(bug("ZuneRenderer: BeginBatch(rp=%p)\n", rp));
+  D(bug("ZuneRenderer: ZuneBeginBatch(rp=%p)\n", rp));
 
   if (!ValidateRenderPort(rp)) {
     D(bug("ZuneRenderer: Invalid RenderPort\n"));
@@ -69,7 +69,7 @@ SEE ALSO
 
   D(bug("ZuneRenderer: Batch session started\n"));
 
-  EXIT_FUNCTION("BeginBatch");
+  EXIT_FUNCTION("ZuneBeginBatch");
 
   AROS_LIBFUNC_EXIT
 }

@@ -803,6 +803,9 @@ static void PurgeStaleWindows(struct LayerCompositor *comp,
 /* PUBLIC API: Internal implementations called by library wrappers         */
 /* ════════════════════════════════════════════════════════════════════════ */
 
+/* Forward declaration */
+struct LayerCompositor *CreateLayerCompositorSharedInternal(struct Screen *screen, APTR masterGLContext);
+
 /*
  * CreateLayerCompositorInternal - Create a LayerCompositor for a screen.
  * Discovers the GLCompositor master context via the published semaphore.

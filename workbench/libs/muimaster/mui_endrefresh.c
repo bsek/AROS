@@ -49,7 +49,7 @@
 
     /* End batching before finishing refresh */
     if (mri->mri_RenderPort) {
-        EndBatch(mri->mri_RenderPort);
+        ZuneEndBatch(mri->mri_RenderPort);
     }
 
     EndRefresh(w, TRUE);

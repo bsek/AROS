@@ -50,7 +50,7 @@ void CompositorSetShadowInternal(struct LayerCompositor *comp,
 /*****************************************************************************
 
     NAME */
-AROS_LH1(struct LayerCompositor *, CreateLayerCompositor,
+AROS_LH1(struct LayerCompositor *, ZuneCreateLayerCompositor,
 
 /*  SYNOPSIS */
     AROS_LHA(struct Screen *, screen, A0),
@@ -79,7 +79,7 @@ RESULT
 /*****************************************************************************
 
     NAME */
-AROS_LH2(struct LayerCompositor *, CreateLayerCompositorShared,
+AROS_LH2(struct LayerCompositor *, ZuneCreateLayerCompositorShared,
 
 /*  SYNOPSIS */
     AROS_LHA(struct Screen *, screen, A0),
@@ -110,7 +110,7 @@ RESULT
 /*****************************************************************************
 
     NAME */
-AROS_LH1(void, DestroyLayerCompositor,
+AROS_LH1(void, ZuneDestroyLayerCompositor,
 
 /*  SYNOPSIS */
     AROS_LHA(struct LayerCompositor *, comp, A0),
@@ -136,7 +136,7 @@ INPUTS
 /*****************************************************************************
 
     NAME */
-AROS_LH1(BOOL, ActivateLayerCompositor,
+AROS_LH1(BOOL, ZuneActivateLayerCompositor,
 
 /*  SYNOPSIS */
     AROS_LHA(struct LayerCompositor *, comp, A0),
@@ -165,7 +165,7 @@ RESULT
 /*****************************************************************************
 
     NAME */
-AROS_LH1(void, DeactivateLayerCompositor,
+AROS_LH1(void, ZuneDeactivateLayerCompositor,
 
 /*  SYNOPSIS */
     AROS_LHA(struct LayerCompositor *, comp, A0),
@@ -191,7 +191,7 @@ INPUTS
 /*****************************************************************************
 
     NAME */
-AROS_LH5(struct CompositorWindow *, CompositorRegisterWindow,
+AROS_LH5(struct CompositorWindow *, ZuneCompositorRegisterWindow,
 
 /*  SYNOPSIS */
     AROS_LHA(struct LayerCompositor *, comp, A0),
@@ -228,7 +228,7 @@ RESULT
 /*****************************************************************************
 
     NAME */
-AROS_LH2(void, CompositorUnregisterWindow,
+AROS_LH2(void, ZuneCompositorUnregisterWindow,
 
 /*  SYNOPSIS */
     AROS_LHA(struct LayerCompositor *, comp, A0),
@@ -256,7 +256,7 @@ INPUTS
 /*****************************************************************************
 
     NAME */
-AROS_LH3(void, CompositorSetWindowAlpha,
+AROS_LH3(void, ZuneCompositorSetWindowAlpha,
 
 /*  SYNOPSIS */
     AROS_LHA(struct LayerCompositor *, comp, A0),
@@ -286,7 +286,7 @@ INPUTS
 /*****************************************************************************
 
     NAME */
-AROS_LH2(void, CompositorMarkWindowDirty,
+AROS_LH2(void, ZuneCompositorMarkWindowDirty,
 
 /*  SYNOPSIS */
     AROS_LHA(struct LayerCompositor *, comp, A0),
@@ -314,7 +314,7 @@ INPUTS
 /*****************************************************************************
 
     NAME */
-AROS_LH2(struct CompositorWindow *, CompositorFindWindow,
+AROS_LH2(struct CompositorWindow *, ZuneCompositorFindWindow,
 
 /*  SYNOPSIS */
     AROS_LHA(struct LayerCompositor *, comp, A0),
@@ -345,7 +345,7 @@ RESULT
 /*****************************************************************************
 
     NAME */
-AROS_LH1(void, CompositorUpdate,
+AROS_LH1(void, ZuneCompositorUpdate,
 
 /*  SYNOPSIS */
     AROS_LHA(struct LayerCompositor *, comp, A0),
@@ -371,7 +371,7 @@ INPUTS
 /*****************************************************************************
 
     NAME */
-AROS_LH1(void, CompositorRefresh,
+AROS_LH1(void, ZuneCompositorRefresh,
 
 /*  SYNOPSIS */
     AROS_LHA(struct LayerCompositor *, comp, A0),
@@ -397,7 +397,7 @@ INPUTS
 /*****************************************************************************
 
     NAME */
-AROS_LH5(void, CompositorSetShadow,
+AROS_LH5(void, ZuneCompositorSetShadow,
 
 /*  SYNOPSIS */
     AROS_LHA(struct LayerCompositor *, comp, A0),

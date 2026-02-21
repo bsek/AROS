@@ -353,7 +353,7 @@ BOOL ZuneBrushToInternalColor(struct RenderPort *rp,
 /*****************************************************************************
 
     NAME */
-AROS_LH3(ULONG, RGBToColor,
+AROS_LH3(ULONG, ZuneRGBToColor,
 
          /*  SYNOPSIS */
          AROS_LHA(UBYTE, r, D0), AROS_LHA(UBYTE, g, D1), AROS_LHA(UBYTE, b, D2),
@@ -373,7 +373,7 @@ RESULT
     ARGB color value with alpha = 255
 
 SEE ALSO
-    ARGBToColor(), BlendColors()
+    ZuneARGBToColor(), ZuneBlendColors()
 
 *****************************************************************************/
 {
@@ -387,7 +387,7 @@ SEE ALSO
 /*****************************************************************************
 
     NAME */
-AROS_LH4(ULONG, ARGBToColor,
+AROS_LH4(ULONG, ZuneARGBToColor,
 
          /*  SYNOPSIS */
          AROS_LHA(UBYTE, a, D0), AROS_LHA(UBYTE, r, D1), AROS_LHA(UBYTE, g, D2),
@@ -409,7 +409,7 @@ RESULT
     ARGB color value
 
 SEE ALSO
-    RGBToColor(), BlendColors()
+    ZuneRGBToColor(), ZuneBlendColors()
 
 *****************************************************************************/
 {
@@ -423,7 +423,7 @@ SEE ALSO
 /*****************************************************************************
 
     NAME */
-AROS_LH3(ULONG, BlendColors,
+AROS_LH3(ULONG, ZuneBlendColors,
 
          /*  SYNOPSIS */
          AROS_LHA(ULONG, color1, D0), AROS_LHA(ULONG, color2, D1),
@@ -448,7 +448,7 @@ NOTES
 * alpha
 
 SEE ALSO
-    RGBToColor(), ARGBToColor()
+    ZuneRGBToColor(), ZuneARGBToColor()
 
 *****************************************************************************/
 {

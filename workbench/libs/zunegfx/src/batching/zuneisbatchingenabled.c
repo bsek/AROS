@@ -8,7 +8,7 @@
 /*****************************************************************************
 
     NAME */
-AROS_LH1(BOOL, IsBatchingEnabled,
+AROS_LH1(BOOL, ZuneIsBatchingEnabled,
 
          /*  SYNOPSIS */
          AROS_LHA(struct RenderPort *, rp, A0),
@@ -26,7 +26,7 @@ RESULT
     TRUE if batching is enabled, FALSE otherwise.
 
 SEE ALSO
-    BeginBatch(), EndBatch()
+    ZuneBeginBatch(), ZuneEndBatch()
 
 *****************************************************************************/
 {

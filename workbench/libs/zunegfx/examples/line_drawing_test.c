@@ -173,12 +173,12 @@ BOOL InitTest(void)
 void CleanupTest(void)
 {
     if (test_rp) {
-        DestroyRenderPort(test_rp);
+        ZuneDestroyRenderPort(test_rp);
         test_rp = NULL;
     }
 
     if (test_board) {
-        DestroyDrawingBoard(test_board);
+        ZuneDestroyDrawingBoard(test_board);
         test_board = NULL;
     }
 
@@ -219,10 +219,10 @@ void TestLockedLineDrawing(void)
     ULONG pitch;
 
     /* Clear the DrawingBoard */
-    ClearDrawingBoard(test_rp, ZUNE_BLACK);
+    ZuneClearDrawingBoard(test_rp, ZUNE_BLACK);
 
     printf("  Locking DrawingBoard pixels...\n");
-    pixels = LockDrawingBoardPixels(test_rp, &pitch);
+    pixels = ZuneLockDrawingBoardPixels(test_rp, &pitch);
     if (!pixels) {
         printf("  ERROR: Cannot lock DrawingBoard pixels\n");
         return;
@@ -238,14 +238,14 @@ void TestLockedLineDrawing(void)
     DrawLineStressTest(TRUE, 400, 0);
 
     /* Unlock pixels */
-    UnlockDrawingBoardPixels(test_rp);
+    ZuneUnlockDrawingBoardPixels(test_rp);
     printf("  Locked line drawing test completed\n");
 }
 
 void TestUnlockedLineDrawing(void)
 {
     /* Clear the DrawingBoard */
-    ClearDrawingBoard(test_rp, ZUNE_BLACK);
+    ZuneClearDrawingBoard(test_rp, ZUNE_BLACK);
 
     printf("  Using unlocked DrawingBoard (WriteRGBPixel calls)...\n");
 
@@ -337,12 +337,12 @@ void DrawLineStressTest(BOOL locked, int offset_x, int offset_y)
 void VerifyLineAccuracy(void)
 {
     /* Clear the DrawingBoard */
-    ClearDrawingBoard(test_rp, ZUNE_BLACK);
+    ZuneClearDrawingBoard(test_rp, ZUNE_BLACK);
 
     printf("  Drawing accuracy verification patterns...\n");
 
     /* Lock for this test to use direct pixel access */
-    APTR pixels = LockDrawingBoardPixels(test_rp, NULL);
+    APTR pixels = ZuneLockDrawingBoardPixels(test_rp, NULL);
     if (!pixels) {
         printf("  ERROR: Cannot lock pixels for accuracy test\n");
         return;
@@ -387,7 +387,7 @@ void VerifyLineAccuracy(void)
     ZuneDrawLinePoints(test_rp, 700, 500, 900, 500, ZUNE_CYAN);     // End outside
     ZuneDrawLinePoints(test_rp, 700, 500, 700, 700, ZUNE_CYAN);     // End outside
 
-    UnlockDrawingBoardPixels(test_rp);
+    ZuneUnlockDrawingBoardPixels(test_rp);
     printf("  Line accuracy verification completed\n");
 }
 

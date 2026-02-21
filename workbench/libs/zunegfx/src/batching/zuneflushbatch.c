@@ -8,7 +8,7 @@
 /*****************************************************************************
 
     NAME */
-AROS_LH1(void, FlushBatch,
+AROS_LH1(void, ZuneFlushBatch,
 
          /*  SYNOPSIS */
          AROS_LHA(struct RenderPort *, rp, A0),
@@ -32,15 +32,15 @@ NOTES
     will start a new batch.
 
 SEE ALSO
-    BeginBatch(), EndBatch()
+    ZuneBeginBatch(), ZuneEndBatch()
 
 *****************************************************************************/
 {
   AROS_LIBFUNC_INIT
 
-  ENTER_FUNCTION("FlushBatch");
+  ENTER_FUNCTION("ZuneFlushBatch");
 
-  D(bug("ZuneRenderer: FlushBatch(rp=%p)\n", rp));
+  D(bug("ZuneRenderer: ZuneFlushBatch(rp=%p)\n", rp));
 
   if (!ValidateRenderPort(rp)) {
     D(bug("ZuneRenderer: Invalid RenderPort\n"));
@@ -57,7 +57,7 @@ SEE ALSO
 
   D(bug("ZuneRenderer: Manual batch flush completed\n"));
 
-  EXIT_FUNCTION("FlushBatch");
+  EXIT_FUNCTION("ZuneFlushBatch");
 
   AROS_LIBFUNC_EXIT
 }

@@ -114,8 +114,11 @@ BOOL InitializeZuneRenderer(struct IntZuneGfxBase *base) {
    */
   if (ZuneIsBackendAvailable(BACKEND_OPENGL)) {
     extern BOOL OpenGL_PreInitializeShaders(void);
+    BOOL shader_result;
     D(bug("ZuneRenderer: Pre-initializing OpenGL shaders...\n"));
-    if (OpenGL_PreInitializeShaders()) {
+    shader_result = OpenGL_PreInitializeShaders();
+    D(bug("ZuneRenderer: PreInitializeShaders returned %d\n", shader_result));
+    if (shader_result) {
       D(bug("ZuneRenderer: OpenGL shaders pre-initialized successfully\n"));
     } else {
       D(bug("ZuneRenderer: OpenGL shader pre-initialization failed (will retry on first window)\n"));
@@ -302,7 +305,7 @@ RESULT
 
   ENTER_FUNCTION("CreateRenderPortForWindowInternal");
 
-  D(bug("ZuneRenderer: CreateRenderPortForWindow(window=%p, colormap=%p)\n",
+  D(bug("ZuneRenderer: ZuneCreateRenderPortForWindow(window=%p, colormap=%p)\n",
         window, colormap));
 
   if (!window || !colormap) {
@@ -380,7 +383,7 @@ RESULT
 /*****************************************************************************
 
     NAME */
-AROS_LH3(struct RenderPort *, CreateRenderPortForWindow,
+AROS_LH3(struct RenderPort *, ZuneCreateRenderPortForWindow,
 
          /*  SYNOPSIS */
          AROS_LHA(struct Window *, window, A0),
@@ -397,12 +400,12 @@ AROS_LH3(struct RenderPort *, CreateRenderPortForWindow,
 *****************************************************************************/
 {
   AROS_LIBFUNC_INIT
-  ENTER_FUNCTION("CreateRenderPortForWindow");
+  ENTER_FUNCTION("ZuneCreateRenderPortForWindow");
 
   struct IntZuneGfxBase *base = ZRB(ZuneGfxBase);
   return CreateRenderPortForWindowInternal(base, window, colormap, backend_type);
 
-  EXIT_FUNCTION("CreateRenderPortForWindow");
+  EXIT_FUNCTION("ZuneCreateRenderPortForWindow");
   AROS_LIBFUNC_EXIT
 }
 
@@ -595,7 +598,7 @@ struct RenderPort *CreateRenderPortInternal(struct IntZuneGfxBase *base,
 /*****************************************************************************
 
     NAME */
-AROS_LH1(void, DestroyRenderPort,
+AROS_LH1(void, ZuneDestroyRenderPort,
 
          /*  SYNOPSIS */
          AROS_LHA(struct RenderPort *, rp, A0),
@@ -626,9 +629,9 @@ SEE ALSO
 
   struct IntZuneGfxBase *base = ZRB(ZuneGfxBase);
 
-  ENTER_FUNCTION("DestroyRenderPort");
+  ENTER_FUNCTION("ZuneDestroyRenderPort");
 
-  D(bug("ZuneRenderer: DestroyRenderPort(rp=%p)\n", rp));
+  D(bug("ZuneRenderer: ZuneDestroyRenderPort(rp=%p)\n", rp));
 
   if (!rp) {
     D(bug("ZuneRenderer: NULL RenderPort, nothing to destroy\n"));
@@ -655,7 +658,7 @@ SEE ALSO
 
   D(bug("ZuneRenderer: RenderPort destroyed\n"));
 
-  EXIT_FUNCTION("DestroyRenderPort");
+  EXIT_FUNCTION("ZuneDestroyRenderPort");
 
   AROS_LIBFUNC_EXIT
 }
@@ -663,7 +666,7 @@ SEE ALSO
 /*****************************************************************************
 
     NAME */
-AROS_LH2(void, ClearRenderPort,
+AROS_LH2(void, ZuneClearRenderPort,
 
          /*  SYNOPSIS */
          AROS_LHA(struct RenderPort *, rp, A0), AROS_LHA(ULONG, color, D0),
@@ -686,15 +689,15 @@ NOTES
     based on the active backend.
 
 SEE ALSO
-    FillRectangle(), ClearDrawingBoard()
+    FillRectangle(), ZuneClearDrawingBoard()
 
 *****************************************************************************/
 {
   AROS_LIBFUNC_INIT
 
-  ENTER_FUNCTION("ClearRenderPort");
+  ENTER_FUNCTION("ZuneClearRenderPort");
 
-  D(bug("ZuneRenderer: ClearRenderPort(rp=%p, color=0x%08x)\n", rp, color));
+  D(bug("ZuneRenderer: ZuneClearRenderPort(rp=%p, color=0x%08x)\n", rp, color));
 
   if (!ValidateRenderPort(rp)) {
     D(bug("ZuneRenderer: Invalid RenderPort\n"));
@@ -705,7 +708,7 @@ SEE ALSO
       ZuneColorToInternal(rp, color, rp->pixel_format);
   ZUNE_BACKEND_CALL(rp, ClearRenderPort, &internal_color);
 
-  EXIT_FUNCTION("ClearRenderPort");
+  EXIT_FUNCTION("ZuneClearRenderPort");
 
   AROS_LIBFUNC_EXIT
 }
@@ -737,7 +740,7 @@ AROS_LH0(APTR, ZuneGetMasterGLContext,
 
 /*  FUNCTION
     Returns the master OpenGL context used by zunegfx for context sharing.
-    This context can be passed to CreateLayerCompositorShared() to ensure
+    This context can be passed to ZuneCreateLayerCompositorShared() to ensure
     the compositor shares the same pipe_screen as zunegfx windows.
 
 INPUTS
@@ -755,7 +758,7 @@ NOTES
     pipe_screen which cannot access zunegfx FBO contents.
 
 SEE ALSO
-    CreateLayerCompositorShared()
+    ZuneCreateLayerCompositorShared()
 
 *****************************************************************************/
 {

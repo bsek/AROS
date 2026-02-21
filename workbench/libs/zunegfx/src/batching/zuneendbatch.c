@@ -8,7 +8,7 @@
 /*****************************************************************************
 
     NAME */
-AROS_LH1(void, EndBatch,
+AROS_LH1(void, ZuneEndBatch,
 
          /*  SYNOPSIS */
          AROS_LHA(struct RenderPort *, rp, A0),
@@ -30,15 +30,15 @@ NOTES
     and disables batching mode for the RenderPort.
 
 SEE ALSO
-    BeginBatch(), FlushBatch()
+    ZuneBeginBatch(), ZuneFlushBatch()
 
 *****************************************************************************/
 {
   AROS_LIBFUNC_INIT
 
-  ENTER_FUNCTION("EndBatch");
+  ENTER_FUNCTION("ZuneEndBatch");
 
-  D(bug("ZuneRenderer: EndBatch(rp=%p)\n", rp));
+  D(bug("ZuneRenderer: ZuneEndBatch(rp=%p)\n", rp));
 
   if (!ValidateRenderPort(rp)) {
     D(bug("ZuneRenderer: Invalid RenderPort\n"));
@@ -62,7 +62,7 @@ SEE ALSO
 
   D(bug("ZuneRenderer: Batch session ended\n"));
 
-  EXIT_FUNCTION("EndBatch");
+  EXIT_FUNCTION("ZuneEndBatch");
 
   AROS_LIBFUNC_EXIT
 }
