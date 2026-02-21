@@ -6,7 +6,7 @@
     This file implements the CyberGraphics backend using the new unified
     backend interface. It provides hardware-accelerated rendering with
     full antialiasing support for both screen and DrawingBoard targets
-    via RenderPort.
+    via RenderContext.
 */
 
 #include "graphics/rastport.h"
@@ -50,38 +50,38 @@ typedef struct CybergfxPrivateData {
 static BOOL CybergfxInitBackend(ZuneBackendContext *ctx);
 static void CybergfxCleanupBackend(ZuneBackendContext *ctx);
 static BOOL CybergfxIsAvailable(void);
-static BOOL CybergfxIsCompatible(struct RenderPort *rp);
+static BOOL CybergfxIsCompatible(struct RenderContext *rctx);
 static ULONG CybergfxGetCapabilities(void);
 static ULONG CybergfxGetPixelFormat(struct BitMap *bitmap);
 
-static BOOL CybergfxInitRenderPort(struct RenderPort *rp);
-static void CybergfxCleanupRenderPort(struct RenderPort *rp);
+static BOOL CybergfxInitRenderContext(struct RenderContext *rctx);
+static void CybergfxCleanupRenderContext(struct RenderContext *rctx);
 
-static BOOL CybergfxPrepareColor(struct RenderPort *rp, struct InternalColor *color);
-static void CybergfxReleaseColor(struct RenderPort *rp, struct InternalColor *color);
+static BOOL CybergfxPrepareColor(struct RenderContext *rctx, struct InternalColor *color);
+static void CybergfxReleaseColor(struct RenderContext *rctx, struct InternalColor *color);
 
-void CybergfxDrawPixel(struct RenderPort *rp, WORD x, WORD y, struct InternalColor *color, BOOL antialias);
+void CybergfxDrawPixel(struct RenderContext *rctx, WORD x, WORD y, struct InternalColor *color, BOOL antialias);
 
-static void CybergfxClearRenderPort(struct RenderPort *rp, struct InternalColor *color);
+static void CybergfxClearRenderContext(struct RenderContext *rctx, struct InternalColor *color);
 
-static void CybergfxBeginBatch(struct RenderPort *rp);
-static void CybergfxEndBatch(struct RenderPort *rp);
-static void CybergfxFlushBatch(struct RenderPort *rp);
-static BOOL CybergfxIsBatching(struct RenderPort *rp);
+static void CybergfxBeginBatch(struct RenderContext *rctx);
+static void CybergfxEndBatch(struct RenderContext *rctx);
+static void CybergfxFlushBatch(struct RenderContext *rctx);
+static BOOL CybergfxIsBatching(struct RenderContext *rctx);
 
-static void CybergfxBlitRenderPorts(struct RenderPort *source, struct RenderPort *dest, WORD src_x, WORD src_y, WORD dest_x, WORD dest_y, UWORD width,
+static void CybergfxBlitRenderContexts(struct RenderContext *source, struct RenderContext *dest, WORD src_x, WORD src_y, WORD dest_x, WORD dest_y, UWORD width,
                                     UWORD height);
-static void CybergfxBlitToScreen(struct RenderPort *source, struct RastPort *screen_rp, WORD src_x, WORD src_y, WORD dest_x, WORD dest_y, UWORD width,
+static void CybergfxBlitToScreen(struct RenderContext *source, struct RastPort *screen_rp, WORD src_x, WORD src_y, WORD dest_x, WORD dest_y, UWORD width,
                                  UWORD height);
 
 static BOOL CybergfxInitDrawingBoard(struct DrawingBoard *board);
 static void CybergfxCleanupDrawingBoard(struct DrawingBoard *board);
 
-static BOOL CybergfxCopyFromDrawingBoard(struct RenderPort *rp);
-static BOOL CybergfxCopyRegionFromDrawingBoard(struct RenderPort *rp,
+static BOOL CybergfxCopyFromDrawingBoard(struct RenderContext *rctx);
+static BOOL CybergfxCopyRegionFromDrawingBoard(struct RenderContext *rctx,
                                                WORD x, WORD y, UWORD width, UWORD height);
 
-static void CybergfxCopyFromRastPort(struct RenderPort *rp, struct RastPort *src_rp,
+static void CybergfxCopyFromRastPort(struct RenderContext *rctx, struct RastPort *src_rp,
                                      WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
                                      UWORD width, UWORD height);
 
@@ -99,8 +99,8 @@ ZuneBackendOps cybergfx_backend_ops = {.name = "CyberGraphics",
                                        .IsCompatible = CybergfxIsCompatible,
                                        .GetPixelFormat = CybergfxGetPixelFormat,
 
-                                       .InitRenderPort = CybergfxInitRenderPort,
-                                       .CleanupRenderPort = CybergfxCleanupRenderPort,
+                                       .InitRenderContext = CybergfxInitRenderContext,
+                                       .CleanupRenderContext = CybergfxCleanupRenderContext,
 
                                        .PrepareColor = CybergfxPrepareColor,
                                        .ReleaseColor = CybergfxReleaseColor,
@@ -110,7 +110,7 @@ ZuneBackendOps cybergfx_backend_ops = {.name = "CyberGraphics",
                                        .DrawRectangle = CybergfxDrawRectangle,
                                        .DrawCircle = CybergfxDrawCircle,
 
-                                       .ClearRenderPort = CybergfxClearRenderPort,
+                                       .ClearRenderContext = CybergfxClearRenderContext,
 
                                        .LockPixels = CybergfxLockPixels,
                                        .UnlockPixels = CybergfxUnlockPixels,
@@ -122,7 +122,7 @@ ZuneBackendOps cybergfx_backend_ops = {.name = "CyberGraphics",
                                        .FlushBatch = CybergfxFlushBatch,
                                        .IsBatching = CybergfxIsBatching,
 
-                                       .BlitRenderPorts = CybergfxBlitRenderPorts,
+                                       .BlitRenderContexts = CybergfxBlitRenderContexts,
                                        .BlitToScreen = CybergfxBlitToScreen,
 
                                        .InitDrawingBoard = CybergfxInitDrawingBoard,
@@ -185,8 +185,8 @@ static void CybergfxCleanupDrawingBoard(struct DrawingBoard *board) {
  * For CyberGraphics backend, the bitmap IS the render target, so no
  * synchronization is needed. This is a no-op that always returns TRUE.
  */
-static BOOL CybergfxCopyFromDrawingBoard(struct RenderPort *rp) {
-    (void)rp; /* Unused - no sync needed for CyberGfx */
+static BOOL CybergfxCopyFromDrawingBoard(struct RenderContext *rctx) {
+    (void)rctx; /* Unused - no sync needed for CyberGfx */
     return TRUE;
 }
 
@@ -196,9 +196,9 @@ static BOOL CybergfxCopyFromDrawingBoard(struct RenderPort *rp) {
  * For CyberGraphics backend, this is also a no-op since the bitmap IS the
  * render target directly.
  */
-static BOOL CybergfxCopyRegionFromDrawingBoard(struct RenderPort *rp,
+static BOOL CybergfxCopyRegionFromDrawingBoard(struct RenderContext *rctx,
                                                WORD x, WORD y, UWORD width, UWORD height) {
-    (void)rp;
+    (void)rctx;
     (void)x;
     (void)y;
     (void)width;
@@ -313,7 +313,7 @@ static ULONG CybergfxGetPixelFormat(struct BitMap *bitmap) { return GetCyberMapA
 
 static BOOL CybergfxIsAvailable(void) { return (CyberGfxBase != NULL); }
 
-static BOOL CybergfxIsCompatible(struct RenderPort *rp) {
+static BOOL CybergfxIsCompatible(struct RenderContext *rctx) {
     ENTER_FUNCTION("CybergfxIsCompatible");
 
     /* Check if CyberGraphics library is available first */
@@ -323,8 +323,8 @@ static BOOL CybergfxIsCompatible(struct RenderPort *rp) {
         return FALSE;
     }
 
-    /* If no RenderPort provided, assume compatible (for general availability check) */
-    if (!rp) {
+    /* If no RenderContext provided, assume compatible (for general availability check) */
+    if (!rctx) {
         EXIT_FUNCTION("CybergfxIsCompatible");
         return TRUE;
     }
@@ -335,9 +335,9 @@ static BOOL CybergfxIsCompatible(struct RenderPort *rp) {
      * This is called BEFORE bitmap allocation (lazy allocation), so we can't
      * check the bitmap yet. CyberGfx can create bitmaps for any DrawingBoard,
      * so we report compatible here. The actual bitmap will be allocated later
-     * in CreateRenderPortWithDrawingBoard().
+     * in CreateRenderContextWithDrawingBoard().
      */
-    if (rp->target_board) {
+    if (rctx->target_board) {
         D(bug("CybergfxIsCompatible: DrawingBoard target - compatible (will allocate bitmap)\n"));
         EXIT_FUNCTION("CybergfxIsCompatible");
         return TRUE;
@@ -346,14 +346,14 @@ static BOOL CybergfxIsCompatible(struct RenderPort *rp) {
     /*
      * Direct RastPort target: Check if bitmap exists and is CyberGfx compatible.
      */
-    if (!rp->target_rp || !rp->target_rp->BitMap) {
+    if (!rctx->target_rastport || !rctx->target_rastport->BitMap) {
         D(bug("CybergfxIsCompatible: No target RastPort or BitMap\n"));
         EXIT_FUNCTION("CybergfxIsCompatible");
         return FALSE;
     }
 
     /* Check if the bitmap is CyberGraphics compatible */
-    BOOL is_compatible = GetCyberMapAttr(rp->target_rp->BitMap, CYBRMATTR_ISCYBERGFX);
+    BOOL is_compatible = GetCyberMapAttr(rctx->target_rastport->BitMap, CYBRMATTR_ISCYBERGFX);
     D(bug("CybergfxIsCompatible: Bitmap %s CyberGraphics compatible\n", is_compatible ? "IS" : "IS NOT"));
 
     EXIT_FUNCTION("CybergfxIsCompatible");
@@ -367,38 +367,38 @@ static ULONG CybergfxGetCapabilities(void) {
     return 0;
 }
 
-static BOOL CybergfxInitRenderPort(struct RenderPort *rp) {
-    ENTER_FUNCTION("CybergfxInitRenderPort");
+static BOOL CybergfxInitRenderContext(struct RenderContext *rctx) {
+    ENTER_FUNCTION("CybergfxInitRenderContext");
 
-    if (!rp) {
-        EXIT_FUNCTION("CybergfxInitRenderPort");
+    if (!rctx) {
+        EXIT_FUNCTION("CybergfxInitRenderContext");
         return FALSE;
     }
 
-    /* No special RenderPort initialization needed for CyberGfx */
-    D(bug("CybergfxInitRenderPort: RenderPort initialized %p\n", rp));
+    /* No special RenderContext initialization needed for CyberGfx */
+    D(bug("CybergfxInitRenderContext: RenderContext initialized %p\n", rctx));
 
-    EXIT_FUNCTION("CybergfxInitRenderPort");
+    EXIT_FUNCTION("CybergfxInitRenderContext");
     return TRUE;
 }
 
-static void CybergfxCleanupRenderPort(struct RenderPort *rp) {
-    ENTER_FUNCTION("CybergfxCleanupRenderPort");
+static void CybergfxCleanupRenderContext(struct RenderContext *rctx) {
+    ENTER_FUNCTION("CybergfxCleanupRenderContext");
 
-    if (!rp) {
-        EXIT_FUNCTION("CybergfxCleanupRenderPort");
+    if (!rctx) {
+        EXIT_FUNCTION("CybergfxCleanupRenderContext");
         return;
     }
 
-    EXIT_FUNCTION("CybergfxCleanupRenderPort");
+    EXIT_FUNCTION("CybergfxCleanupRenderContext");
 }
 
 /*****************************************************************************/
 /* Color Management */
 /*****************************************************************************/
 
-static BOOL CybergfxPrepareColor(struct RenderPort *rp, struct InternalColor *color) {
-    if (!rp || !color) {
+static BOOL CybergfxPrepareColor(struct RenderContext *rctx, struct InternalColor *color) {
+    if (!rctx || !color) {
         return FALSE;
     }
 
@@ -408,9 +408,9 @@ static BOOL CybergfxPrepareColor(struct RenderPort *rp, struct InternalColor *co
     return TRUE;
 }
 
-static void CybergfxReleaseColor(struct RenderPort *rp, struct InternalColor *color) {
+static void CybergfxReleaseColor(struct RenderContext *rctx, struct InternalColor *color) {
     /* Nothing to release for CyberGfx colors */
-    (void)rp;
+    (void)rctx;
     (void)color;
 }
 
@@ -418,24 +418,24 @@ static void CybergfxReleaseColor(struct RenderPort *rp, struct InternalColor *co
 /* Drawing Primitives */
 /*****************************************************************************/
 
-void CybergfxDrawPixel(struct RenderPort *rp, WORD x, WORD y, struct InternalColor *color, BOOL antialias) {
+void CybergfxDrawPixel(struct RenderContext *rctx, WORD x, WORD y, struct InternalColor *color, BOOL antialias) {
     ENTER_FUNCTION("CybergfxDrawPixel");
 
-    if (!rp || !color) {
+    if (!rctx || !color) {
         EXIT_FUNCTION("CybergfxDrawPixel");
         return;
     }
 
     /* Check clipping first - early exit if pixel is clipped */
-    if (!CybergfxClipPixel(rp, x, y)) {
+    if (!CybergfxClipPixel(rctx, x, y)) {
         EXIT_FUNCTION("CybergfxDrawPixel");
         return;
     }
 
-    /* Check what the RenderPort is targeting - check target_board first */
-    if (rp->target_board) {
+    /* Check what the RenderContext is targeting - check target_board first */
+    if (rctx->target_board) {
         /* Rendering to DrawingBoard */
-        struct DrawingBoard *board = rp->target_board;
+        struct DrawingBoard *board = rctx->target_board;
         if (board->pixels_locked) {
             /* Direct pixel access for locked boards */
             ULONG *pixels = (ULONG *)board->pixels;
@@ -448,9 +448,9 @@ void CybergfxDrawPixel(struct RenderPort *rp, WORD x, WORD y, struct InternalCol
             /* Use CyberGraphics functions for unlocked boards */
             WriteRGBPixel(board->rastport, x, y, color->original_pixel);
         }
-    } else if (rp->target_rp) {
+    } else if (rctx->target_rastport) {
         /* Rendering to screen via RastPort */
-        WriteRGBPixel(rp->target_rp, x, y, color->original_pixel);
+        WriteRGBPixel(rctx->target_rastport, x, y, color->original_pixel);
     }
 
     EXIT_FUNCTION("CybergfxDrawPixel");
@@ -460,25 +460,25 @@ void CybergfxDrawPixel(struct RenderPort *rp, WORD x, WORD y, struct InternalCol
 /* Surface Operations */
 /*****************************************************************************/
 
-static void CybergfxClearRenderPort(struct RenderPort *rp, struct InternalColor *fill_color) {
-    ENTER_FUNCTION("CybergfxClearRenderPort");
+static void CybergfxClearRenderContext(struct RenderContext *rctx, struct InternalColor *fill_color) {
+    ENTER_FUNCTION("CybergfxClearRenderContext");
 
-    if (!rp || !fill_color) {
-        EXIT_FUNCTION("CybergfxClearRenderPort");
+    if (!rctx || !fill_color) {
+        EXIT_FUNCTION("CybergfxClearRenderContext");
         return;
     }
 
     UWORD width, height;
 
-    /* Get dimensions based on what RenderPort is targeting */
-    if (rp->target_rp) {
-        width = GetCyberMapAttr(rp->target_rp->BitMap, CYBRMATTR_WIDTH);
-        height = GetCyberMapAttr(rp->target_rp->BitMap, CYBRMATTR_HEIGHT);
-    } else if (rp->target_board) {
-        width = rp->target_board->width;
-        height = rp->target_board->height;
+    /* Get dimensions based on what RenderContext is targeting */
+    if (rctx->target_rastport) {
+        width = GetCyberMapAttr(rctx->target_rastport->BitMap, CYBRMATTR_WIDTH);
+        height = GetCyberMapAttr(rctx->target_rastport->BitMap, CYBRMATTR_HEIGHT);
+    } else if (rctx->target_board) {
+        width = rctx->target_board->width;
+        height = rctx->target_board->height;
     } else {
-        EXIT_FUNCTION("CybergfxClearRenderPort");
+        EXIT_FUNCTION("CybergfxClearRenderContext");
         return;
     }
 
@@ -487,10 +487,10 @@ static void CybergfxClearRenderPort(struct RenderPort *rp, struct InternalColor 
     struct ZuneBrush fill_brush = ZUNE_BRUSH_LITERAL_SOLID(fill_color->original_pixel);
 
     if (width > 0 && height > 0) {
-        CybergfxDrawRectangle(rp, 0, 0, width, height, 0.0f, 0.0f, &fill_brush, NULL, TRUE, FALSE);
+        CybergfxDrawRectangle(rctx, 0, 0, width, height, 0.0f, 0.0f, &fill_brush, NULL, TRUE, FALSE);
     }
 
-    EXIT_FUNCTION("CybergfxClearRenderPort");
+    EXIT_FUNCTION("CybergfxClearRenderContext");
 }
 
 /*****************************************************************************/
@@ -602,34 +602,42 @@ void CybergfxSetPixel(struct DrawingBoard *board, WORD x, WORD y, struct Interna
 /* Batching Support */
 /*****************************************************************************/
 
-static void CybergfxBeginBatch(struct RenderPort *rp) { /* TODO: Implement batching */ }
+static void CybergfxBeginBatch(struct RenderContext *rctx) {
+    if (rctx) rctx->batching_enabled = TRUE;
+}
 
-static void CybergfxEndBatch(struct RenderPort *rp) { /* TODO: Implement batching */ }
+static void CybergfxEndBatch(struct RenderContext *rctx) {
+    if (rctx) rctx->batching_enabled = FALSE;
+}
 
-static void CybergfxFlushBatch(struct RenderPort *rp) { /* TODO: Implement batching */ }
+static void CybergfxFlushBatch(struct RenderContext *rctx) {
+    /* Command execution is handled by the library layer (ExecuteBatchCommands) */
+}
 
-static BOOL CybergfxIsBatching(struct RenderPort *rp) { return FALSE; /* No batching yet */ }
+static BOOL CybergfxIsBatching(struct RenderContext *rctx) {
+    return rctx ? rctx->batching_enabled : FALSE;
+}
 
 /*****************************************************************************/
 /* Blitting Operations */
 /*****************************************************************************/
 
-static void CybergfxBlitRenderPorts(struct RenderPort *source, struct RenderPort *dest, WORD src_x, WORD src_y, WORD dest_x, WORD dest_y, UWORD width,
+static void CybergfxBlitRenderContexts(struct RenderContext *source, struct RenderContext *dest, WORD src_x, WORD src_y, WORD dest_x, WORD dest_y, UWORD width,
                                     UWORD height) {
-    ENTER_FUNCTION("CybergfxBlitRenderPorts");
+    ENTER_FUNCTION("CybergfxBlitRenderContexts");
 
     if (!source || !dest) {
-        EXIT_FUNCTION("CybergfxBlitRenderPorts");
+        EXIT_FUNCTION("CybergfxBlitRenderContexts");
         return;
     }
 
-    /* TODO: Implement RenderPort-to-RenderPort blitting */
-    D(bug("CybergfxBlitRenderPorts: Blitting %dx%d from (%d,%d) to (%d,%d)\n", width, height, src_x, src_y, dest_x, dest_y));
+    /* TODO: Implement RenderContext-to-RenderContext blitting */
+    D(bug("CybergfxBlitRenderContexts: Blitting %dx%d from (%d,%d) to (%d,%d)\n", width, height, src_x, src_y, dest_x, dest_y));
 
-    EXIT_FUNCTION("CybergfxBlitRenderPorts");
+    EXIT_FUNCTION("CybergfxBlitRenderContexts");
 }
 
-static void CybergfxBlitToScreen(struct RenderPort *source, struct RastPort *screen_rp, WORD src_x, WORD src_y, WORD dest_x, WORD dest_y, UWORD width,
+static void CybergfxBlitToScreen(struct RenderContext *source, struct RastPort *screen_rp, WORD src_x, WORD src_y, WORD dest_x, WORD dest_y, UWORD width,
                                  UWORD height) {
     ENTER_FUNCTION("CybergfxBlitToScreen");
 
@@ -662,7 +670,7 @@ static void CybergfxBlitToScreen(struct RenderPort *source, struct RastPort *scr
  * For CyberGfx backend, this uses ReadPixelArray directly since we have
  * direct pixel access to the DrawingBoard's bitmap.
  */
-static void CybergfxCopyFromRastPort(struct RenderPort *rp, struct RastPort *src_rp,
+static void CybergfxCopyFromRastPort(struct RenderContext *rctx, struct RastPort *src_rp,
                                      WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
                                      UWORD width, UWORD height)
 {
@@ -670,15 +678,15 @@ static void CybergfxCopyFromRastPort(struct RenderPort *rp, struct RastPort *src
 
     ENTER_FUNCTION("CybergfxCopyFromRastPort");
 
-    if (!rp || !src_rp) {
-        D(bug("CybergfxCopyFromRastPort: Invalid parameters (rp=%p, src_rp=%p)\n", rp, src_rp));
+    if (!rctx || !src_rp) {
+        D(bug("CybergfxCopyFromRastPort: Invalid parameters (rctx=%p, src_rp=%p)\n", rctx, src_rp));
         EXIT_FUNCTION("CybergfxCopyFromRastPort");
         return;
     }
 
-    board = rp->target_board;
+    board = rctx->target_board;
     if (!board) {
-        D(bug("CybergfxCopyFromRastPort: RenderPort has no DrawingBoard\n"));
+        D(bug("CybergfxCopyFromRastPort: RenderContext has no DrawingBoard\n"));
         EXIT_FUNCTION("CybergfxCopyFromRastPort");
         return;
     }

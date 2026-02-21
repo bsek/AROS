@@ -20,9 +20,9 @@
  *       ZuneDrawCircleAA -- Draw an antialiased circle outline
  *
  *   SYNOPSIS
- *       ZuneDrawCircleAA(rp, centerX, centerY, radius, color)
+ *       ZuneDrawCircleAA(rctx, centerX, centerY, radius, color)
  *
- *       VOID ZuneDrawCircleAA(struct RenderPort *rp, UWORD centerX,
+ *       VOID ZuneDrawCircleAA(struct RenderContext *rctx, UWORD centerX,
  *                                          UWORD centerY, UWORD radius,
  *                                          ULONG color)
  *
@@ -30,7 +30,7 @@
  *       Draws only the outline/border of a circle with antialiased edges.
  *
  *   INPUTS
- *       rp -- The RenderPort to draw on
+ *       rctx -- The RenderContext to draw on
  *       centerX -- X coordinate of the circle center
  *       centerY -- Y coordinate of the circle center
  *       radius -- Radius of the circle in pixels
@@ -38,7 +38,7 @@
  *
  ***************************************************************************/
 
-AROS_LH4(VOID, ZuneDrawCircleAA, AROS_LHA(struct RenderPort *, rp, A0),
+AROS_LH4(VOID, ZuneDrawCircleAA, AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(struct ZunePoint *, center, A1), AROS_LHA(UWORD, radius, D0),
          AROS_LHA(ULONG, color, D1), struct Library *, ZuneGfxBase, 54,
          zunegfx)
@@ -46,7 +46,7 @@ AROS_LH4(VOID, ZuneDrawCircleAA, AROS_LHA(struct RenderPort *, rp, A0),
 {
   AROS_LIBFUNC_INIT
 
-  if (!rp || !center) {
+  if (!rctx || !center) {
     return;
   }
 
@@ -54,9 +54,9 @@ AROS_LH4(VOID, ZuneDrawCircleAA, AROS_LHA(struct RenderPort *, rp, A0),
   const WORD centerY = center->y;
 
   struct InternalColor internal_color =
-      ZuneColorToInternal(rp, color, rp->pixel_format);
+      ZuneColorToInternal(rctx, color, rctx->pixel_format);
 
-  ZUNE_BACKEND_CALL(rp, DrawCircle, centerX, centerY, radius, 1, NULL,
+  ZUNE_BACKEND_CALL(rctx, DrawCircle, centerX, centerY, radius, 1, NULL,
                     &internal_color, FALSE, TRUE);
 
   AROS_LIBFUNC_EXIT

@@ -28,7 +28,7 @@
 #include "libraries/zunegfx.h"
 
 static void CybergfxDrawLineWu(struct DrawingBoard *board, float x0, float y0, float x1, float y1, struct InternalColor *color);
-static void CybergfxDrawLineAA(struct RenderPort *rp, WORD x1, WORD y1, WORD x2, WORD y2, struct InternalColor *color);
+static void CybergfxDrawLineAA(struct RenderContext *rctx, WORD x1, WORD y1, WORD x2, WORD y2, struct InternalColor *color);
 
 /*****************************************************************************
  * Helper function for Bresenham's line algorithm
@@ -36,17 +36,17 @@ static void CybergfxDrawLineAA(struct RenderPort *rp, WORD x1, WORD y1, WORD x2,
  * DrawingBoards) and RastPort operations (for unlocked DrawingBoards and screen
  * rendering).
  *****************************************************************************/
-static void draw_line_bresenham(struct RenderPort *rp, UWORD start_x, UWORD start_y, UWORD end_x, UWORD end_y, struct InternalColor *color,
+static void draw_line_bresenham(struct RenderContext *rctx, UWORD start_x, UWORD start_y, UWORD end_x, UWORD end_y, struct InternalColor *color,
                                 BOOL use_direct_pixels, UWORD line_width) {
     D(bug("[ZuneRenderer] DrawLineBresenham: start(%d,%d), end(%d,%d), width=%d, direct=%d\n", start_x, start_y, end_x, end_y, line_width,
           use_direct_pixels));
 
     struct RastPort *rastport;
     if (!use_direct_pixels) {
-        if (rp->target_board != NULL) {
-            rastport = rp->target_board->rastport;
+        if (rctx->target_board != NULL) {
+            rastport = rctx->target_board->rastport;
         } else {
-            rastport = rp->target_rp;
+            rastport = rctx->target_rastport;
         }
     }
 
@@ -63,8 +63,8 @@ static void draw_line_bresenham(struct RenderPort *rp, UWORD start_x, UWORD star
     ULONG pitch_pixels = 0;
 
     if (use_direct_pixels) {
-        pixels = (ULONG *)rp->target_board->pixels;
-        pitch_pixels = rp->target_board->pitch / 4;
+        pixels = (ULONG *)rctx->target_board->pixels;
+        pitch_pixels = rctx->target_board->pitch / 4;
     }
 
     /* Calculate perpendicular direction for line width */
@@ -92,8 +92,8 @@ static void draw_line_bresenham(struct RenderPort *rp, UWORD start_x, UWORD star
                 /* Use pack_argb32 for correct format when writing directly to memory */
                 ULONG pixel = pack_argb32(color->a, color->r, color->g, color->b);
                 CybergfxWritePixelClamped(pixels, pitch_pixels,
-                                          rp->target_board->width,
-                                          rp->target_board->height, x, y,
+                                          rctx->target_board->width,
+                                          rctx->target_board->height, x, y,
                                           pixel);
             } else {
                 WriteRGBPixel(rastport, x, y, color->original_pixel);
@@ -113,8 +113,8 @@ static void draw_line_bresenham(struct RenderPort *rp, UWORD start_x, UWORD star
                     /* Use pack_argb32 for correct format when writing directly to memory */
                     ULONG pixel = pack_argb32(color->a, color->r, color->g, color->b);
                     CybergfxWritePixelClamped(pixels, pitch_pixels,
-                                              rp->target_board->width,
-                                              rp->target_board->height, px, py,
+                                              rctx->target_board->width,
+                                              rctx->target_board->height, px, py,
                                               pixel);
                 } else {
                     WriteRGBPixel(rastport, px, py, color->original_pixel);
@@ -142,11 +142,11 @@ static void draw_line_bresenham(struct RenderPort *rp, UWORD start_x, UWORD star
  * Helper function for drawing straight lines using FillPixelArray.
  * Handles both unlocked DrawingBoards and direct RastPort rendering.
  *****************************************************************************/
-static void draw_straight_line_rastport(struct RenderPort *rp, struct RastPort *rastport, WORD start_x, WORD start_y, WORD end_x, WORD end_y,
+static void draw_straight_line_rastport(struct RenderContext *rctx, struct RastPort *rastport, WORD start_x, WORD start_y, WORD end_x, WORD end_y,
                                         UWORD width, struct InternalColor *color) {
     ENTER_FUNCTION("CybergfxDrawStraightLineFillPixelArray");
 
-    if (!rp || !rastport || !color) {
+    if (!rctx || !rastport || !color) {
         EXIT_FUNCTION("CybergfxDrawStraightLineFillPixelArray");
         return;
     }
@@ -161,7 +161,7 @@ static void draw_straight_line_rastport(struct RenderPort *rp, struct RastPort *
             x_end--; /* Adjust for even widths */
         WORD y_min = MIN(start_y, end_y);
         WORD y_max = MAX(start_y, end_y);
-        CybergfxClipFillPixelArray(rp, rastport, x_start, y_min, x_end - x_start + 1, y_max - y_min + 1, color->original_pixel);
+        CybergfxClipFillPixelArray(rctx, rastport, x_start, y_min, x_end - x_start + 1, y_max - y_min + 1, color->original_pixel);
     } else {
         /* Horizontal line */
         WORD y_start = start_y - half_width;
@@ -170,25 +170,25 @@ static void draw_straight_line_rastport(struct RenderPort *rp, struct RastPort *
             y_end--; /* Adjust for even widths */
         WORD x_min = MIN(start_x, end_x);
         WORD x_max = MAX(start_x, end_x);
-        CybergfxClipFillPixelArray(rp, rastport, x_min, y_start, x_max - x_min + 1, y_end - y_start + 1, color->original_pixel);
+        CybergfxClipFillPixelArray(rctx, rastport, x_min, y_start, x_max - x_min + 1, y_end - y_start + 1, color->original_pixel);
     }
 
     EXIT_FUNCTION("CybergfxDrawStraightLineFillPixelArray");
 }
 
-static void draw_straigth_line(struct RenderPort *rp, UWORD start_x, UWORD start_y, UWORD end_x, UWORD end_y, UWORD line_width,
+static void draw_straigth_line(struct RenderContext *rctx, UWORD start_x, UWORD start_y, UWORD end_x, UWORD end_y, UWORD line_width,
                                struct InternalColor *color) {
     ENTER_FUNCTION("draw_straight_line");
 
-    if (!rp || !color) {
+    if (!rctx || !color) {
         EXIT_FUNCTION("draw_straight_line");
         return;
     }
 
-    /* Check what the RenderPort is targeting */
-    if (rp->target_board) {
+    /* Check what the RenderContext is targeting */
+    if (rctx->target_board) {
         /* Rendering to DrawingBoard */
-        struct DrawingBoard *board = rp->target_board;
+        struct DrawingBoard *board = rctx->target_board;
 
         if (board->pixels_locked && (board->pixel_format == PIXFMT_ARGB32 || board->pixel_format == PIXFMT_RGBA32)) {
             /* Direct pixel manipulation for locked DrawingBoard */
@@ -247,11 +247,11 @@ static void draw_straigth_line(struct RenderPort *rp, UWORD start_x, UWORD start
 
         } else {
             /* DrawingBoard pixels are unlocked, use FillPixelArray */
-            draw_straight_line_rastport(rp, board->rastport, start_x, start_y, end_x, end_y, line_width, color);
+            draw_straight_line_rastport(rctx, board->rastport, start_x, start_y, end_x, end_y, line_width, color);
         }
-    } else if (rp->target_rp) {
+    } else if (rctx->target_rastport) {
         /* Direct RastPort rendering using FillPixelArray */
-        draw_straight_line_rastport(rp, rp->target_rp, start_x, start_y, end_x, end_y, line_width, color);
+        draw_straight_line_rastport(rctx, rctx->target_rastport, start_x, start_y, end_x, end_y, line_width, color);
     }
 
     EXIT_FUNCTION("draw_straight_line");
@@ -263,18 +263,18 @@ static void draw_straigth_line(struct RenderPort *rp, UWORD start_x, UWORD start
  * Line drawing implementation handling straigth, diagonal lines with optional
  * thickness and anti-aliasing
  *****************************************************************************/
-void CybergfxDrawLine(struct RenderPort *rp, WORD start_x, WORD start_y, WORD end_x, WORD end_y, UWORD line_width, struct InternalColor *color,
+void CybergfxDrawLine(struct RenderContext *rctx, WORD start_x, WORD start_y, WORD end_x, WORD end_y, UWORD line_width, struct InternalColor *color,
                       BOOL antialias) {
     ENTER_FUNCTION("CybergfxDrawLine");
 
-    if (!rp || !color) {
+    if (!rctx || !color) {
         EXIT_FUNCTION("CybergfxDrawLine");
         return;
     }
 
     /* Clip line against clipping region - modifies coordinates if needed */
     WORD x1 = start_x, y1 = start_y, x2 = end_x, y2 = end_y;
-    if (!CybergfxClipLine(rp, &x1, &y1, &x2, &y2)) {
+    if (!CybergfxClipLine(rctx, &x1, &y1, &x2, &y2)) {
         /* Line is completely outside clipping region */
         EXIT_FUNCTION("CybergfxDrawLine");
         return;
@@ -289,28 +289,28 @@ void CybergfxDrawLine(struct RenderPort *rp, WORD start_x, WORD start_y, WORD en
     /* Check if we have a straight line (horizontal or vertical) */
     /* For straight lines, we can use more optimized drawing functions */
     if (start_x == end_x || start_y == end_y) {
-        draw_straigth_line(rp, start_x, start_y, end_x, end_y, line_width, color);
+        draw_straigth_line(rctx, start_x, start_y, end_x, end_y, line_width, color);
         EXIT_FUNCTION("CybergfxDrawLine");
         return;
     }
 
     if (antialias) {
-        return CybergfxDrawLineAA(rp, start_x, start_y, end_x, end_y, color);
+        return CybergfxDrawLineAA(rctx, start_x, start_y, end_x, end_y, color);
     }
 
-    /* Check what the RenderPort is targeting - check target_board first */
-    if (rp->target_board) {
+    /* Check what the RenderContext is targeting - check target_board first */
+    if (rctx->target_board) {
         /* Rendering to DrawingBoard */
-        struct DrawingBoard *board = rp->target_board;
+        struct DrawingBoard *board = rctx->target_board;
         if (board->pixels_locked && (board->pixel_format == PIXFMT_ARGB32 || board->pixel_format == PIXFMT_RGBA32)) {
             /* Use direct pixel manipulation for locked DrawingBoard */
-            draw_line_bresenham(rp, start_x, start_y, end_x, end_y, color, TRUE, line_width);
+            draw_line_bresenham(rctx, start_x, start_y, end_x, end_y, color, TRUE, line_width);
         } else {
             /* DrawingBoard pixels are unlocked, write to rastport */
-            draw_line_bresenham(rp, start_x, start_y, end_x, end_y, color, FALSE, line_width);
+            draw_line_bresenham(rctx, start_x, start_y, end_x, end_y, color, FALSE, line_width);
         }
-    } else if (rp->target_rp) {
-        draw_line_bresenham(rp, start_x, start_y, end_x, end_y, color, FALSE, line_width);
+    } else if (rctx->target_rastport) {
+        draw_line_bresenham(rctx, start_x, start_y, end_x, end_y, color, FALSE, line_width);
     }
 
     EXIT_FUNCTION("CybergfxDrawLine");
@@ -344,10 +344,10 @@ static inline void write_wu_pixels(struct RastPort *rp, ULONG *pixels, ULONG pit
 }
 
 /* Optimized Wu line drawing with direct pixel access */
-void CybergfxDrawLineAA(struct RenderPort *rp, WORD x1, WORD y1, WORD x2, WORD y2, struct InternalColor *color) {
+void CybergfxDrawLineAA(struct RenderContext *rctx, WORD x1, WORD y1, WORD x2, WORD y2, struct InternalColor *color) {
     ENTER_FUNCTION("CybergfxDrawLineDrawingBoardAA");
 
-    if (!rp || !color) {
+    if (!rctx || !color) {
         EXIT_FUNCTION("CybergfxDrawLineDrawingBoardAA");
         return;
     }
@@ -359,17 +359,17 @@ void CybergfxDrawLineAA(struct RenderPort *rp, WORD x1, WORD y1, WORD x2, WORD y
     ULONG *pixels = NULL;
     ULONG pitch_pixels = 0;
     /* Ensure pixels are locked and we support the pixel format */
-    if (rp->target_board && rp->target_board->pixels_locked) {
-        pixels = (ULONG *)rp->target_board->pixels;
-        pitch_pixels = rp->target_board->pitch / 4;
-        bitmap_width = rp->target_board->width;
-        bitmap_height = rp->target_board->height;
-    } else if (rp->target_board) {
-        rastport = rp->target_board->rastport;
+    if (rctx->target_board && rctx->target_board->pixels_locked) {
+        pixels = (ULONG *)rctx->target_board->pixels;
+        pitch_pixels = rctx->target_board->pitch / 4;
+        bitmap_width = rctx->target_board->width;
+        bitmap_height = rctx->target_board->height;
+    } else if (rctx->target_board) {
+        rastport = rctx->target_board->rastport;
         bitmap_width = GetBitMapAttr(rastport->BitMap, BMA_WIDTH);
         bitmap_height = GetBitMapAttr(rastport->BitMap, BMA_HEIGHT);
     } else {
-        rastport = rp->target_rp;
+        rastport = rctx->target_rastport;
         bitmap_width = GetBitMapAttr(rastport->BitMap, BMA_WIDTH);
         bitmap_height = GetBitMapAttr(rastport->BitMap, BMA_HEIGHT);
     }

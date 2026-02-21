@@ -4,7 +4,7 @@
     Zune Renderer Library - Simplified Core Implementation
 
     This module provides the core functionality for the simplified Zune Renderer
-    library, including RenderPort management, library initialization, and
+    library, including RenderContext management, library initialization, and
     backend detection. The simplified approach eliminates complex abstractions
     while preserving all essential functionality.
 */
@@ -33,12 +33,12 @@
 #include "backends/backend_interface.h"
 #include "zunegfx_intern.h"
 
-BOOL ValidateRenderPort(struct RenderPort *rp);
-struct RenderPort *CreateRenderPortInternal(struct IntZuneGfxBase *base,
+BOOL ValidateRenderContext(struct RenderContext *rctx);
+struct RenderContext *CreateRenderContextInternal(struct IntZuneGfxBase *base,
                                             struct ColorMap *colormap,
                                             struct RastPort *rastport);
-void DestroyRenderPortInternal(struct IntZuneGfxBase *base,
-                               struct RenderPort *rp);
+void DestroyRenderContextInternal(struct IntZuneGfxBase *base,
+                               struct RenderContext *rctx);
 
 /*****************************************************************************/
 /* Library Helper Functions */
@@ -177,91 +177,91 @@ void CleanupZuneRenderer(struct IntZuneGfxBase *base) {
 }
 
 /*****************************************************************************/
-/* RenderPort Internal Functions */
+/* RenderContext Internal Functions */
 /*****************************************************************************/
-void InitializeRenderPort(struct RenderPort *rp) {
-  ENTER_FUNCTION("InitializeRenderPort");
+void InitializeRenderContext(struct RenderContext *rctx) {
+  ENTER_FUNCTION("InitializeRenderContext");
 
   /* Initialize basic fields */
-  rp->batching_enabled = FALSE;
-  rp->batch_state = NULL;
-  rp->clipping_enabled = FALSE;
-  rp->clip_region = NULL;
-  rp->backend_type = BACKEND_SOFTWARE;
-  rp->backend_context = NULL;
-  rp->backend_vtable = NULL;
-  rp->hidd_bitmap_obj = NULL;
-  rp->pen_cache = NULL;
-  rp->color_cache = NULL;
-  rp->pen_color_cache = NULL;
-  rp->valid = TRUE;
+  rctx->batching_enabled = FALSE;
+  rctx->batch_state = NULL;
+  rctx->clipping_enabled = FALSE;
+  rctx->clip_region = NULL;
+  rctx->backend_type = BACKEND_SOFTWARE;
+  rctx->backend_context = NULL;
+  rctx->backend_vtable = NULL;
+  rctx->hidd_bitmap_obj = NULL;
+  rctx->pen_cache = NULL;
+  rctx->color_cache = NULL;
+  rctx->pen_color_cache = NULL;
+  rctx->valid = TRUE;
 
-  EXIT_FUNCTION("InitializeRenderPort");
+  EXIT_FUNCTION("InitializeRenderContext");
 }
 
-void CleanupRenderPort(struct RenderPort *rp) {
-  if (!rp)
+void CleanupRenderContext(struct RenderContext *rctx) {
+  if (!rctx)
     return;
 
   /* Mark as invalid */
-  rp->valid = FALSE;
+  rctx->valid = FALSE;
 
   /* Cleanup batch state */
-  if (rp->batch_state) {
-    DestroyBatchState((struct BatchState *)rp->batch_state);
-    rp->batch_state = NULL;
+  if (rctx->batch_state) {
+    DestroyBatchState((struct BatchState *)rctx->batch_state);
+    rctx->batch_state = NULL;
   }
 
   /* Cleanup backend system */
-  ZuneUnbindRenderPortFromBackend(rp);
+  ZuneUnbindRenderContextFromBackend(rctx);
 
   /* Cleanup pen cache if present */
-  if (rp->pen_cache) {
-    CleanupPenCache(rp->pen_cache);
-    FreeVec(rp->pen_cache);
-    rp->pen_cache = NULL;
+  if (rctx->pen_cache) {
+    CleanupPenCache(rctx->pen_cache);
+    FreeVec(rctx->pen_cache);
+    rctx->pen_cache = NULL;
   }
 
-  if (rp->color_cache) {
-    CleanupColorCache(rp->color_cache);
-    FreeVec(rp->color_cache);
-    rp->color_cache = NULL;
+  if (rctx->color_cache) {
+    CleanupColorCache(rctx->color_cache);
+    FreeVec(rctx->color_cache);
+    rctx->color_cache = NULL;
   }
 
-  if (rp->pen_color_cache) {
-    CleanupPenColorCache(rp->pen_color_cache);
-    FreeVec(rp->pen_color_cache);
-    rp->pen_color_cache = NULL;
+  if (rctx->pen_color_cache) {
+    CleanupPenColorCache(rctx->pen_color_cache);
+    FreeVec(rctx->pen_color_cache);
+    rctx->pen_color_cache = NULL;
   }
 
   /* Clear references */
-  rp->target_rp = NULL;
-  rp->colormap = NULL;
-  rp->target_board = NULL;
+  rctx->target_rastport = NULL;
+  rctx->colormap = NULL;
+  rctx->target_board = NULL;
 }
 
 /*****************************************************************************/
 /* Resource Management */
 /*****************************************************************************/
 
-void AddRenderPortToList(struct IntZuneGfxBase *base,
-                         struct RenderPort *rp) {
-  if (!base || !rp)
+void AddRenderContextToList(struct IntZuneGfxBase *base,
+                         struct RenderContext *rctx) {
+  if (!base || !rctx)
     return;
 
   ObtainSemaphore(&base->lock);
   AddTail((struct List *)&base->renderports,
-          &rp->node); /* Using draw_color field as Node */
+          &rctx->node); /* Using draw_color field as Node */
   ReleaseSemaphore(&base->lock);
 }
 
-void RemoveRenderPortFromList(struct IntZuneGfxBase *base,
-                              struct RenderPort *rp) {
-  if (!base || !rp)
+void RemoveRenderContextFromList(struct IntZuneGfxBase *base,
+                              struct RenderContext *rctx) {
+  if (!base || !rctx)
     return;
 
   ObtainSemaphore(&base->lock);
-  Remove(&rp->node); /* Using draw_color field as Node */
+  Remove(&rctx->node); /* Using draw_color field as Node */
   ReleaseSemaphore(&base->lock);
 }
 
@@ -274,17 +274,17 @@ void RemoveRenderPortFromList(struct IntZuneGfxBase *base,
 /*****************************************************************************
 
     NAME */
-struct RenderPort *CreateRenderPortForWindowInternal(
+struct RenderContext *CreateRenderContextForWindowInternal(
     struct IntZuneGfxBase *base,
     struct Window *window,
     struct ColorMap *colormap,
     UWORD backend_type)
 
 /*  FUNCTION
-    Creates a new RenderPort bound to a Window.
+    Creates a new RenderContext bound to a Window.
 
-    This is the primary way to create a RenderPort in the new architecture.
-    The RenderPort is bound to the window and automatically selects the best
+    This is the primary way to create a RenderContext in the new architecture.
+    The RenderContext is bound to the window and automatically selects the best
     backend (OpenGL if available, otherwise CyberGraphics).
 
     The window reference is required for OpenGL to create a GL context.
@@ -296,94 +296,94 @@ INPUTS
     backend_type - Backend to be used
 
 RESULT
-    Pointer to new RenderPort structure, or NULL if creation failed.
+    Pointer to new RenderContext structure, or NULL if creation failed.
 
 *****************************************************************************/
 {
-  struct RenderPort *rp;
+  struct RenderContext *rctx;
   ZuneBackend *backend;
 
-  ENTER_FUNCTION("CreateRenderPortForWindowInternal");
+  ENTER_FUNCTION("CreateRenderContextForWindowInternal");
 
-  D(bug("ZuneRenderer: ZuneCreateRenderPortForWindow(window=%p, colormap=%p)\n",
+  D(bug("ZuneRenderer: ZuneCreateRenderContextForWindow(window=%p, colormap=%p)\n",
         window, colormap));
 
   if (!window || !colormap) {
     D(bug("ZuneRenderer: Invalid parameters (window=%p, colormap=%p)\n",
           window, colormap));
-    EXIT_FUNCTION("CreateRenderPortForWindowInternal");
+    EXIT_FUNCTION("CreateRenderContextForWindowInternal");
     return NULL;
   }
 
-  /* Allocate RenderPort structure */
-  rp = AllocVec(sizeof(struct RenderPort), MEMF_CLEAR | MEMF_PUBLIC);
-  if (!rp) {
-    D(bug("ZuneRenderer: Failed to allocate RenderPort\n"));
-    EXIT_FUNCTION("CreateRenderPortForWindowInternal");
+  /* Allocate RenderContext structure */
+  rctx = AllocVec(sizeof(struct RenderContext), MEMF_CLEAR | MEMF_PUBLIC);
+  if (!rctx) {
+    D(bug("ZuneRenderer: Failed to allocate RenderContext\n"));
+    EXIT_FUNCTION("CreateRenderContextForWindowInternal");
     return NULL;
   }
 
-  InitializeRenderPort(rp);
+  InitializeRenderContext(rctx);
 
   /* Set window binding - this is key for OpenGL context creation */
-  rp->window = window;
-  rp->target_rp = window->RPort;
-  rp->colormap = colormap;
-  rp->target_board = NULL;  /* Initially rendering to window */
+  rctx->window = window;
+  rctx->target_rastport = window->RPort;
+  rctx->colormap = colormap;
+  rctx->target_board = NULL;  /* Initially rendering to window */
 
-  /* Allocate per-RenderPort caches */
-  rp->color_cache = AllocVec(sizeof(struct ColorCache), MEMF_CLEAR | MEMF_PUBLIC);
-  if (rp->color_cache) {
-    InitColorCache(rp->color_cache);
+  /* Allocate per-RenderContext caches */
+  rctx->color_cache = AllocVec(sizeof(struct ColorCache), MEMF_CLEAR | MEMF_PUBLIC);
+  if (rctx->color_cache) {
+    InitColorCache(rctx->color_cache);
   }
-  rp->pen_color_cache = AllocVec(sizeof(struct PenColorCache), MEMF_CLEAR | MEMF_PUBLIC);
-  if (rp->pen_color_cache) {
-    InitPenColorCache(rp->pen_color_cache);
+  rctx->pen_color_cache = AllocVec(sizeof(struct PenColorCache), MEMF_CLEAR | MEMF_PUBLIC);
+  if (rctx->pen_color_cache) {
+    InitPenColorCache(rctx->pen_color_cache);
   }
 
   /* Cache HIDD bitmap object */
   if (window->RPort && window->RPort->BitMap) {
-    rp->hidd_bitmap_obj = HIDD_BM_OBJ(window->RPort->BitMap);
+    rctx->hidd_bitmap_obj = HIDD_BM_OBJ(window->RPort->BitMap);
   }
 
   if (backend_type != BACKEND_BEST_AVAILABLE) {
     backend = ZuneFindBackendByType(backend_type);
     D(bug("ZuneRenderer: Requested backend type %d, found: %p\n", backend_type, backend));
   } else {
-    backend = ZuneFindBestBackend(rp);
+    backend = ZuneFindBestBackend(rctx);
   }
 
-  if (backend && ZuneBindRenderPortToBackend(rp, backend)) {
-    D(bug("ZuneRenderer: RenderPort bound to %s backend (type %d)\n", backend->ops->name, backend->ops->type));
+  if (backend && ZuneBindRenderContextToBackend(rctx, backend)) {
+    D(bug("ZuneRenderer: RenderContext bound to %s backend (type %d)\n", backend->ops->name, backend->ops->type));
 
     /* Determine pixel format */
     if (backend->ops->GetPixelFormat && window->RPort->BitMap) {
-      rp->pixel_format = backend->ops->GetPixelFormat(window->RPort->BitMap);
+      rctx->pixel_format = backend->ops->GetPixelFormat(window->RPort->BitMap);
     } else {
-      rp->pixel_format = PIXFMT_ARGB32;
+      rctx->pixel_format = PIXFMT_ARGB32;
     }
   } else {
     D(bug("ZuneRenderer: No backend available, using software fallback\n"));
-    rp->backend_type = BACKEND_SOFTWARE;
-    rp->backend_context = NULL;
-    rp->backend_vtable = NULL;
-    rp->pixel_format = PIXFMT_ARGB32;
+    rctx->backend_type = BACKEND_SOFTWARE;
+    rctx->backend_context = NULL;
+    rctx->backend_vtable = NULL;
+    rctx->pixel_format = PIXFMT_ARGB32;
   }
 
   /* Add to tracking list */
-  AddRenderPortToList(base, rp);
+  AddRenderContextToList(base, rctx);
 
-  D(bug("ZuneRenderer: RenderPort created for window %p, backend=%d\n",
-        window, rp->backend_type));
+  D(bug("ZuneRenderer: RenderContext created for window %p, backend=%d\n",
+        window, rctx->backend_type));
 
-  EXIT_FUNCTION("CreateRenderPortForWindowInternal");
-  return rp;
+  EXIT_FUNCTION("CreateRenderContextForWindowInternal");
+  return rctx;
 }
 
 /*****************************************************************************
 
     NAME */
-AROS_LH3(struct RenderPort *, ZuneCreateRenderPortForWindow,
+AROS_LH3(struct RenderContext *, ZuneCreateRenderContextForWindow,
 
          /*  SYNOPSIS */
          AROS_LHA(struct Window *, window, A0),
@@ -394,18 +394,18 @@ AROS_LH3(struct RenderPort *, ZuneCreateRenderPortForWindow,
          struct Library *, ZuneGfxBase, 5, zunegfx)
 
 /*  FUNCTION
-    Creates a new RenderPort bound to a Window.
-    See CreateRenderPortForWindowInternal for details.
+    Creates a new RenderContext bound to a Window.
+    See CreateRenderContextForWindowInternal for details.
 
 *****************************************************************************/
 {
   AROS_LIBFUNC_INIT
-  ENTER_FUNCTION("ZuneCreateRenderPortForWindow");
+  ENTER_FUNCTION("ZuneCreateRenderContextForWindow");
 
   struct IntZuneGfxBase *base = ZRB(ZuneGfxBase);
-  return CreateRenderPortForWindowInternal(base, window, colormap, backend_type);
+  return CreateRenderContextForWindowInternal(base, window, colormap, backend_type);
 
-  EXIT_FUNCTION("ZuneCreateRenderPortForWindow");
+  EXIT_FUNCTION("ZuneCreateRenderContextForWindow");
   AROS_LIBFUNC_EXIT
 }
 
@@ -415,14 +415,14 @@ AROS_LH3(struct RenderPort *, ZuneCreateRenderPortForWindow,
 AROS_LH2(BOOL, ZuneSetTarget,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(struct DrawingBoard *, board, A1),
 
          /*  LOCATION */
          struct Library *, ZuneGfxBase, 10, zunegfx)
 
 /*  FUNCTION
-    Switch the render target of a RenderPort.
+    Switch the render target of a RenderContext.
 
     board = NULL: Render to the window's RastPort
     board != NULL: Render to the DrawingBoard
@@ -431,7 +431,7 @@ AROS_LH2(BOOL, ZuneSetTarget,
     For CyberGfx backend: Updates internal target pointer
 
 INPUTS
-    rp - RenderPort to modify
+    rctx - RenderContext to modify
     board - Target DrawingBoard, or NULL for window
 
 RESULT
@@ -443,8 +443,8 @@ RESULT
 
   ENTER_FUNCTION("ZuneSetTarget");
 
-  if (!rp || !rp->valid) {
-    D(bug("ZuneRenderer: ZuneSetTarget - invalid RenderPort\n"));
+  if (!rctx || !rctx->valid) {
+    D(bug("ZuneRenderer: ZuneSetTarget - invalid RenderContext\n"));
     EXIT_FUNCTION("ZuneSetTarget");
     return FALSE;
   }
@@ -455,29 +455,29 @@ RESULT
     return FALSE;
   }
 
-  D(bug("ZuneRenderer: ZuneSetTarget(rp=%p, board=%p)\n", rp, board));
+  D(bug("ZuneRenderer: ZuneSetTarget(rctx=%p, board=%p)\n", rctx, board));
 
   /* Update target */
-  rp->target_board = board;
+  rctx->target_board = board;
 
   if (board) {
     /* Switching to DrawingBoard */
-    rp->target_rp = board->rastport;
+    rctx->target_rastport = board->rastport;
     if (board->bitmap) {
-      rp->hidd_bitmap_obj = HIDD_BM_OBJ(board->bitmap);
+      rctx->hidd_bitmap_obj = HIDD_BM_OBJ(board->bitmap);
     }
     D(bug("ZuneRenderer: Target set to DrawingBoard %p (%dx%d)\n",
           board, board->width, board->height));
   } else {
     /* Switching to window */
-    if (rp->window) {
-      rp->target_rp = rp->window->RPort;
-      if (rp->window->RPort && rp->window->RPort->BitMap) {
-        rp->hidd_bitmap_obj = HIDD_BM_OBJ(rp->window->RPort->BitMap);
+    if (rctx->window) {
+      rctx->target_rastport = rctx->window->RPort;
+      if (rctx->window->RPort && rctx->window->RPort->BitMap) {
+        rctx->hidd_bitmap_obj = HIDD_BM_OBJ(rctx->window->RPort->BitMap);
       }
-      D(bug("ZuneRenderer: Target set to window %p RastPort\n", rp->window));
+      D(bug("ZuneRenderer: Target set to window %p RastPort\n", rctx->window));
     } else {
-      D(bug("ZuneRenderer: Warning - no window, keeping current target_rp\n"));
+      D(bug("ZuneRenderer: Warning - no window, keeping current target_rastport\n"));
     }
   }
 
@@ -494,134 +494,134 @@ RESULT
   AROS_LIBFUNC_EXIT
 }
 
-void DestroyRenderPortInternal(struct IntZuneGfxBase *base,
-                               struct RenderPort *rp) {
-  if (!rp)
+void DestroyRenderContextInternal(struct IntZuneGfxBase *base,
+                               struct RenderContext *rctx) {
+  if (!rctx)
     return;
 
-  ENTER_FUNCTION("DestroyRenderPortInternal");
+  ENTER_FUNCTION("DestroyRenderContextInternal");
 
   /* Mark as invalid */
-  rp->valid = FALSE;
+  rctx->valid = FALSE;
 
   /* Remove from tracking list */
-  RemoveRenderPortFromList(base, rp);
+  RemoveRenderContextFromList(base, rctx);
 
-  /* Cleanup RenderPort */
-  CleanupRenderPort(rp);
+  /* Cleanup RenderContext */
+  CleanupRenderContext(rctx);
 
   /* Free structure */
-  FreeVec(rp);
+  FreeVec(rctx);
 
-  D(bug("ZuneRenderer: RenderPort destroyed internally\n"));
-  EXIT_FUNCTION("DestroyRenderPortInternal");
+  D(bug("ZuneRenderer: RenderContext destroyed internally\n"));
+  EXIT_FUNCTION("DestroyRenderContextInternal");
 }
 
-struct RenderPort *CreateRenderPortInternal(struct IntZuneGfxBase *base,
+struct RenderContext *CreateRenderContextInternal(struct IntZuneGfxBase *base,
                                             struct ColorMap *colormap,
                                             struct RastPort *rastport) {
-  struct RenderPort *rp;
+  struct RenderContext *rctx;
 
-  ENTER_FUNCTION("CreateRenderPortInternal");
+  ENTER_FUNCTION("CreateRenderContextInternal");
 
   if (!colormap || !rastport) {
     D(bug(
-        "ZuneRenderer: Invalid parameters for internal RenderPort creation\n"));
-    EXIT_FUNCTION("CreateRenderPortInternal");
+        "ZuneRenderer: Invalid parameters for internal RenderContext creation\n"));
+    EXIT_FUNCTION("CreateRenderContextInternal");
     return NULL;
   }
 
-  /* Allocate RenderPort structure */
-  rp = AllocVec(sizeof(struct RenderPort), MEMF_CLEAR | MEMF_PUBLIC);
-  if (!rp) {
-    D(bug("ZuneRenderer: Failed to allocate RenderPort internally\n"));
-    EXIT_FUNCTION("CreateRenderPortInternal");
+  /* Allocate RenderContext structure */
+  rctx = AllocVec(sizeof(struct RenderContext), MEMF_CLEAR | MEMF_PUBLIC);
+  if (!rctx) {
+    D(bug("ZuneRenderer: Failed to allocate RenderContext internally\n"));
+    EXIT_FUNCTION("CreateRenderContextInternal");
     return NULL;
   }
 
-  InitializeRenderPort(rp);
+  InitializeRenderContext(rctx);
 
   /* Set target information */
-  rp->target_rp = rastport;
-  rp->colormap = colormap;
-  rp->target_board = NULL; /* Screen rendering */
+  rctx->target_rastport = rastport;
+  rctx->colormap = colormap;
+  rctx->target_board = NULL; /* Screen rendering */
 
-  /* Allocate per-RenderPort caches */
-  rp->color_cache = AllocVec(sizeof(struct ColorCache), MEMF_CLEAR | MEMF_PUBLIC);
-  if (rp->color_cache) {
-    InitColorCache(rp->color_cache);
+  /* Allocate per-RenderContext caches */
+  rctx->color_cache = AllocVec(sizeof(struct ColorCache), MEMF_CLEAR | MEMF_PUBLIC);
+  if (rctx->color_cache) {
+    InitColorCache(rctx->color_cache);
   }
-  rp->pen_color_cache =
+  rctx->pen_color_cache =
       AllocVec(sizeof(struct PenColorCache), MEMF_CLEAR | MEMF_PUBLIC);
-  if (rp->pen_color_cache) {
-    InitPenColorCache(rp->pen_color_cache);
+  if (rctx->pen_color_cache) {
+    InitPenColorCache(rctx->pen_color_cache);
   }
 
   /* Cache HIDD bitmap object for efficient direct operations */
   if (rastport && rastport->BitMap) {
-    rp->hidd_bitmap_obj = HIDD_BM_OBJ(rastport->BitMap);
+    rctx->hidd_bitmap_obj = HIDD_BM_OBJ(rastport->BitMap);
   }
 
   /* Detect and initialize backend */
-  ZuneBackend *backend = ZuneFindBestBackend(rp);
-  if (backend && ZuneBindRenderPortToBackend(rp, backend)) {
+  ZuneBackend *backend = ZuneFindBestBackend(rctx);
+  if (backend && ZuneBindRenderContextToBackend(rctx, backend)) {
     /* Determine pixel format from ColorMap */
     if (colormap && backend->ops && backend->ops->GetPixelFormat) {
-      rp->pixel_format = backend->ops->GetPixelFormat(rp->target_rp->BitMap);
+      rctx->pixel_format = backend->ops->GetPixelFormat(rctx->target_rastport->BitMap);
     }
   } else {
     /* No active backend - rely on software fallbacks */
     D(bug("ZuneRenderer: No backend available, using software fallback\n"));
-    rp->backend_type = BACKEND_SOFTWARE;
-    rp->backend_context = NULL;
-    rp->backend_vtable = NULL;
+    rctx->backend_type = BACKEND_SOFTWARE;
+    rctx->backend_context = NULL;
+    rctx->backend_vtable = NULL;
 
-    if (rp->target_board && rp->target_board->pixel_format) {
-      rp->pixel_format = rp->target_board->pixel_format;
-    } else if (colormap && rp->target_rp && rp->target_rp->BitMap &&
+    if (rctx->target_board && rctx->target_board->pixel_format) {
+      rctx->pixel_format = rctx->target_board->pixel_format;
+    } else if (colormap && rctx->target_rastport && rctx->target_rastport->BitMap &&
                CyberGfxBase) {
       ULONG pf =
-          GetCyberMapAttr(rp->target_rp->BitMap, CYBRMATTR_PIXFMT);
-      rp->pixel_format = pf ? pf : PIXFMT_ARGB32;
+          GetCyberMapAttr(rctx->target_rastport->BitMap, CYBRMATTR_PIXFMT);
+      rctx->pixel_format = pf ? pf : PIXFMT_ARGB32;
     } else {
-      rp->pixel_format = PIXFMT_ARGB32;
+      rctx->pixel_format = PIXFMT_ARGB32;
     }
   }
 
   /* Add to tracking list */
-  AddRenderPortToList(base, rp);
+  AddRenderContextToList(base, rctx);
 
-  EXIT_FUNCTION("CreateRenderPortInternal");
-  return rp;
+  EXIT_FUNCTION("CreateRenderContextInternal");
+  return rctx;
 }
 
 /*****************************************************************************
 
     NAME */
-AROS_LH1(void, ZuneDestroyRenderPort,
+AROS_LH1(void, ZuneDestroyRenderContext,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
 
          /*  LOCATION */
          struct Library *, ZuneGfxBase, 7, zunegfx)
 
 /*  FUNCTION
-    Destroys a RenderPort and frees all associated resources.
+    Destroys a RenderContext and frees all associated resources.
     Any pending batch operations are automatically flushed.
 
 INPUTS
-    rp - RenderPort to destroy (may be NULL)
+    rctx - RenderContext to destroy (may be NULL)
 
 RESULT
     None
 
 NOTES
-    After calling this function, the RenderPort pointer is no longer valid.
+    After calling this function, the RenderContext pointer is no longer valid.
     It is safe to pass NULL to this function.
 
 SEE ALSO
-    CreateRenderPort(), CreateRenderPortWithDrawingBoard()
+    CreateRenderContext(), CreateRenderContextWithDrawingBoard()
 
 *****************************************************************************/
 {
@@ -629,18 +629,18 @@ SEE ALSO
 
   struct IntZuneGfxBase *base = ZRB(ZuneGfxBase);
 
-  ENTER_FUNCTION("ZuneDestroyRenderPort");
+  ENTER_FUNCTION("ZuneDestroyRenderContext");
 
-  D(bug("ZuneRenderer: ZuneDestroyRenderPort(rp=%p)\n", rp));
+  D(bug("ZuneRenderer: ZuneDestroyRenderContext(rctx=%p)\n", rctx));
 
-  if (!rp) {
-    D(bug("ZuneRenderer: NULL RenderPort, nothing to destroy\n"));
+  if (!rctx) {
+    D(bug("ZuneRenderer: NULL RenderContext, nothing to destroy\n"));
     return;
   }
 
   /* Flush any pending batch operations */
-  if (rp->batch_state && rp->batching_enabled) {
-    struct BatchState *batch = (struct BatchState *)rp->batch_state;
+  if (rctx->batch_state && rctx->batching_enabled) {
+    struct BatchState *batch = (struct BatchState *)rctx->batch_state;
     if (batch->immediate.count > 0 || batch->deferred.count > 0) {
       D(bug("ZuneRenderer: Flushing pending batch operations\n"));
       // FlushBatchState(batch);
@@ -648,17 +648,17 @@ SEE ALSO
   }
 
   /* Remove from tracking list */
-  RemoveRenderPortFromList(base, rp);
+  RemoveRenderContextFromList(base, rctx);
 
-  /* Cleanup RenderPort */
-  CleanupRenderPort(rp);
+  /* Cleanup RenderContext */
+  CleanupRenderContext(rctx);
 
   /* Free the structure */
-  FreeVec(rp);
+  FreeVec(rctx);
 
-  D(bug("ZuneRenderer: RenderPort destroyed\n"));
+  D(bug("ZuneRenderer: RenderContext destroyed\n"));
 
-  EXIT_FUNCTION("ZuneDestroyRenderPort");
+  EXIT_FUNCTION("ZuneDestroyRenderContext");
 
   AROS_LIBFUNC_EXIT
 }
@@ -666,19 +666,19 @@ SEE ALSO
 /*****************************************************************************
 
     NAME */
-AROS_LH2(void, ZuneClearRenderPort,
+AROS_LH2(void, ZuneClearRenderContext,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0), AROS_LHA(ULONG, color, D0),
+         AROS_LHA(struct RenderContext *, rctx, A0), AROS_LHA(ULONG, color, D0),
 
          /*  LOCATION */
          struct Library *, ZuneGfxBase, 8, zunegfx)
 
 /*  FUNCTION
-    Clears the entire RenderPort with the specified color.
+    Clears the entire RenderContext with the specified color.
 
 INPUTS
-    rp - RenderPort to clear (must not be NULL)
+    rctx - RenderContext to clear (must not be NULL)
     color - Clear color in ARGB format (0xAARRGGBB)
 
 RESULT
@@ -695,20 +695,20 @@ SEE ALSO
 {
   AROS_LIBFUNC_INIT
 
-  ENTER_FUNCTION("ZuneClearRenderPort");
+  ENTER_FUNCTION("ZuneClearRenderContext");
 
-  D(bug("ZuneRenderer: ZuneClearRenderPort(rp=%p, color=0x%08x)\n", rp, color));
+  D(bug("ZuneRenderer: ZuneClearRenderContext(rctx=%p, color=0x%08x)\n", rctx, color));
 
-  if (!ValidateRenderPort(rp)) {
-    D(bug("ZuneRenderer: Invalid RenderPort\n"));
+  if (!ValidateRenderContext(rctx)) {
+    D(bug("ZuneRenderer: Invalid RenderContext\n"));
     return;
   }
 
   struct InternalColor internal_color =
-      ZuneColorToInternal(rp, color, rp->pixel_format);
-  ZUNE_BACKEND_CALL(rp, ClearRenderPort, &internal_color);
+      ZuneColorToInternal(rctx, color, rctx->pixel_format);
+  ZUNE_BACKEND_CALL(rctx, ClearRenderContext, &internal_color);
 
-  EXIT_FUNCTION("ZuneClearRenderPort");
+  EXIT_FUNCTION("ZuneClearRenderContext");
 
   AROS_LIBFUNC_EXIT
 }
@@ -717,12 +717,12 @@ SEE ALSO
 /* Validation Functions */
 /*****************************************************************************/
 
-BOOL ValidateRenderPort(struct RenderPort *rp) {
-  if (!rp)
+BOOL ValidateRenderContext(struct RenderContext *rctx) {
+  if (!rctx)
     return FALSE;
-  if (!rp->valid)
+  if (!rctx->valid)
     return FALSE;
-  if (!rp->target_rp && !rp->target_board)
+  if (!rctx->target_rastport && !rctx->target_board)
     return FALSE;
 
   /* Additional validation may be added here once clipping/batching mature */
@@ -749,7 +749,7 @@ INPUTS
 RESULT
     Pointer to the master GL context, or NULL if not available.
     The context is only available after at least one OpenGL-based
-    RenderPort has been created and used.
+    RenderContext has been created and used.
 
 NOTES
     This function is primarily intended for use by the Layer Compositor

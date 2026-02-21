@@ -54,7 +54,7 @@ struct FrameRendererBrush {
 };
 
 static inline BOOL frame_renderer_can_use_zunegfx(struct MUI_RenderInfo *mri) {
-    return mri && mri->mri_RenderPort && (mri->mri_RenderPort->target_rp == mri->mri_RastPort);
+    return mri && mri->mri_RenderContext && (mri->mri_RenderContext->target_rastport == mri->mri_RastPort);
 }
 
 static inline UBYTE frame_renderer_clamp_channel(ULONG value) {
@@ -343,7 +343,7 @@ BOOL zune_frame_try_renderer(Object *obj, struct MUI_AreaData *data, const struc
 
     fill_brush = &fill_brush_storage.brush;
 
-    struct RenderPort *port = mri->mri_RenderPort;
+    struct RenderContext *port = mri->mri_RenderContext;
     if (!port)
         return FALSE;
 
@@ -384,7 +384,7 @@ BOOL zune_frame_try_renderer(Object *obj, struct MUI_AreaData *data, const struc
 
     if (use_drawbuffer) {
         struct DrawingBoard *board = NULL;
-        struct RenderPort *buffer_port = NULL;
+        struct RenderContext *buffer_port = NULL;
 
         /* Use LINEARMEM flag to get a bitmap that supports direct pixel locking for AA rendering */
         if (WindowObtainObjectDrawBuffer(mri, obj, (UWORD)bgw, (UWORD)bgh, ZUNE_DRAWINGBOARD_LINEARMEM, &board, &buffer_port)) {
@@ -516,7 +516,7 @@ void zune_frame_draw_deferred_outline(Object *obj, struct MUI_AreaData *data,
 
     ULONG border_color = frame_renderer_generate_border_color(background, mri);
 
-    struct RenderPort *port = mri->mri_RenderPort;
+    struct RenderContext *port = mri->mri_RenderContext;
     if (!port)
         return;
 
@@ -545,7 +545,7 @@ void zune_frame_draw_deferred_outline(Object *obj, struct MUI_AreaData *data,
 
     if (use_drawbuffer) {
         struct DrawingBoard *board = NULL;
-        struct RenderPort *buffer_port = NULL;
+        struct RenderContext *buffer_port = NULL;
 
         /* Use LINEARMEM flag to get a bitmap that supports direct pixel locking for AA rendering */
         if (WindowObtainObjectDrawBuffer(mri, obj, (UWORD)bgw, (UWORD)bgh, ZUNE_DRAWINGBOARD_LINEARMEM, &board, &buffer_port)) {
@@ -1062,7 +1062,7 @@ static BOOL rect_draw_with_zunegfx(struct MUI_RenderInfo *mri, int left,
         .height = (UWORD)height,
     };
 
-    ZuneDrawRectangleOutline(mri->mri_RenderPort, &rect, border_color);
+    ZuneDrawRectangleOutline(mri->mri_RenderContext, &rect, border_color);
 
     return TRUE;
 }

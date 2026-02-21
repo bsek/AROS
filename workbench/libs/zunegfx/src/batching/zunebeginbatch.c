@@ -2,6 +2,7 @@
 #include <aros/libcall.h>
 #include <exec/types.h>
 
+#include "../backends/backend_interface.h"
 #include "../zunegfx_intern.h"
 #include "batching_intern.h"
 
@@ -11,7 +12,7 @@
 AROS_LH1(void, ZuneBeginBatch,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
 
          /*  LOCATION */
          struct Library *, ZuneGfxBase, 19, zunegfx)
@@ -22,7 +23,7 @@ AROS_LH1(void, ZuneBeginBatch,
     is called.
 
 INPUTS
-    rp - RenderPort for batching (must not be NULL)
+    rctx - RenderContext for batching (must not be NULL)
 
 RESULT
     None
@@ -41,23 +42,23 @@ SEE ALSO
 
   ENTER_FUNCTION("ZuneBeginBatch");
 
-  D(bug("ZuneRenderer: ZuneBeginBatch(rp=%p)\n", rp));
+  D(bug("ZuneRenderer: ZuneBeginBatch(rctx=%p)\n", rctx));
 
-  if (!ValidateRenderPort(rp)) {
-    D(bug("ZuneRenderer: Invalid RenderPort\n"));
+  if (!ValidateRenderContext(rctx)) {
+    D(bug("ZuneRenderer: Invalid RenderContext\n"));
     return;
   }
 
-  if (!rp->batch_state) {
+  if (!rctx->batch_state) {
     D(bug("ZuneRenderer: Creating batch state on-demand\n"));
-    rp->batch_state = CreateBatchState(rp);
-    if (!rp->batch_state) {
+    rctx->batch_state = CreateBatchState(rctx);
+    if (!rctx->batch_state) {
       D(bug("ZuneRenderer: Failed to create batch state\n"));
       return;
     }
   }
 
-  struct BatchState *batch = (struct BatchState *)rp->batch_state;
+  struct BatchState *batch = (struct BatchState *)rctx->batch_state;
 
   /* Flush any existing batch first */
   if (batch->immediate.count > 0 || batch->deferred.count > 0) {
@@ -65,7 +66,13 @@ SEE ALSO
   }
 
   batch->active = TRUE;
-  rp->batching_enabled = TRUE;
+  rctx->batching_enabled = TRUE;
+
+  /* Notify the backend (e.g. OpenGL defers swapbuffers) */
+  ZuneBackend *backend = ZuneGetRenderContextBackend(rctx);
+  if (backend && backend->ops && backend->ops->BeginBatch) {
+    backend->ops->BeginBatch(rctx);
+  }
 
   D(bug("ZuneRenderer: Batch session started\n"));
 

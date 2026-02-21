@@ -235,7 +235,7 @@ ULONG BlendColorsInternal(ULONG color1, ULONG color2, ULONG alpha) {
   return ZUNE_COLOR_ARGB32(a, r, g, b);
 }
 
-static struct InternalColor BuildInternalColor(struct RenderPort *rp,
+static struct InternalColor BuildInternalColor(struct RenderContext *rctx,
                                                ULONG color,
                                                BOOL prepare_backend) {
   struct InternalColor ic;
@@ -249,22 +249,22 @@ static struct InternalColor BuildInternalColor(struct RenderPort *rp,
   ic.original_pixel = color;
 
   if (prepare_backend) {
-    ZuneBackend *backend = ZuneGetRenderPortBackend(rp);
+    ZuneBackend *backend = ZuneGetRenderContextBackend(rctx);
     if (backend && backend->ops && backend->ops->PrepareColor) {
-      backend->ops->PrepareColor(rp, &ic);
+      backend->ops->PrepareColor(rctx, &ic);
     }
   }
 
   return ic;
 }
 
-static BOOL PenIndexToARGB(struct RenderPort *rp, LONG pen, ULONG *out_color) {
+static BOOL PenIndexToARGB(struct RenderContext *rctx, LONG pen, ULONG *out_color) {
   ULONG rgb[3];
 
-  if (!rp || !out_color)
+  if (!rctx || !out_color)
     return FALSE;
 
-  struct ColorMap *cm = rp->colormap;
+  struct ColorMap *cm = rctx->colormap;
   if (!cm)
     return FALSE;
 
@@ -277,40 +277,40 @@ static BOOL PenIndexToARGB(struct RenderPort *rp, LONG pen, ULONG *out_color) {
   return TRUE;
 }
 
-BOOL ZuneBrushToInternalColor(struct RenderPort *rp,
+BOOL ZuneBrushToInternalColor(struct RenderContext *rctx,
                               const struct ZuneBrush *brush,
                               struct InternalColor *out_color) {
-  if (!rp || !brush || !out_color) {
+  if (!rctx || !brush || !out_color) {
     D(bug(
-        "ZuneBrushToInternalColor: Invalid parameters rp=%p brush=%p out=%p\n",
-        rp, brush, out_color));
+        "ZuneBrushToInternalColor: Invalid parameters rctx=%p brush=%p out=%p\n",
+        rctx, brush, out_color));
     return FALSE;
   }
 
   switch (brush->type) {
   case ZUNE_BRUSH_TYPE_SOLID:
     /* Try cache first for solid color */
-    if (rp->color_cache &&
-        GetCachedInternalColor(rp->color_cache, brush->data.solid.color,
-                               rp->pixel_format, out_color)) {
+    if (rctx->color_cache &&
+        GetCachedInternalColor(rctx->color_cache, brush->data.solid.color,
+                               rctx->pixel_format, out_color)) {
       D(bug("ZuneBrushToInternalColor: Cache hit for solid color=0x%08X\n",
             brush->data.solid.color));
       return TRUE;
     }
     /* Not in cache, compute and cache it */
-    *out_color = BuildInternalColor(rp, brush->data.solid.color, TRUE);
-    if (rp->color_cache) {
-      CacheInternalColor(rp->color_cache, brush->data.solid.color,
-                         rp->pixel_format, out_color);
+    *out_color = BuildInternalColor(rctx, brush->data.solid.color, TRUE);
+    if (rctx->color_cache) {
+      CacheInternalColor(rctx->color_cache, brush->data.solid.color,
+                         rctx->pixel_format, out_color);
     }
     return TRUE;
   case ZUNE_BRUSH_TYPE_PEN: {
     LONG pen = brush->data.pen.pen;
 
     /* Try pen color cache first */
-    if (rp->pen_color_cache && rp->colormap) {
-      if (GetCachedPenInternalColor(rp->pen_color_cache, pen, rp->colormap,
-                                    rp->pixel_format, out_color)) {
+    if (rctx->pen_color_cache && rctx->colormap) {
+      if (GetCachedPenInternalColor(rctx->pen_color_cache, pen, rctx->colormap,
+                                    rctx->pixel_format, out_color)) {
         D(bug("ZuneBrushToInternalColor: Pen cache hit for pen=%ld\n", pen));
         /* Update pen allocation info from brush */
         out_color->pen = pen;
@@ -321,20 +321,20 @@ BOOL ZuneBrushToInternalColor(struct RenderPort *rp,
 
     /* Not in cache, convert pen to ARGB first */
     ULONG argb_color;
-    if (!PenIndexToARGB(rp, pen, &argb_color)) {
-      D(bug("ZuneBrushToInternalColor: Invalid pen %ld for rp=%p\n", pen, rp));
+    if (!PenIndexToARGB(rctx, pen, &argb_color)) {
+      D(bug("ZuneBrushToInternalColor: Invalid pen %ld for rctx=%p\n", pen, rctx));
       return FALSE;
     }
 
     /* Build internal color */
-    *out_color = BuildInternalColor(rp, argb_color, FALSE);
+    *out_color = BuildInternalColor(rctx, argb_color, FALSE);
     out_color->pen = pen;
     out_color->pen_allocated = brush->data.pen.release_pen;
 
     /* Cache the result */
-    if (rp->pen_color_cache && rp->colormap) {
-      CachePenInternalColor(rp->pen_color_cache, pen, rp->colormap,
-                            rp->pixel_format, out_color);
+    if (rctx->pen_color_cache && rctx->colormap) {
+      CachePenInternalColor(rctx->pen_color_cache, pen, rctx->colormap,
+                            rctx->pixel_format, out_color);
     }
 
     return TRUE;
@@ -464,13 +464,13 @@ SEE ALSO
 /*****************************************************************************/
 
 /* Convert ARGB color to internal color structure with caching */
-struct InternalColor ZuneColorToInternal(struct RenderPort *rp, ULONG color,
+struct InternalColor ZuneColorToInternal(struct RenderContext *rctx, ULONG color,
                                          ULONG pixel_format) {
   struct InternalColor ic;
 
   /* Try to get from cache first */
-  if (rp && rp->color_cache) {
-    if (GetCachedInternalColor(rp->color_cache, color, pixel_format, &ic)) {
+  if (rctx && rctx->color_cache) {
+    if (GetCachedInternalColor(rctx->color_cache, color, pixel_format, &ic)) {
       D(bug("ZuneColorToInternal: Cache hit for color=0x%08X, pixel_format=%d\n",
             color, pixel_format));
       return ic;
@@ -478,11 +478,11 @@ struct InternalColor ZuneColorToInternal(struct RenderPort *rp, ULONG color,
   }
 
   /* Not in cache, compute it */
-  ic = BuildInternalColor(rp, color, TRUE);
+  ic = BuildInternalColor(rctx, color, TRUE);
 
   /* Cache the result */
-  if (rp && rp->color_cache) {
-    CacheInternalColor(rp->color_cache, color, pixel_format, &ic);
+  if (rctx && rctx->color_cache) {
+    CacheInternalColor(rctx->color_cache, color, pixel_format, &ic);
   }
 
   return ic;
@@ -494,7 +494,7 @@ struct InternalColor ZuneColorToInternal(struct RenderPort *rp, ULONG color,
 AROS_LH3(void, ZuneInitPenCache,
 
          /*  SYNOPSIS */
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(LONG *, pens, A1),
          AROS_LHA(UWORD, count, D0),
 
@@ -507,7 +507,7 @@ AROS_LH3(void, ZuneInitPenCache,
     performance during rendering.
 
 INPUTS
-    rp    - RenderPort to initialize cache for
+    rctx    - RenderContext to initialize cache for
     pens  - Array of pen indices to cache
     count - Number of pens in the array
 
@@ -515,16 +515,16 @@ RESULT
     None
 
 SEE ALSO
-    CreateRenderPort()
+    CreateRenderContext()
 
 *****************************************************************************/
 {
   AROS_LIBFUNC_INIT
 
-  if (!rp || !pens || count == 0)
+  if (!rctx || !pens || count == 0)
     return;
 
-  if (!rp->pen_color_cache || !rp->colormap)
+  if (!rctx->pen_color_cache || !rctx->colormap)
     return;
 
   for (UWORD i = 0; i < count; i++) {
@@ -532,16 +532,16 @@ SEE ALSO
     ULONG argb_color;
 
     /* Convert pen to ARGB */
-    if (!PenIndexToARGB(rp, pen, &argb_color))
+    if (!PenIndexToARGB(rctx, pen, &argb_color))
       continue;
 
     /* Build and cache the internal color */
-    struct InternalColor ic = BuildInternalColor(rp, argb_color, FALSE);
+    struct InternalColor ic = BuildInternalColor(rctx, argb_color, FALSE);
     ic.pen = pen;
     ic.pen_allocated = FALSE;
 
-    CachePenInternalColor(rp->pen_color_cache, pen, rp->colormap,
-                          rp->pixel_format, &ic);
+    CachePenInternalColor(rctx->pen_color_cache, pen, rctx->colormap,
+                          rctx->pixel_format, &ic);
   }
 
   AROS_LIBFUNC_EXIT

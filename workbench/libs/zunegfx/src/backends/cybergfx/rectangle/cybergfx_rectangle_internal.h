@@ -20,16 +20,16 @@
 #include "../cybergfx_pixel_format.h"
 #include "../cybergfx_simd.h"
 
-void CybergfxDrawRoundedRectangleToLockedDrawingBoard(struct RenderPort *renderport, UWORD x, UWORD y, UWORD width, UWORD height, UBYTE border_width,
+void CybergfxDrawRoundedRectangleToLockedDrawingBoard(struct RenderContext *renderport, UWORD x, UWORD y, UWORD width, UWORD height, UBYTE border_width,
                                                       struct ZuneBrush *fill_brush, ULONG border_color, UWORD border_radius, BOOL filled);
 
-void CybergfxDrawRoundedRectangleToRasterPort(struct RenderPort *renderport, struct RastPort *rp, UWORD x, UWORD y, UWORD width, UWORD height,
+void CybergfxDrawRoundedRectangleToRasterPort(struct RenderContext *renderport, struct RastPort *rp, UWORD x, UWORD y, UWORD width, UWORD height,
                                               UBYTE border_width, struct ZuneBrush *fill_brush, ULONG border_color, UWORD border_radius, BOOL filled);
 
-void CybergfxDrawRectangleToRasterPort(struct RenderPort *renderport, struct RastPort *rp, UWORD x, UWORD y, UWORD width, UWORD height,
+void CybergfxDrawRectangleToRasterPort(struct RenderContext *renderport, struct RastPort *rp, UWORD x, UWORD y, UWORD width, UWORD height,
                                        UBYTE border_width, struct ZuneBrush *fill_brush, ULONG border_color, BOOL filled);
 
-void CybergfxDrawRectangleToLockedDrawingBoard(struct RenderPort *renderport, WORD x, WORD y, UWORD width, UWORD height, UBYTE border_width,
+void CybergfxDrawRectangleToLockedDrawingBoard(struct RenderContext *renderport, WORD x, WORD y, UWORD width, UWORD height, UBYTE border_width,
                                                struct ZuneBrush *fill_brush, ULONG border_color, BOOL filled);
 
 void CybergfxAARectangleDrawingBoard(struct DrawingBoard *board, UWORD x, UWORD y, UWORD width, UWORD height, UBYTE radius, float line_width,

@@ -78,7 +78,7 @@ struct DrawBufferEntry {
     struct MinNode node;
     Object *object;
     struct DrawingBoard *board;
-    struct RenderPort *port;
+    struct RenderContext *port;
     UWORD width;
     UWORD height;
 };
@@ -241,7 +241,7 @@ static void ResetDrawBufferEntry(struct DrawBufferEntry *entry) {
         entry->board = NULL;
     }
     if (entry->port) {
-        ZuneDestroyRenderPort(entry->port);
+        ZuneDestroyRenderContext(entry->port);
         entry->port = NULL;
     }
     entry->width = 0;
@@ -274,7 +274,7 @@ static void ClearDrawBufferEntries(struct MUI_WindowData *data) {
 }
 
 BOOL WindowObtainObjectDrawBuffer(struct MUI_RenderInfo *mri, Object *obj, UWORD width, UWORD height, ULONG flags, struct DrawingBoard **board_out,
-                                  struct RenderPort **port_out) {
+                                  struct RenderContext **port_out) {
     struct MUI_WindowData *data;
     struct DrawBufferEntry *entry;
 
@@ -302,18 +302,18 @@ BOOL WindowObtainObjectDrawBuffer(struct MUI_RenderInfo *mri, Object *obj, UWORD
 
     if (!entry->board || !entry->port) {
         /*
-         * New API: Create RenderPort first (bound to window), then DrawingBoard.
-         * The RenderPort selects the best backend (OpenGL if available).
+         * New API: Create RenderContext first (bound to window), then DrawingBoard.
+         * The RenderContext selects the best backend (OpenGL if available).
          */
-        entry->port = ZuneCreateRenderPortForWindow(mri->mri_Window, mri->mri_Colormap, BACKEND_OPENGL);
+        entry->port = ZuneCreateRenderContextForWindow(mri->mri_Window, mri->mri_Colormap, BACKEND_OPENGL);
         if (!entry->port) {
             RemoveDrawBufferEntry(data, entry);
             return FALSE;
         }
 
-        entry->board = ZuneCreateDrawingBoardForRenderPort(entry->port, width, height, flags);
+        entry->board = ZuneCreateDrawingBoardForRenderContext(entry->port, width, height, flags);
         if (!entry->board) {
-            ZuneDestroyRenderPort(entry->port);
+            ZuneDestroyRenderContext(entry->port);
             entry->port = NULL;
             RemoveDrawBufferEntry(data, entry);
             return FALSE;
@@ -323,7 +323,7 @@ BOOL WindowObtainObjectDrawBuffer(struct MUI_RenderInfo *mri, Object *obj, UWORD
         entry->height = height;
     }
 
-    /* Ensure RenderPort targets the correct DrawingBoard (important for reuse) */
+    /* Ensure RenderContext targets the correct DrawingBoard (important for reuse) */
     ZuneSetTarget(entry->port, entry->board);
 
     if (board_out)
@@ -507,8 +507,8 @@ static void InitRenderInfoPens(struct MUI_RenderInfo *mri, struct MUI_WindowData
     mri->mri_Pens = mri->mri_PensStorage;
 }
 
-static void InitRenderPortPenCache(struct MUI_RenderInfo *mri) {
-    if (!mri || !mri->mri_RenderPort || !mri->mri_Pens)
+static void InitRenderContextPenCache(struct MUI_RenderInfo *mri) {
+    if (!mri || !mri->mri_RenderContext || !mri->mri_Pens)
         return;
 
     /* Pre-cache all MPEN pens for better rendering performance */
@@ -516,7 +516,7 @@ static void InitRenderPortPenCache(struct MUI_RenderInfo *mri) {
     for (int i = 0; i < MPEN_COUNT; i++) {
         pens[i] = mri->mri_Pens[i];
     }
-    ZuneInitPenCache(mri->mri_RenderPort, pens, MPEN_COUNT);
+    ZuneInitPenCache(mri->mri_RenderContext, pens, MPEN_COUNT);
 }
 
 static BOOL SetupRenderInfo(Object *obj, struct MUI_WindowData *data, struct MUI_RenderInfo *mri) {
@@ -711,8 +711,8 @@ static void CleanupRenderInfo(Object *obj, struct MUI_WindowData *data, struct M
     FreeScreenDrawInfo(mri->mri_Screen, mri->mri_DrawInfo);
     mri->mri_DrawInfo = NULL;
 
-    if (mri->mri_RenderPort) {
-        ZuneDestroyRenderPort(mri->mri_RenderPort);
+    if (mri->mri_RenderContext) {
+        ZuneDestroyRenderContext(mri->mri_RenderContext);
     }
 
     /* If a custom screen has been opened by zune, close it as soon as zero
@@ -750,7 +750,7 @@ static void ShowRenderInfo(struct MUI_RenderInfo *mri) {
     if (mri->mri_DrawingBoard) {
         /* Modern double buffering with DrawingBoard
          * MUI renders to the DrawingBoard's bitmap RastPort (legacy SetAPen/RectFill)
-         * zunegfx draws to DrawingBoard via mri_RenderPort (may use FBO for OpenGL) */
+         * zunegfx draws to DrawingBoard via mri_RenderContext (may use FBO for OpenGL) */
         mri->mri_RastPort = mri->mri_DrawingBoard->rastport;
         D(bug("ShowRenderInfo: Using DrawingBoard for double buffering\n"));
         D(bug("  mri_DrawingBoard: %p\n", mri->mri_DrawingBoard));
@@ -1013,19 +1013,19 @@ static void ClearDoubleBuffer(struct MUI_RenderInfo *mri);
 void FlushDoubleBuffer(struct MUI_RenderInfo *mri);
 
 static void WindowSyncFboToBitmap(struct MUI_RenderInfo *mri) {
-    if (!mri || !mri->mri_RenderPort || !mri->mri_DrawingBoard)
+    if (!mri || !mri->mri_RenderContext || !mri->mri_DrawingBoard)
         return;
-    ZuneSync(mri->mri_RenderPort);
+    ZuneSync(mri->mri_RenderContext);
 }
 
 static void WindowSyncBitmapToFbo(struct MUI_RenderInfo *mri) {
-    if (!mri || !mri->mri_RenderPort || !mri->mri_DrawingBoard ||
+    if (!mri || !mri->mri_RenderContext || !mri->mri_DrawingBoard ||
         !mri->mri_DrawingBoard->rastport)
         return;
-    ZuneSetTarget(mri->mri_RenderPort, mri->mri_DrawingBoard);
+    ZuneSetTarget(mri->mri_RenderContext, mri->mri_DrawingBoard);
     /* Reload the FBO from the DrawingBoard's bitmap.
      * This syncs any legacy bitmap drawing back to the OpenGL FBO. */
-    ZuneReload(mri->mri_RenderPort);
+    ZuneReload(mri->mri_RenderContext);
 }
 
 static VOID RefreshWindow(Object *oWin, struct MUI_WindowData *data) {
@@ -3226,15 +3226,15 @@ static void InstallBackbuffer(struct IClass *cl, Object *obj) {
     if (!win)
         return;
 
-    /* Create main RenderPort for this window - always needed for zunegfx */
-    if (!mri->mri_RenderPort) {
-        mri->mri_RenderPort = ZuneCreateRenderPortForWindow(win, mri->mri_Colormap, BACKEND_CYBERGFX);
-        if (!mri->mri_RenderPort) {
-            D(bug("Failed to create RenderPort for window\n"));
+    /* Create main RenderContext for this window - always needed for zunegfx */
+    if (!mri->mri_RenderContext) {
+        mri->mri_RenderContext = ZuneCreateRenderContextForWindow(win, mri->mri_Colormap, BACKEND_CYBERGFX);
+        if (!mri->mri_RenderContext) {
+            D(bug("Failed to create RenderContext for window\n"));
             return;
         }
-        InitRenderPortPenCache(mri);
-        D(bug("Created RenderPort for window %p, backend=%ld\n", win, mri->mri_RenderPort->backend_type));
+        InitRenderContextPenCache(mri);
+        D(bug("Created RenderContext for window %p, backend=%ld\n", win, mri->mri_RenderContext->backend_type));
     }
 
     /* Only install double buffering if enabled both per-window and globally.
@@ -3243,8 +3243,8 @@ static void InstallBackbuffer(struct IClass *cl, Object *obj) {
      * RastPort for the FBO to receive the draw calls. Without a DrawingBoard,
      * drawing goes to the window's RastPort and the GL framebuffer stays empty.
      */
-    BOOL opengl_requires_buffer = (mri->mri_RenderPort &&
-                                   mri->mri_RenderPort->backend_type == BACKEND_OPENGL);
+    BOOL opengl_requires_buffer = (mri->mri_RenderContext &&
+                                   mri->mri_RenderContext->backend_type == BACKEND_OPENGL);
     BOOL use_double_buffer = data->wd_DoubleBuffer &&
                              muiGlobalInfo(obj)->mgi_Prefs->renderer_doublebuffer;
 
@@ -3264,22 +3264,22 @@ static void InstallBackbuffer(struct IClass *cl, Object *obj) {
     buffer_width = win->BorderLeft + win->BorderRight + win->GZZWidth;
     buffer_height = win->BorderTop + win->BorderBottom + win->GZZHeight;
 
-    /* Create DrawingBoard for double buffering via RenderPort.
+    /* Create DrawingBoard for double buffering via RenderContext.
      * Pass 0 for flags to use friend_bitmap for colormap inheritance (pen drawing). */
-    mri->mri_DrawingBoard = ZuneCreateDrawingBoardForRenderPort(mri->mri_RenderPort, buffer_width, buffer_height, 0);
+    mri->mri_DrawingBoard = ZuneCreateDrawingBoardForRenderContext(mri->mri_RenderContext, buffer_width, buffer_height, 0);
 
     if (mri->mri_DrawingBoard && mri->mri_DrawingBoard->bitmap && mri->mri_DrawingBoard->rastport) {
         /*
          * DrawingBoard already has its own allocated RastPort from
-         * ZuneCreateDrawingBoardForRenderPort(). We just use it directly.
+         * ZuneCreateDrawingBoardForRenderContext(). We just use it directly.
          */
         D(bug("InstallBackbuffer: Setup complete\n"));
         D(bug("  mri_DrawingBoard->rastport: %p\n", mri->mri_DrawingBoard->rastport));
         D(bug("  mri_DrawingBoard->rastport->BitMap: %p\n", mri->mri_DrawingBoard->rastport->BitMap));
         D(bug("  mri_DrawingBoard->bitmap: %p\n", mri->mri_DrawingBoard->bitmap));
 
-        /* Set the RenderPort to target the DrawingBoard for zunegfx operations */
-        ZuneSetTarget(mri->mri_RenderPort, mri->mri_DrawingBoard);
+        /* Set the RenderContext to target the DrawingBoard for zunegfx operations */
+        ZuneSetTarget(mri->mri_RenderContext, mri->mri_DrawingBoard);
 
         D(bug("Double buffer installed: DrawingBoard %dx%d, bitmap=%p\n",
               buffer_width, buffer_height, mri->mri_DrawingBoard->bitmap));
@@ -3287,7 +3287,7 @@ static void InstallBackbuffer(struct IClass *cl, Object *obj) {
         /* DrawingBoard creation failed - continue without double buffering */
         D(bug("DrawingBoard creation failed, using direct rendering\n"));
         if (mri->mri_DrawingBoard) {
-            ZuneDestroyDrawingBoard(mri->mri_RenderPort, mri->mri_DrawingBoard);
+            ZuneDestroyDrawingBoard(mri->mri_RenderContext, mri->mri_DrawingBoard);
             mri->mri_DrawingBoard = NULL;
         }
     }
@@ -3336,8 +3336,8 @@ static void ClearDoubleBuffer(struct MUI_RenderInfo *mri) {
     if (!mri)
         return;
 
-    if (mri->mri_DrawingBoard && mri->mri_RenderPort) {
-        ZuneClearDrawingBoard(mri->mri_RenderPort, ZUNE_COLOR_ARGB32(0, 0, 0, 0));
+    if (mri->mri_DrawingBoard && mri->mri_RenderContext) {
+        ZuneClearDrawingBoard(mri->mri_RenderContext, ZUNE_COLOR_ARGB32(0, 0, 0, 0));
         D(bug("Cleared DrawingBoard buffer\n"));
         mri->mri_BufferDirty = TRUE;
     }
@@ -3356,7 +3356,7 @@ void FlushDoubleBufferRegion(struct MUI_RenderInfo *mri, LONG left, LONG top, LO
 
     struct Window *win = mri->mri_Window;
 
-    if (mri->mri_DrawingBoard && mri->mri_RenderPort) {
+    if (mri->mri_DrawingBoard && mri->mri_RenderContext) {
         LONG src_x, src_y;
         LONG copy_left = left;
         LONG copy_top = top;
@@ -3369,7 +3369,7 @@ void FlushDoubleBufferRegion(struct MUI_RenderInfo *mri, LONG left, LONG top, LO
 
         D(bug("FlushDoubleBufferRegion: board (%ld,%ld,%ld,%ld) -> window (%ld,%ld)\n", src_x, src_y, copy_width, copy_height, copy_left, copy_top));
 
-        ZunePresent(mri->mri_RenderPort, src_x, src_y, copy_left, copy_top, copy_width, copy_height);
+        ZunePresent(mri->mri_RenderContext, src_x, src_y, copy_left, copy_top, copy_width, copy_height);
     }
 }
 
@@ -3559,20 +3559,20 @@ static void DeinstallBackbuffer(struct IClass *cl, Object *obj) {
     struct MUI_WindowData *data = INST_DATA(cl, obj);
     struct MUI_RenderInfo *mri = &data->wd_RenderInfo;
 
-    /* Cleanup per-object DrawBufferEntries first - they have their own RenderPorts
+    /* Cleanup per-object DrawBufferEntries first - they have their own RenderContexts
      * that reference the window and must be cleaned up before the window closes */
     ClearDrawBufferEntries(data);
 
-    /* Cleanup DrawingBoard first (it may reference the RenderPort) */
+    /* Cleanup DrawingBoard first (it may reference the RenderContext) */
     if (mri->mri_DrawingBoard) {
-        ZuneDestroyDrawingBoard(mri->mri_RenderPort, mri->mri_DrawingBoard);
+        ZuneDestroyDrawingBoard(mri->mri_RenderContext, mri->mri_DrawingBoard);
         mri->mri_DrawingBoard = NULL;
     }
 
-    /* Then cleanup RenderPort */
-    if (mri->mri_RenderPort) {
-        ZuneDestroyRenderPort(mri->mri_RenderPort);
-        mri->mri_RenderPort = NULL;
+    /* Then cleanup RenderContext */
+    if (mri->mri_RenderContext) {
+        ZuneDestroyRenderContext(mri->mri_RenderContext);
+        mri->mri_RenderContext = NULL;
     }
 }
 

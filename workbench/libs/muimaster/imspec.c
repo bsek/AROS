@@ -845,13 +845,13 @@ void zune_imspec_drawbuffered(struct MUI_ImageSpec_intern *spec,
 
             /* New path: Use ZuneTexture directly if available */
             struct ZuneTexture *tex = dt_get_texture(node);
-            if (tex && mri->mri_RenderPort)
+            if (tex && mri->mri_RenderContext)
             {
                 struct ZunePoint pos = {
                     .x = left - dx,
                     .y = top - dy
                 };
-                ZuneDrawTexture(mri->mri_RenderPort, tex, &pos);
+                ZuneDrawTexture(mri->mri_RenderContext, tex, &pos);
             }
             else
             {
@@ -882,7 +882,7 @@ void zune_imspec_drawbuffered(struct MUI_ImageSpec_intern *spec,
              * - Cache is reused across all windows using the same texture
              * - No cache invalidation needed when drawing different areas
              */
-            if (tex && mri->mri_RenderPort)
+            if (tex && mri->mri_RenderContext)
             {
                 struct ZuneRect dest = {
                     .x = left - dx,
@@ -890,7 +890,7 @@ void zune_imspec_drawbuffered(struct MUI_ImageSpec_intern *spec,
                     .width = right - left + 1,
                     .height = bottom - top + 1
                 };
-                ZuneDrawTextureTiled(mri->mri_RenderPort, tex, &dest);
+                ZuneDrawTextureTiled(mri->mri_RenderContext, tex, &dest);
             }
             else
             {

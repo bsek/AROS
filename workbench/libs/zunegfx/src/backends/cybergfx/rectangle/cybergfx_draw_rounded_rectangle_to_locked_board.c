@@ -10,12 +10,12 @@
  * Draws a rounded rectangle to a locked DrawingBoard.
  * Fill and border are drawn in a single pass to avoid edge artifacts.
  *****************************************************************************/
-void CybergfxDrawRoundedRectangleToLockedDrawingBoard(struct RenderPort *rp, UWORD x, UWORD y, UWORD width, UWORD height, UBYTE border_width,
+void CybergfxDrawRoundedRectangleToLockedDrawingBoard(struct RenderContext *rctx, UWORD x, UWORD y, UWORD width, UWORD height, UBYTE border_width,
                                                       struct ZuneBrush *fill_brush, ULONG border_color, UWORD border_radius, BOOL filled) {
-    struct DrawingBoard *board = rp->target_board;
+    struct DrawingBoard *board = rctx->target_board;
 
     /* Validate input parameters */
-    if (!rp || !board) {
+    if (!rctx || !board) {
         return;
     }
 

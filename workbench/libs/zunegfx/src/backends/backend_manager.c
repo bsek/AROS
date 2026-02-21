@@ -148,20 +148,20 @@ void ZuneUnregisterBackend(ZuneBackend *backend) {
 /* Backend Discovery Functions */
 /*****************************************************************************/
 
-ZuneBackend *ZuneFindBestBackend(struct RenderPort *rp) {
+ZuneBackend *ZuneFindBestBackend(struct RenderContext *rctx) {
   ZuneBackend *best_backend = NULL;
   ZuneBackend *current_backend;
 
   /*
-   * Fast path: Return cached result for NULL rp.
+   * Fast path: Return cached result for NULL rctx.
    * This is called very frequently from SelectTextureBackend and others.
    * The result doesn't change after initialization.
    */
-  if (!rp && g_default_backend_checked) {
+  if (!rctx && g_default_backend_checked) {
     return g_default_backend_cached;
   }
 
-  D(bug("ZuneFindBestBackend: Finding best backend for RenderPort %p\n", rp));
+  D(bug("ZuneFindBestBackend: Finding best backend for RenderContext %p\n", rctx));
 
   ObtainSemaphoreShared(&ZuneBackendSemaphore);
 
@@ -171,7 +171,7 @@ ZuneBackend *ZuneFindBestBackend(struct RenderPort *rp) {
     if (current_backend->available) {
       /* Check backend-specific compatibility */
       if (current_backend->ops->IsCompatible) {
-        if (!current_backend->ops->IsCompatible(rp)) {
+        if (!current_backend->ops->IsCompatible(rctx)) {
           D(bug("ZuneFindBestBackend: Backend %s not compatible, skipping\n",
                 current_backend->ops->name));
           continue;
@@ -185,8 +185,8 @@ ZuneBackend *ZuneFindBestBackend(struct RenderPort *rp) {
 
   ReleaseSemaphore(&ZuneBackendSemaphore);
 
-  /* Cache result for NULL rp */
-  if (!rp && !g_default_backend_checked) {
+  /* Cache result for NULL rctx */
+  if (!rctx && !g_default_backend_checked) {
     g_default_backend_cached = best_backend;
     g_default_backend_checked = TRUE;
   }
@@ -309,51 +309,51 @@ BOOL ZuneIsBackendAvailable(ZuneBackendType type) {
 }
 
 /*****************************************************************************/
-/* RenderPort-Backend Binding */
+/* RenderContext-Backend Binding */
 /*****************************************************************************/
 
-ZuneBackend *ZuneGetRenderPortBackend(struct RenderPort *rp) {
-  if (!rp || !rp->backend_vtable) {
+ZuneBackend *ZuneGetRenderContextBackend(struct RenderContext *rctx) {
+  if (!rctx || !rctx->backend_vtable) {
     return NULL;
   }
 
-  /* The backend is stored in the RenderPort's backend_vtable field */
-  return (ZuneBackend *)rp->backend_vtable;
+  /* The backend is stored in the RenderContext's backend_vtable field */
+  return (ZuneBackend *)rctx->backend_vtable;
 }
 
-BOOL ZuneBindRenderPortToBackend(struct RenderPort *rp, ZuneBackend *backend) {
-  if (!rp || !backend || !backend->available) {
-    D(bug("ZuneBindRenderPortToBackend: Invalid parameters\n"));
+BOOL ZuneBindRenderContextToBackend(struct RenderContext *rctx, ZuneBackend *backend) {
+  if (!rctx || !backend || !backend->available) {
+    D(bug("ZuneBindRenderContextToBackend: Invalid parameters\n"));
     return FALSE;
   }
 
-  D(bug("ZuneBindRenderPortToBackend: Binding RenderPort %p to backend %s\n",
-        rp, backend->ops->name));
+  D(bug("ZuneBindRenderContextToBackend: Binding RenderContext %p to backend %s\n",
+        rctx, backend->ops->name));
 
   /* Unbind from current backend first */
-  if (rp->backend_context || rp->backend_vtable) {
-    ZuneUnbindRenderPortFromBackend(rp);
+  if (rctx->backend_context || rctx->backend_vtable) {
+    ZuneUnbindRenderContextFromBackend(rctx);
   }
 
-  /* Store backend information in RenderPort BEFORE calling InitRenderPort */
-  rp->backend_type = backend->ops->type;
-  rp->backend_vtable = backend; /* Store the whole backend structure */
+  /* Store backend information in RenderContext BEFORE calling InitRenderContext */
+  rctx->backend_type = backend->ops->type;
+  rctx->backend_vtable = backend; /* Store the whole backend structure */
 
   /*
-   * Note: We do NOT set rp->backend_context here!
-   * The backend's InitRenderPort() is responsible for setting up
-   * rp->backend_context with backend-specific per-RenderPort data.
+   * Note: We do NOT set rctx->backend_context here!
+   * The backend's InitRenderContext() is responsible for setting up
+   * rctx->backend_context with backend-specific per-RenderContext data.
    *
-   * For example, the OpenGL backend needs to store per-RenderPort GL
+   * For example, the OpenGL backend needs to store per-RenderContext GL
    * contexts, not the global backend context. Setting backend_context
    * here would overwrite what the backend sets up.
    */
 
-  /* Initialize RenderPort with backend */
-  if (backend->ops->InitRenderPort && !backend->ops->InitRenderPort(rp)) {
-    D(bug("ZuneBindRenderPortToBackend: Backend InitRenderPort failed\n"));
-    rp->backend_type = BACKEND_SOFTWARE;
-    rp->backend_vtable = NULL;
+  /* Initialize RenderContext with backend */
+  if (backend->ops->InitRenderContext && !backend->ops->InitRenderContext(rctx)) {
+    D(bug("ZuneBindRenderContextToBackend: Backend InitRenderContext failed\n"));
+    rctx->backend_type = BACKEND_SOFTWARE;
+    rctx->backend_vtable = NULL;
     return FALSE;
   }
 
@@ -362,28 +362,28 @@ BOOL ZuneBindRenderPortToBackend(struct RenderPort *rp, ZuneBackend *backend) {
     backend->context->ref_count++;
   }
 
-  D(bug("ZuneBindRenderPortToBackend: RenderPort bound to backend %s "
+  D(bug("ZuneBindRenderContextToBackend: RenderContext bound to backend %s "
         "successfully\n",
         backend->ops->name));
 
   return TRUE;
 }
 
-void ZuneUnbindRenderPortFromBackend(struct RenderPort *rp) {
-  if (!rp)
+void ZuneUnbindRenderContextFromBackend(struct RenderContext *rctx) {
+  if (!rctx)
     return;
 
-  ZuneBackend *backend = ZuneGetRenderPortBackend(rp);
+  ZuneBackend *backend = ZuneGetRenderContextBackend(rctx);
   if (!backend)
     return;
 
-  D(bug("ZuneUnbindRenderPortFromBackend: Unbinding RenderPort %p from backend "
+  D(bug("ZuneUnbindRenderContextFromBackend: Unbinding RenderContext %p from backend "
         "%s\n",
-        rp, backend->ops->name));
+        rctx, backend->ops->name));
 
-  /* Cleanup RenderPort with backend */
-  if (backend->ops->CleanupRenderPort) {
-    backend->ops->CleanupRenderPort(rp);
+  /* Cleanup RenderContext with backend */
+  if (backend->ops->CleanupRenderContext) {
+    backend->ops->CleanupRenderContext(rctx);
   }
 
   /* Decrement reference count */
@@ -391,10 +391,10 @@ void ZuneUnbindRenderPortFromBackend(struct RenderPort *rp) {
     backend->context->ref_count--;
   }
 
-  /* Clear RenderPort backend information */
-  rp->backend_context = NULL;
-  rp->backend_vtable = NULL;
-  rp->backend_type = BACKEND_SOFTWARE;
+  /* Clear RenderContext backend information */
+  rctx->backend_context = NULL;
+  rctx->backend_vtable = NULL;
+  rctx->backend_type = BACKEND_SOFTWARE;
 }
 
 /*****************************************************************************/

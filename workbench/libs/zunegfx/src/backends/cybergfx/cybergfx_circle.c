@@ -30,9 +30,9 @@
 #include "cybergfx_simd.h"
 
 /* Forward declarations for antialiasing functions */
-static void CybergfxDrawAACircleDrawingBoard(struct RenderPort *rp, UWORD x, UWORD y, UWORD radius, struct ZuneBrush *fill_brush,
+static void CybergfxDrawAACircleDrawingBoard(struct RenderContext *rctx, UWORD x, UWORD y, UWORD radius, struct ZuneBrush *fill_brush,
                                              struct InternalColor *border_color, UBYTE border_width);
-static void CybergfxDrawAACircleRastPort(struct RenderPort *rp, UWORD x, UWORD y, UWORD radius, struct ZuneBrush *fill_brush,
+static void CybergfxDrawAACircleRastPort(struct RenderContext *rctx, UWORD x, UWORD y, UWORD radius, struct ZuneBrush *fill_brush,
                                          struct InternalColor *border_color, UBYTE border_width);
 
 /*****************************************************************************
@@ -50,11 +50,11 @@ static void CybergfxDrawAACircleRastPort(struct RenderPort *rp, UWORD x, UWORD y
  *
  * Basic Bresenham circle implementation with comprehensive clipping support.
  *****************************************************************************/
-void CybergfxDrawCircle(struct RenderPort *rp, WORD center_x, WORD center_y, UWORD radius, UBYTE border_width, struct ZuneBrush *fill_brush,
+void CybergfxDrawCircle(struct RenderContext *rctx, WORD center_x, WORD center_y, UWORD radius, UBYTE border_width, struct ZuneBrush *fill_brush,
                         struct InternalColor *border_color, BOOL filled, BOOL antialias) {
     ENTER_FUNCTION("CybergfxDrawCircle");
 
-    if (!rp) {
+    if (!rctx) {
         EXIT_FUNCTION("CybergfxDrawCircle");
         return;
     }
@@ -67,21 +67,21 @@ void CybergfxDrawCircle(struct RenderPort *rp, WORD center_x, WORD center_y, UWO
     WORD circle_height = 2 * radius + 1;
 
     WORD clipped_x, clipped_y, clipped_width, clipped_height;
-    if (!CybergfxClipRectangle(rp, circle_left, circle_top, circle_width, circle_height, &clipped_x, &clipped_y, &clipped_width, &clipped_height)) {
+    if (!CybergfxClipRectangle(rctx, circle_left, circle_top, circle_width, circle_height, &clipped_x, &clipped_y, &clipped_width, &clipped_height)) {
         /* Circle is completely outside clipping region */
         EXIT_FUNCTION("CybergfxDrawCircle");
         return;
     }
 
     if (antialias) {
-        if (rp->target_board) {
-            if (rp->target_board->pixels_locked) {
-                return CybergfxDrawAACircleDrawingBoard(rp, center_x, center_y, radius, fill_brush, border_color, border_width);
+        if (rctx->target_board) {
+            if (rctx->target_board->pixels_locked) {
+                return CybergfxDrawAACircleDrawingBoard(rctx, center_x, center_y, radius, fill_brush, border_color, border_width);
             } else {
-                return CybergfxDrawAACircleRastPort(rp, center_x, center_y, radius, fill_brush, border_color, border_width);
+                return CybergfxDrawAACircleRastPort(rctx, center_x, center_y, radius, fill_brush, border_color, border_width);
             }
         } else {
-            return CybergfxDrawAACircleRastPort(rp, center_x, center_y, radius, fill_brush, border_color, border_width);
+            return CybergfxDrawAACircleRastPort(rctx, center_x, center_y, radius, fill_brush, border_color, border_width);
         }
     }
 
@@ -92,8 +92,8 @@ void CybergfxDrawCircle(struct RenderPort *rp, WORD center_x, WORD center_y, UWO
             return;
         }
 
-        int board_width = rp->target_board ? rp->target_board->width : 640;
-        int board_height = rp->target_board ? rp->target_board->height : 480;
+        int board_width = rctx->target_board ? rctx->target_board->width : 640;
+        int board_height = rctx->target_board ? rctx->target_board->height : 480;
 
         int min_x = fmaxf(0, center_x - radius - 1);
         int min_y = fmaxf(0, center_y - radius - 1);
@@ -105,9 +105,9 @@ void CybergfxDrawCircle(struct RenderPort *rp, WORD center_x, WORD center_y, UWO
             return;
         }
 
-        if (rp->target_board && rp->target_board->pixels_locked && rp->target_board->pixels) {
+        if (rctx->target_board && rctx->target_board->pixels_locked && rctx->target_board->pixels) {
             /* Direct pixel manipulation for locked DrawingBoard */
-            struct DrawingBoard *board = rp->target_board;
+            struct DrawingBoard *board = rctx->target_board;
             if (board->pixel_format == PIXFMT_ARGB32 || board->pixel_format == PIXFMT_RGBA32) {
                 ULONG *pixels = (ULONG *)board->pixels;
                 ULONG pitch_pixels = board->pitch / 4;
@@ -130,7 +130,7 @@ void CybergfxDrawCircle(struct RenderPort *rp, WORD center_x, WORD center_y, UWO
                     int end_x = center_x + line_x;
 
                     if (start_x <= end_x) {
-                        CybergfxClipFillPixelArrayDirect(rp, pixels, pitch_pixels, board_width, board_height, start_x, py,
+                        CybergfxClipFillPixelArrayDirect(rctx, pixels, pitch_pixels, board_width, board_height, start_x, py,
                                                          end_x - start_x + 1, 1, converted_color);
                     }
                 }
@@ -138,10 +138,10 @@ void CybergfxDrawCircle(struct RenderPort *rp, WORD center_x, WORD center_y, UWO
         } else {
             /* Use scanline approach with FillPixelArray for unlocked boards */
             struct RastPort *rastport = NULL;
-            if (rp->target_board && rp->target_board->rastport) {
-                rastport = rp->target_board->rastport;
+            if (rctx->target_board && rctx->target_board->rastport) {
+                rastport = rctx->target_board->rastport;
             } else {
-                rastport = rp->target_rp;
+                rastport = rctx->target_rastport;
             }
 
             for (int py = min_y; py <= max_y; py++) {
@@ -163,7 +163,7 @@ void CybergfxDrawCircle(struct RenderPort *rp, WORD center_x, WORD center_y, UWO
                     end_x = max_x;
 
                 if (start_x <= end_x) {
-                    CybergfxClipFillPixelArray(rp, rastport, start_x, py, end_x - start_x + 1, 1, fill_brush->data.solid.color);
+                    CybergfxClipFillPixelArray(rctx, rastport, start_x, py, end_x - start_x + 1, 1, fill_brush->data.solid.color);
                 }
             }
         }
@@ -175,8 +175,8 @@ void CybergfxDrawCircle(struct RenderPort *rp, WORD center_x, WORD center_y, UWO
             return;
         }
 
-        int board_width = rp->target_board ? rp->target_board->width : 640;
-        int board_height = rp->target_board ? rp->target_board->height : 480;
+        int board_width = rctx->target_board ? rctx->target_board->width : 640;
+        int board_height = rctx->target_board ? rctx->target_board->height : 480;
 
         int min_x = fmaxf(0, center_x - radius - border_width - 1);
         int min_y = fmaxf(0, center_y - radius - border_width - 1);
@@ -191,9 +191,9 @@ void CybergfxDrawCircle(struct RenderPort *rp, WORD center_x, WORD center_y, UWO
         float half_border = border_width * 0.5f;
         int radius_sq = (int)radius * (int)radius;
 
-        if (rp->target_board && rp->target_board->pixels_locked && rp->target_board->pixels) {
+        if (rctx->target_board && rctx->target_board->pixels_locked && rctx->target_board->pixels) {
             /* Direct pixel manipulation for locked DrawingBoard */
-            struct DrawingBoard *board = rp->target_board;
+            struct DrawingBoard *board = rctx->target_board;
             if (board->pixel_format == PIXFMT_ARGB32 || board->pixel_format == PIXFMT_RGBA32) {
                 ULONG *pixels = (ULONG *)board->pixels;
                 ULONG pitch_pixels = board->pitch / 4;
@@ -209,7 +209,7 @@ void CybergfxDrawCircle(struct RenderPort *rp, WORD center_x, WORD center_y, UWO
                         float diff = fabsf(dist - radius);
 
                         if (diff <= half_border) {
-                            CybergfxClipFillPixelArrayDirect(rp, pixels, pitch_pixels, board_width, board_height, px, py, 1, 1, color);
+                            CybergfxClipFillPixelArrayDirect(rctx, pixels, pitch_pixels, board_width, board_height, px, py, 1, 1, color);
                         }
                     }
                 }
@@ -225,10 +225,10 @@ void CybergfxDrawCircle(struct RenderPort *rp, WORD center_x, WORD center_y, UWO
                 line_width = 1;
 
             struct RastPort *rastport = NULL;
-            if (rp->target_board && rp->target_board->rastport) {
-                rastport = rp->target_board->rastport;
+            if (rctx->target_board && rctx->target_board->rastport) {
+                rastport = rctx->target_board->rastport;
             } else {
-                rastport = rp->target_rp;
+                rastport = rctx->target_rastport;
             }
 
             while (x <= y) {
@@ -323,11 +323,11 @@ static inline ULONG make_bgra32(UBYTE a, UBYTE r, UBYTE g, UBYTE b) { return ((U
 static inline int cybergfx_fast_ftoi(float f) { return (int)(f + 0.5f); }
 
 /* Draw filled circle with border using SDF antialiasing */
-static void CybergfxDrawAACircleDrawingBoard(struct RenderPort *rp, UWORD x, UWORD y, UWORD radius, struct ZuneBrush *fill_brush,
+static void CybergfxDrawAACircleDrawingBoard(struct RenderContext *rctx, UWORD x, UWORD y, UWORD radius, struct ZuneBrush *fill_brush,
                                              struct InternalColor *border_color, UBYTE border_width) {
     ENTER_FUNCTION("CybergfxDrawAACircleDrawingBoard");
 
-    struct DrawingBoard *board = rp->target_board;
+    struct DrawingBoard *board = rctx->target_board;
 
     if (!board || !board->pixels) {
         EXIT_FUNCTION("CybergfxDrawAACircleDrawingBoard");
@@ -340,7 +340,7 @@ static void CybergfxDrawAACircleDrawingBoard(struct RenderPort *rp, UWORD x, UWO
     }
 
     if (fill_brush) {
-      PrepareBrushForRendering(rp, fill_brush, x, y, radius * 2, radius * 2);
+      PrepareBrushForRendering(rctx, fill_brush, x, y, radius * 2, radius * 2);
     }
 
     /* Get direct pixel buffer access */
@@ -364,7 +364,7 @@ static void CybergfxDrawAACircleDrawingBoard(struct RenderPort *rp, UWORD x, UWO
     /* Convert fill brush to internal color once before the loop */
     struct InternalColor fill_color_storage;
     struct InternalColor *fill_color = NULL;
-    if (fill_brush && ZuneBrushToInternalColor(rp, fill_brush, &fill_color_storage)) {
+    if (fill_brush && ZuneBrushToInternalColor(rctx, fill_brush, &fill_color_storage)) {
         fill_color = &fill_color_storage;
     }
 
@@ -477,11 +477,11 @@ static void CybergfxDrawAACircleDrawingBoard(struct RenderPort *rp, UWORD x, UWO
     EXIT_FUNCTION("CybergfxDrawAACircleDrawingBoard");
 }
 
-static void CybergfxDrawAACircleRastPort(struct RenderPort *rp, UWORD x, UWORD y, UWORD radius, struct ZuneBrush *fill_brush,
+static void CybergfxDrawAACircleRastPort(struct RenderContext *rctx, UWORD x, UWORD y, UWORD radius, struct ZuneBrush *fill_brush,
                                          struct InternalColor *border_color, UBYTE border_width) {
     ENTER_FUNCTION("CybergfxDrawAACircleDrawingBoard");
 
-    if (!rp) {
+    if (!rctx) {
         EXIT_FUNCTION("CybergfxDrawAACircleDrawingBoard");
         return;
     }
@@ -492,8 +492,8 @@ static void CybergfxDrawAACircleRastPort(struct RenderPort *rp, UWORD x, UWORD y
     }
 
     /* Get bitmap dimensions */
-    ULONG bitmap_width = GetBitMapAttr(rp->target_rp->BitMap, BMA_WIDTH);
-    ULONG bitmap_height = GetBitMapAttr(rp->target_rp->BitMap, BMA_HEIGHT);
+    ULONG bitmap_width = GetBitMapAttr(rctx->target_rastport->BitMap, BMA_WIDTH);
+    ULONG bitmap_height = GetBitMapAttr(rctx->target_rastport->BitMap, BMA_HEIGHT);
 
     /* Calculate bounding box with padding for antialiasing */
     int min_x = fmaxf(0, cybergfx_fast_ftoi(x - radius - 2.0f));
@@ -519,7 +519,7 @@ static void CybergfxDrawAACircleRastPort(struct RenderPort *rp, UWORD x, UWORD y
     /* Convert fill brush to internal color once before the loop */
     struct InternalColor fill_color_storage;
     struct InternalColor *fill_color = NULL;
-    if (fill_brush && ZuneBrushToInternalColor(rp, fill_brush, &fill_color_storage)) {
+    if (fill_brush && ZuneBrushToInternalColor(rctx, fill_brush, &fill_color_storage)) {
         fill_color = &fill_color_storage;
     }
 
@@ -532,7 +532,7 @@ static void CybergfxDrawAACircleRastPort(struct RenderPort *rp, UWORD x, UWORD y
         /* Read entire batch from raster port */
         BOOL batch_ok = FALSE;
         if (batch_buffer) {
-            batch_ok = ReadPixelArray(batch_buffer, 0, 0, (ULONG)width * 4, rp->target_rp, 
+            batch_ok = ReadPixelArray(batch_buffer, 0, 0, (ULONG)width * 4, rctx->target_rastport, 
                                       min_x, batch_start_y, width, batch_height, CYBERGFX_PIXELFORMAT_ARGB32);
         }
         
@@ -626,7 +626,7 @@ static void CybergfxDrawAACircleRastPort(struct RenderPort *rp, UWORD x, UWORD y
                 float rel_x = (min_x + px + 0.5f) - x;
                 float dist = sqrtf(rel_x * rel_x + rel_y * rel_y) - radius;
 
-                ULONG bg = batch_ok ? row_buffer[px] : ReadRGBPixel(rp->target_rp, min_x + px, py);
+                ULONG bg = batch_ok ? row_buffer[px] : ReadRGBPixel(rctx->target_rastport, min_x + px, py);
                 UBYTE bg_a, bg_r, bg_g, bg_b;
                 extract_argb32(bg, &bg_a, &bg_r, &bg_g, &bg_b);
 
@@ -676,7 +676,7 @@ static void CybergfxDrawAACircleRastPort(struct RenderPort *rp, UWORD x, UWORD y
                         batch_dirty[row_in_batch] = TRUE;
                         any_dirty = TRUE;
                     } else {
-                        WriteRGBPixel(rp->target_rp, min_x + px, py, final_color);
+                        WriteRGBPixel(rctx->target_rastport, min_x + px, py, final_color);
                     }
                 }
             }
@@ -693,7 +693,7 @@ static void CybergfxDrawAACircleRastPort(struct RenderPort *rp, UWORD x, UWORD y
                     /* Write contiguous dirty region */
                     int write_height = i - write_start;
                     WritePixelArray(batch_buffer + (write_start * width), 0, 0, (ULONG)width * 4, 
-                                    rp->target_rp, min_x, batch_start_y + write_start, width, write_height, 
+                                    rctx->target_rastport, min_x, batch_start_y + write_start, width, write_height, 
                                     CYBERGFX_PIXELFORMAT_ARGB32);
                     write_start = -1;
                 }

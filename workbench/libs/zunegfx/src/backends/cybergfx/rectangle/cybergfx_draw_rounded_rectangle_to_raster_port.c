@@ -10,7 +10,7 @@
  * For outline-only drawing (filled=FALSE), only border pixels are written
  * to preserve the existing background.
  *****************************************************************************/
-void CybergfxDrawRoundedRectangleToRasterPort(struct RenderPort *renderport, struct RastPort *rp, UWORD x, UWORD y, UWORD width, UWORD height,
+void CybergfxDrawRoundedRectangleToRasterPort(struct RenderContext *renderport, struct RastPort *rp, UWORD x, UWORD y, UWORD width, UWORD height,
                                               UBYTE border_width, struct ZuneBrush *fill_brush, ULONG border_color, UWORD border_radius,
                                               BOOL filled) {
     if (!renderport || !rp || width == 0 || height == 0) {

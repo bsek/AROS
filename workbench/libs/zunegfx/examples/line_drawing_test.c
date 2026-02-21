@@ -41,8 +41,8 @@ struct GfxBase *GfxBase = NULL;
 struct Screen *screen = NULL;
 struct Window *window = NULL;
 struct DrawingBoard *test_board = NULL;
-struct RenderPort *test_rp = NULL;
-struct RenderPort *window_rp = NULL;
+struct RenderContext *test_rp = NULL;
+struct RenderContext *window_rp = NULL;
 
 /* Function prototypes */
 BOOL InitTest(void);
@@ -157,15 +157,15 @@ BOOL InitTest(void)
         return FALSE;
     }
 
-    /* Create RenderPort targeting the DrawingBoard */
-    test_rp = CreateRenderPortWithDrawingBoard(screen->ViewPort.ColorMap,
+    /* Create RenderContext targeting the DrawingBoard */
+    test_rp = CreateRenderContextWithDrawingBoard(screen->ViewPort.ColorMap,
                                               test_board);
     if (!test_rp) {
-        printf("ERROR: Cannot create RenderPort\n");
+        printf("ERROR: Cannot create RenderContext\n");
         return FALSE;
     }
 
-    window_rp = CreateRenderPort(screen->ViewPort.ColorMap, window->RPort);
+    window_rp = CreateRenderContext(screen->ViewPort.ColorMap, window->RPort);
 
     return TRUE;
 }
@@ -173,7 +173,7 @@ BOOL InitTest(void)
 void CleanupTest(void)
 {
     if (test_rp) {
-        ZuneDestroyRenderPort(test_rp);
+        ZuneDestroyRenderContext(test_rp);
         test_rp = NULL;
     }
 
@@ -396,7 +396,7 @@ void ShowResults(const char *title)
     printf("  Displaying results: %s\n", title);
 
     /* Blit the DrawingBoard to the window */
-    BlitDrawingBoardToRenderPortRects(test_board, window_rp, 0, 0, 0, 0,
+    BlitDrawingBoardToRenderContextRects(test_board, window_rp, 0, 0, 0, 0,
                                 TEST_WIDTH, TEST_HEIGHT);
 
     printf("  Results displayed successfully\n");

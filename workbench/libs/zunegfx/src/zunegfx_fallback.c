@@ -20,12 +20,12 @@
 #include "clib/graphics_protos.h"
 #include "zunegfx_intern.h"
 
-static struct RastPort *fallback_get_rastport(struct RenderPort *rp) {
-  if (!rp)
+static struct RastPort *fallback_get_rastport(struct RenderContext *rctx) {
+  if (!rctx)
     return NULL;
-  if (rp->target_board && rp->target_board->rastport)
-    return rp->target_board->rastport;
-  return rp->target_rp;
+  if (rctx->target_board && rctx->target_board->rastport)
+    return rctx->target_board->rastport;
+  return rctx->target_rastport;
 }
 
 static void fallback_save_rastport_state(struct RastPort *rast, UWORD *apen,
@@ -49,7 +49,7 @@ static void fallback_restore_rastport_state(struct RastPort *rast, UWORD apen,
   SetDrMd(rast, drawmode);
 }
 
-static struct PenCache *fallback_ensure_pen_cache(struct RenderPort *rp,
+static struct PenCache *fallback_ensure_pen_cache(struct RenderContext *rctx,
                                                   struct ColorMap *cmap) {
   static struct PenCache global_cache;
   static struct ColorMap *global_cache_cmap;
@@ -57,18 +57,18 @@ static struct PenCache *fallback_ensure_pen_cache(struct RenderPort *rp,
   if (!cmap)
     return NULL;
 
-  if (rp) {
-    if (!rp->pen_cache) {
-      rp->pen_cache =
+  if (rctx) {
+    if (!rctx->pen_cache) {
+      rctx->pen_cache =
           AllocVec(sizeof(struct PenCache), MEMF_CLEAR | MEMF_PUBLIC);
-      if (!rp->pen_cache)
+      if (!rctx->pen_cache)
         return NULL;
-      InitPenCache(rp->pen_cache, cmap);
+      InitPenCache(rctx->pen_cache, cmap);
     }
-    return rp->pen_cache;
+    return rctx->pen_cache;
   }
 
-  /* Fallback: shared cache when no RenderPort is available */
+  /* Fallback: shared cache when no RenderContext is available */
   if (global_cache_cmap != cmap) {
     InitPenCache(&global_cache, cmap);
     global_cache_cmap = cmap;
@@ -76,10 +76,10 @@ static struct PenCache *fallback_ensure_pen_cache(struct RenderPort *rp,
   return &global_cache;
 }
 
-static BOOL fallback_set_pen(struct RenderPort *rp, struct ColorMap *cmap,
+static BOOL fallback_set_pen(struct RenderContext *rctx, struct ColorMap *cmap,
                              struct InternalColor *color,
                              struct RastPort *rast) {
-  struct PenCache *cache = fallback_ensure_pen_cache(rp, cmap);
+  struct PenCache *cache = fallback_ensure_pen_cache(rctx, cmap);
   if (!cache || !rast)
     return FALSE;
 
@@ -93,11 +93,11 @@ static BOOL fallback_set_pen(struct RenderPort *rp, struct ColorMap *cmap,
   return TRUE;
 }
 
-void ZuneFallback_DrawPixel(struct RenderPort *rp, WORD x, WORD y,
+void ZuneFallback_DrawPixel(struct RenderContext *rctx, WORD x, WORD y,
                             struct InternalColor *color, BOOL antialias) {
   (void)antialias;
 
-  struct RastPort *rast = fallback_get_rastport(rp);
+  struct RastPort *rast = fallback_get_rastport(rctx);
   if (!rast || !color)
     return;
 
@@ -105,20 +105,20 @@ void ZuneFallback_DrawPixel(struct RenderPort *rp, WORD x, WORD y,
   UBYTE saved_dm = 0;
   fallback_save_rastport_state(rast, &saved_apen, &saved_bpen, &saved_dm);
 
-  if (fallback_set_pen(rp, rp ? rp->colormap : NULL, color, rast)) {
+  if (fallback_set_pen(rctx, rctx ? rctx->colormap : NULL, color, rast)) {
     WritePixel(rast, x, y);
   }
 
   fallback_restore_rastport_state(rast, saved_apen, saved_bpen, saved_dm);
 }
 
-void ZuneFallback_DrawLine(struct RenderPort *rp, WORD start_x, WORD start_y,
+void ZuneFallback_DrawLine(struct RenderContext *rctx, WORD start_x, WORD start_y,
                            WORD end_x, WORD end_y, UWORD line_width,
                            struct InternalColor *color, BOOL antialias) {
   (void)antialias;
   (void)line_width;
 
-  struct RastPort *rast = fallback_get_rastport(rp);
+  struct RastPort *rast = fallback_get_rastport(rctx);
   if (!rast || !color)
     return;
 
@@ -126,7 +126,7 @@ void ZuneFallback_DrawLine(struct RenderPort *rp, WORD start_x, WORD start_y,
   UBYTE saved_dm = 0;
   fallback_save_rastport_state(rast, &saved_apen, &saved_bpen, &saved_dm);
 
-  if (!fallback_set_pen(rp, rp ? rp->colormap : NULL, color, rast))
+  if (!fallback_set_pen(rctx, rctx ? rctx->colormap : NULL, color, rast))
     goto restore;
 
   /* Bresenham fallback */
@@ -157,19 +157,19 @@ restore:
   fallback_restore_rastport_state(rast, saved_apen, saved_bpen, saved_dm);
 }
 
-static void fallback_rect_fill(struct RenderPort *rp, struct RastPort *rast,
+static void fallback_rect_fill(struct RenderContext *rctx, struct RastPort *rast,
                                WORD x, WORD y, UWORD width, UWORD height,
                                struct InternalColor *color) {
   WORD x2 = x + (WORD)width - 1;
   WORD y2 = y + (WORD)height - 1;
 
-  if (!fallback_set_pen(rp, rp ? rp->colormap : NULL, color, rast))
+  if (!fallback_set_pen(rctx, rctx ? rctx->colormap : NULL, color, rast))
     return;
 
   RectFill(rast, x, y, x2, y2);
 }
 
-static void fallback_rect_outline(struct RenderPort *rp, struct RastPort *rast,
+static void fallback_rect_outline(struct RenderContext *rctx, struct RastPort *rast,
                                   WORD x, WORD y, UWORD width, UWORD height,
                                   struct InternalColor *color) {
   if (!rast || !color)
@@ -178,7 +178,7 @@ static void fallback_rect_outline(struct RenderPort *rp, struct RastPort *rast,
   WORD x2 = x + (WORD)width - 1;
   WORD y2 = y + (WORD)height - 1;
 
-  if (!fallback_set_pen(rp, rp ? rp->colormap : NULL, color, rast))
+  if (!fallback_set_pen(rctx, rctx ? rctx->colormap : NULL, color, rast))
     return;
 
   Move(rast, x, y);
@@ -188,7 +188,7 @@ static void fallback_rect_outline(struct RenderPort *rp, struct RastPort *rast,
   Draw(rast, x, y);
 }
 
-void ZuneFallback_DrawRectangle(struct RenderPort *rp, WORD x, WORD y,
+void ZuneFallback_DrawRectangle(struct RenderContext *rctx, WORD x, WORD y,
                                 UWORD width, UWORD height, UBYTE border_width,
                                 UBYTE corner_radius,
                                 struct ZuneBrush *fill_brush,
@@ -197,7 +197,7 @@ void ZuneFallback_DrawRectangle(struct RenderPort *rp, WORD x, WORD y,
   (void)corner_radius;
   (void)antialias;
 
-  struct RastPort *rast = fallback_get_rastport(rp);
+  struct RastPort *rast = fallback_get_rastport(rctx);
   if (!rast)
     return;
 
@@ -207,19 +207,19 @@ void ZuneFallback_DrawRectangle(struct RenderPort *rp, WORD x, WORD y,
 
   if (filled && fill_brush) {
     struct InternalColor fill_color;
-    if (ZuneBrushToInternalColor(rp, fill_brush, &fill_color)) {
-      fallback_rect_fill(rp, rast, x, y, width, height, &fill_color);
+    if (ZuneBrushToInternalColor(rctx, fill_brush, &fill_color)) {
+      fallback_rect_fill(rctx, rast, x, y, width, height, &fill_color);
     }
   }
 
   if (border_width > 0 && border_color) {
-    fallback_rect_outline(rp, rast, x, y, width, height, border_color);
+    fallback_rect_outline(rctx, rast, x, y, width, height, border_color);
   }
 
   fallback_restore_rastport_state(rast, saved_apen, saved_bpen, saved_dm);
 }
 
-void ZuneFallback_DrawCircle(struct RenderPort *rp, WORD center_x,
+void ZuneFallback_DrawCircle(struct RenderContext *rctx, WORD center_x,
                              WORD center_y, UWORD radius, UBYTE border_width,
                              struct ZuneBrush *fill_brush,
                              struct InternalColor *border_color, BOOL filled,
@@ -227,7 +227,7 @@ void ZuneFallback_DrawCircle(struct RenderPort *rp, WORD center_x,
   (void)border_width;
   (void)antialias;
 
-  struct RastPort *rast = fallback_get_rastport(rp);
+  struct RastPort *rast = fallback_get_rastport(rctx);
   if (!rast || radius == 0)
     return;
 
@@ -237,11 +237,11 @@ void ZuneFallback_DrawCircle(struct RenderPort *rp, WORD center_x,
 
   struct InternalColor fill_color;
   BOOL have_fill = filled && fill_brush &&
-                   ZuneBrushToInternalColor(rp, fill_brush, &fill_color) &&
-                   fallback_set_pen(rp, rp ? rp->colormap : NULL, &fill_color,
+                   ZuneBrushToInternalColor(rctx, fill_brush, &fill_color) &&
+                   fallback_set_pen(rctx, rctx ? rctx->colormap : NULL, &fill_color,
                                     rast);
   BOOL have_border =
-      border_color && fallback_set_pen(rp, rp ? rp->colormap : NULL,
+      border_color && fallback_set_pen(rctx, rctx ? rctx->colormap : NULL,
                                        border_color, rast);
 
   int x = radius;
@@ -288,10 +288,10 @@ void ZuneFallback_DrawCircle(struct RenderPort *rp, WORD center_x,
   fallback_restore_rastport_state(rast, saved_apen, saved_bpen, saved_dm);
 }
 
-void ZuneFallback_ClearRenderPort(struct RenderPort *rp,
+void ZuneFallback_ClearRenderContext(struct RenderContext *rctx,
                                   struct InternalColor *color) {
-  struct RastPort *rast = fallback_get_rastport(rp);
-  if (!rp || !rast || !color)
+  struct RastPort *rast = fallback_get_rastport(rctx);
+  if (!rctx || !rast || !color)
     return;
 
   UWORD saved_apen = 0, saved_bpen = 0;
@@ -301,18 +301,18 @@ void ZuneFallback_ClearRenderPort(struct RenderPort *rp,
   UWORD width = 0;
   UWORD height = 0;
 
-  if (rp->target_board) {
-    width = rp->target_board->width;
-    height = rp->target_board->height;
-  } else if (rp->target_rp && rp->target_rp->BitMap) {
-    width = (UWORD)GetBitMapAttr(rp->target_rp->BitMap, BMA_WIDTH);
-    height = (UWORD)GetBitMapAttr(rp->target_rp->BitMap, BMA_HEIGHT);
+  if (rctx->target_board) {
+    width = rctx->target_board->width;
+    height = rctx->target_board->height;
+  } else if (rctx->target_rastport && rctx->target_rastport->BitMap) {
+    width = (UWORD)GetBitMapAttr(rctx->target_rastport->BitMap, BMA_WIDTH);
+    height = (UWORD)GetBitMapAttr(rctx->target_rastport->BitMap, BMA_HEIGHT);
   }
 
   if (width == 0 || height == 0)
     return;
 
-  fallback_rect_fill(rp, rast, 0, 0, width, height, color);
+  fallback_rect_fill(rctx, rast, 0, 0, width, height, color);
 
   fallback_restore_rastport_state(rast, saved_apen, saved_bpen, saved_dm);
 }
@@ -352,8 +352,8 @@ restore:
   fallback_restore_rastport_state(rast, saved_apen, saved_bpen, saved_dm);
 }
 
-void ZuneFallback_BlitRenderPorts(struct RenderPort *source,
-                                  struct RenderPort *dest, WORD src_x,
+void ZuneFallback_BlitRenderContexts(struct RenderContext *source,
+                                  struct RenderContext *dest, WORD src_x,
                                   WORD src_y, WORD dest_x, WORD dest_y,
                                   UWORD width, UWORD height) {
   if (!source || !dest)
@@ -368,7 +368,7 @@ void ZuneFallback_BlitRenderPorts(struct RenderPort *source,
            0xC0);
 }
 
-void ZuneFallback_BlitToScreen(struct RenderPort *source,
+void ZuneFallback_BlitToScreen(struct RenderContext *source,
                                struct RastPort *screen_rp, WORD src_x,
                                WORD src_y, WORD dest_x, WORD dest_y,
                                UWORD width, UWORD height) {
@@ -383,13 +383,13 @@ void ZuneFallback_BlitToScreen(struct RenderPort *source,
            0xC0);
 }
 
-void ZuneFallback_DrawTexture(struct RenderPort *rp,
+void ZuneFallback_DrawTexture(struct RenderContext *rctx,
                               struct ZuneTexture *texture, WORD dest_x,
                               WORD dest_y, UWORD dest_width, UWORD dest_height,
                               WORD src_x, WORD src_y, UWORD src_width,
                               UWORD src_height, struct InternalColor *tint) {
   /* Minimal software fallback: do nothing but avoid crashes */
-  (void)rp;
+  (void)rctx;
   (void)texture;
   (void)dest_x;
   (void)dest_y;
@@ -402,11 +402,11 @@ void ZuneFallback_DrawTexture(struct RenderPort *rp,
   (void)tint;
 }
 
-BOOL ZuneFallback_CopyFromDrawingBoard(struct RenderPort *rp) {
+BOOL ZuneFallback_CopyFromDrawingBoard(struct RenderContext *rctx) {
   /*
    * Software fallback: No synchronization needed.
    * For software rendering, the bitmap IS the render target.
    */
-  (void)rp;
+  (void)rctx;
   return TRUE;
 }

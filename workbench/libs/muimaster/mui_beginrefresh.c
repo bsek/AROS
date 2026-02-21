@@ -64,8 +64,8 @@
     BeginRefresh(w);
 
     /* Begin batching for performance optimization during refresh */
-    if (mri->mri_RenderPort) {
-        ZuneBeginBatch(mri->mri_RenderPort);
+    if (mri->mri_RenderContext) {
+        ZuneBeginBatch(mri->mri_RenderContext);
     }
 
     return 1;

@@ -280,107 +280,107 @@ struct ZuneBrush {
 #define ZUNE_POINT_PTR(x, y) (&(struct ZunePoint){(WORD)(x), (WORD)(y)})
 
 /* Convenience macros for coordinate-based calls */
-#define ZuneDrawRectangleXYWH(rp, x, y, w, h, brush)                           \
-  ZuneFillRectangle((rp), ZUNE_RECT_PTR((x), (y), (w), (h)), (brush))
-#define ZuneDrawRectangleRoundedXYWH(rp, x, y, w, h, radius, brush)            \
-  ZuneFillRectangleRounded((rp), ZUNE_RECT_PTR((x), (y), (w), (h)), (radius),  \
+#define ZuneDrawRectangleXYWH(rctx, x, y, w, h, brush)                           \
+  ZuneFillRectangle((rctx), ZUNE_RECT_PTR((x), (y), (w), (h)), (brush))
+#define ZuneDrawRectangleRoundedXYWH(rctx, x, y, w, h, radius, brush)            \
+  ZuneFillRectangleRounded((rctx), ZUNE_RECT_PTR((x), (y), (w), (h)), (radius),  \
                            (brush))
-#define ZuneDrawRectangleOutlineXYWH(rp, x, y, w, h, color)                    \
-  ZuneDrawRectangleOutline((rp), ZUNE_RECT_PTR((x), (y), (w), (h)), (color))
-#define ZuneDrawRectangleRoundedOutlineXYWH(rp, x, y, w, h, radius, color)     \
-  ZuneDrawRectangleRoundedOutline((rp), ZUNE_RECT_PTR((x), (y), (w), (h)),     \
+#define ZuneDrawRectangleOutlineXYWH(rctx, x, y, w, h, color)                    \
+  ZuneDrawRectangleOutline((rctx), ZUNE_RECT_PTR((x), (y), (w), (h)), (color))
+#define ZuneDrawRectangleRoundedOutlineXYWH(rctx, x, y, w, h, radius, color)     \
+  ZuneDrawRectangleRoundedOutline((rctx), ZUNE_RECT_PTR((x), (y), (w), (h)),     \
                                   (radius), (color))
-#define ZuneDrawRectangleOutlineStyledXYWH(rp, x, y, w, h, lineWidth, color)   \
-  ZuneDrawRectangleOutlineStyled((rp), ZUNE_RECT_PTR((x), (y), (w), (h)),      \
+#define ZuneDrawRectangleOutlineStyledXYWH(rctx, x, y, w, h, lineWidth, color)   \
+  ZuneDrawRectangleOutlineStyled((rctx), ZUNE_RECT_PTR((x), (y), (w), (h)),      \
                                  (lineWidth), (color))
-#define ZuneDrawRectangleRoundedOutlineStyledXYWH(rp, x, y, w, h, radius,      \
+#define ZuneDrawRectangleRoundedOutlineStyledXYWH(rctx, x, y, w, h, radius,      \
                                                   lineWidth, color)            \
   ZuneDrawRectangleRoundedOutlineStyled(                                       \
-      (rp), ZUNE_RECT_PTR((x), (y), (w), (h)), (radius), (lineWidth), (color))
-#define ZuneDrawRectangleRoundedStyledXYWH(rp, x, y, w, h, radius, borderWidth,\
+      (rctx), ZUNE_RECT_PTR((x), (y), (w), (h)), (radius), (lineWidth), (color))
+#define ZuneDrawRectangleRoundedStyledXYWH(rctx, x, y, w, h, radius, borderWidth,\
                                            fillBrush, borderColor)             \
-  ZuneDrawRectangleRoundedStyled((rp), ZUNE_RECT_PTR((x), (y), (w), (h)),      \
+  ZuneDrawRectangleRoundedStyled((rctx), ZUNE_RECT_PTR((x), (y), (w), (h)),      \
                                  (radius), (borderWidth), (fillBrush),         \
                                  (borderColor))
-#define ZuneDrawCircleAt(rp, cx, cy, radius, brush)                            \
-  ZuneFillCircle((rp), ZUNE_POINT_PTR((cx), (cy)), (radius), (brush))
-#define ZuneDrawCircleOutlineAt(rp, cx, cy, radius, color)                     \
-  ZuneDrawCircleOutline((rp), ZUNE_POINT_PTR((cx), (cy)), (radius), (color))
-#define ZuneDrawCircleOutlineStyledAt(rp, cx, cy, radius, lineWidth, color)    \
-  ZuneDrawCircleOutlineStyled((rp), ZUNE_POINT_PTR((cx), (cy)), (radius),      \
+#define ZuneDrawCircleAt(rctx, cx, cy, radius, brush)                            \
+  ZuneFillCircle((rctx), ZUNE_POINT_PTR((cx), (cy)), (radius), (brush))
+#define ZuneDrawCircleOutlineAt(rctx, cx, cy, radius, color)                     \
+  ZuneDrawCircleOutline((rctx), ZUNE_POINT_PTR((cx), (cy)), (radius), (color))
+#define ZuneDrawCircleOutlineStyledAt(rctx, cx, cy, radius, lineWidth, color)    \
+  ZuneDrawCircleOutlineStyled((rctx), ZUNE_POINT_PTR((cx), (cy)), (radius),      \
                               (lineWidth), (color))
-#define ZuneDrawLinePoints(rp, startX, startY, endX, endY, color)              \
-  ZuneDrawLine((rp), ZUNE_POINT_PTR((startX), (startY)),                       \
+#define ZuneDrawLinePoints(rctx, startX, startY, endX, endY, color)              \
+  ZuneDrawLine((rctx), ZUNE_POINT_PTR((startX), (startY)),                       \
                ZUNE_POINT_PTR((endX), (endY)), (color))
-#define ZuneDrawLineStyledPoints(rp, startX, startY, endX, endY, width, color) \
-  ZuneDrawLineStyled((rp), ZUNE_POINT_PTR((startX), (startY)),                 \
+#define ZuneDrawLineStyledPoints(rctx, startX, startY, endX, endY, width, color) \
+  ZuneDrawLineStyled((rctx), ZUNE_POINT_PTR((startX), (startY)),                 \
                      ZUNE_POINT_PTR((endX), (endY)), (width), (color))
-#define ZuneDrawPixelAt(rp, x, y, color)                                       \
-  ZuneDrawPixel((rp), ZUNE_POINT_PTR((x), (y)), (color))
-#define ZuneDrawCircleAAAt(rp, cx, cy, radius, color)                          \
-  ZuneDrawCircleAA((rp), ZUNE_POINT_PTR((cx), (cy)), (radius), (color))
-#define ZuneFillCircleAAAt(rp, cx, cy, radius, brush)                          \
-  ZuneFillCircleAA((rp), ZUNE_POINT_PTR((cx), (cy)), (radius), (brush))
-#define ZuneDrawCircleOutlineStyledAAAt(rp, cx, cy, radius, borderWidth,       \
+#define ZuneDrawPixelAt(rctx, x, y, color)                                       \
+  ZuneDrawPixel((rctx), ZUNE_POINT_PTR((x), (y)), (color))
+#define ZuneDrawCircleAAAt(rctx, cx, cy, radius, color)                          \
+  ZuneDrawCircleAA((rctx), ZUNE_POINT_PTR((cx), (cy)), (radius), (color))
+#define ZuneFillCircleAAAt(rctx, cx, cy, radius, brush)                          \
+  ZuneFillCircleAA((rctx), ZUNE_POINT_PTR((cx), (cy)), (radius), (brush))
+#define ZuneDrawCircleOutlineStyledAAAt(rctx, cx, cy, radius, borderWidth,       \
                                         color)                                 \
-  ZuneDrawCircleOutlineStyledAA((rp), ZUNE_POINT_PTR((cx), (cy)), (radius),    \
+  ZuneDrawCircleOutlineStyledAA((rctx), ZUNE_POINT_PTR((cx), (cy)), (radius),    \
                                 (borderWidth), (color))
-#define ZuneFillCircleStyledAAAt(rp, cx, cy, radius, borderWidth, brush,       \
+#define ZuneFillCircleStyledAAAt(rctx, cx, cy, radius, borderWidth, brush,       \
                                  borderColor)                                  \
-  ZuneFillCircleStyledAA((rp), ZUNE_POINT_PTR((cx), (cy)), (radius),           \
+  ZuneFillCircleStyledAA((rctx), ZUNE_POINT_PTR((cx), (cy)), (radius),           \
                          (borderWidth), (brush), (borderColor))
-#define ZuneFillRectangleRoundedAAXYWH(rp, x, y, w, h, radius, brush)          \
-  ZuneFillRectangleRoundedAA((rp), ZUNE_RECT_PTR((x), (y), (w), (h)),          \
+#define ZuneFillRectangleRoundedAAXYWH(rctx, x, y, w, h, radius, brush)          \
+  ZuneFillRectangleRoundedAA((rctx), ZUNE_RECT_PTR((x), (y), (w), (h)),          \
                              (radius), (brush))
 #define ZuneFillRectangleRoundedStyledAAXYWH(                                  \
-    rp, x, y, w, h, radius, borderWidth, fillBrush, borderColor)               \
-  ZuneFillRectangleRoundedStyledAA((rp), ZUNE_RECT_PTR((x), (y), (w), (h)),    \
+    rctx, x, y, w, h, radius, borderWidth, fillBrush, borderColor)               \
+  ZuneFillRectangleRoundedStyledAA((rctx), ZUNE_RECT_PTR((x), (y), (w), (h)),    \
                                    (radius), (borderWidth), (fillBrush),       \
                                    (borderColor))
-#define ZuneDrawRectangleRoundedOutlineStyledAAXYWH(rp, x, y, w, h, radius,    \
+#define ZuneDrawRectangleRoundedOutlineStyledAAXYWH(rctx, x, y, w, h, radius,    \
                                                     lineWidth, color)          \
   ZuneDrawRectangleRoundedOutlineStyledAA(                                     \
-      (rp), ZUNE_RECT_PTR((x), (y), (w), (h)), (radius), (lineWidth), (color))
-#define ZuneDrawRectangleRoundedOutlineAAXYWH(rp, x, y, w, h, radius, color)   \
-  ZuneDrawRectangleRoundedOutlineAA((rp), ZUNE_RECT_PTR((x), (y), (w), (h)),   \
+      (rctx), ZUNE_RECT_PTR((x), (y), (w), (h)), (radius), (lineWidth), (color))
+#define ZuneDrawRectangleRoundedOutlineAAXYWH(rctx, x, y, w, h, radius, color)   \
+  ZuneDrawRectangleRoundedOutlineAA((rctx), ZUNE_RECT_PTR((x), (y), (w), (h)),   \
                                     (radius), (color))
-#define ZuneDrawLineAAPoints(rp, startX, startY, endX, endY, color)            \
-  ZuneDrawLineAA((rp), ZUNE_POINT_PTR((startX), (startY)),                     \
+#define ZuneDrawLineAAPoints(rctx, startX, startY, endX, endY, color)            \
+  ZuneDrawLineAA((rctx), ZUNE_POINT_PTR((startX), (startY)),                     \
                  ZUNE_POINT_PTR((endX), (endY)), (color))
-#define ZuneDrawLineStyledAAPoints(rp, startX, startY, endX, endY, width,      \
+#define ZuneDrawLineStyledAAPoints(rctx, startX, startY, endX, endY, width,      \
                                    color)                                      \
-  ZuneDrawLineStyledAA((rp), ZUNE_POINT_PTR((startX), (startY)),               \
+  ZuneDrawLineStyledAA((rctx), ZUNE_POINT_PTR((startX), (startY)),               \
                        ZUNE_POINT_PTR((endX), (endY)), (width), (color))
-#define GetPixelAt(rp, x, y) ZuneGetPixel((rp), ZUNE_POINT_PTR((x), (y)))
-#define SetPixelAt(rp, x, y, color)                                            \
-  ZuneSetPixel((rp), ZUNE_POINT_PTR((x), (y)), (color))
+#define GetPixelAt(rctx, x, y) ZuneGetPixel((rctx), ZUNE_POINT_PTR((x), (y)))
+#define SetPixelAt(rctx, x, y, color)                                            \
+  ZuneSetPixel((rctx), ZUNE_POINT_PTR((x), (y)), (color))
 
 /*
  * Blit helper macros - set target before blitting for convenience
  */
 
 /* Blit from DrawingBoard to DrawingBoard */
-#define ZuneBlitBoards(src_rp, dst_rp, src_x, src_y, dst_x, dst_y, w, h)       \
+#define ZuneBlitBoards(src_rctx, dst_rctx, src_x, src_y, dst_x, dst_y, w, h)       \
   do {                                                                         \
-    ZuneSetTarget((src_rp), (src_rp)->target_board);                           \
-    ZuneSetTarget((dst_rp), (dst_rp)->target_board);                           \
-    ZuneBlit((src_rp), (dst_rp), (src_x), (src_y), (dst_x), (dst_y), (w), (h));\
+    ZuneSetTarget((src_rctx), (src_rctx)->target_board);                           \
+    ZuneSetTarget((dst_rctx), (dst_rctx)->target_board);                           \
+    ZuneBlit((src_rctx), (dst_rctx), (src_x), (src_y), (dst_x), (dst_y), (w), (h));\
   } while (0)
 
 /* Blit from DrawingBoard to screen RastPort */
-#define ZuneBlitBoardToScreen(src_rp, dst_rp, src_x, src_y, dst_x, dst_y, w, h)\
+#define ZuneBlitBoardToScreen(src_rctx, dst_rctx, src_x, src_y, dst_x, dst_y, w, h)\
   do {                                                                         \
-    ZuneSetTarget((src_rp), (src_rp)->target_board);                           \
-    ZuneSetTarget((dst_rp), NULL);                                             \
-    ZuneBlit((src_rp), (dst_rp), (src_x), (src_y), (dst_x), (dst_y), (w), (h));\
+    ZuneSetTarget((src_rctx), (src_rctx)->target_board);                           \
+    ZuneSetTarget((dst_rctx), NULL);                                             \
+    ZuneBlit((src_rctx), (dst_rctx), (src_x), (src_y), (dst_x), (dst_y), (w), (h));\
   } while (0)
 
 /* Blit from screen RastPort to DrawingBoard */
-#define ZuneBlitScreenToBoard(src_rp, dst_rp, src_x, src_y, dst_x, dst_y, w, h)\
+#define ZuneBlitScreenToBoard(src_rctx, dst_rctx, src_x, src_y, dst_x, dst_y, w, h)\
   do {                                                                         \
-    ZuneSetTarget((src_rp), NULL);                                             \
-    ZuneSetTarget((dst_rp), (dst_rp)->target_board);                           \
-    ZuneBlit((src_rp), (dst_rp), (src_x), (src_y), (dst_x), (dst_y), (w), (h));\
+    ZuneSetTarget((src_rctx), NULL);                                             \
+    ZuneSetTarget((dst_rctx), (dst_rctx)->target_board);                           \
+    ZuneBlit((src_rctx), (dst_rctx), (src_x), (src_y), (dst_x), (dst_y), (w), (h));\
   } while (0)
 #define ZuneCreateCircleRegionAt(cx, cy, radius)                               \
   ZuneCreateCircleRegion(ZUNE_POINT_PTR((cx), (cy)), (radius))
@@ -391,7 +391,7 @@ struct ZuneBrush {
 
 /* Forward declarations */
 struct DrawingBoard;
-struct RenderPort;
+struct RenderContext;
 struct PenCache;
 struct ColorCache;
 struct PenColorCache;
@@ -428,14 +428,14 @@ struct DrawingBoard {
 };
 
 /* Render Port - Rendering context */
-struct RenderPort {
+struct RenderContext {
   struct Node node; /* For linking in lists */
 
   /* Window binding (required for OpenGL context) */
-  struct Window *window;             /* Window this RenderPort belongs to */
+  struct Window *window;             /* Window this RenderContext belongs to */
 
   /* Target surfaces */
-  struct RastPort *target_rp;        /* Target RastPort (screen/window) */
+  struct RastPort *target_rastport;        /* Target RastPort (screen/window) */
   struct DrawingBoard *target_board; /* Current target DrawingBoard (or NULL for window) */
   struct ColorMap *colormap;         /* Color mapping */
   ULONG pixel_format;                /* Pixel format identifier */
@@ -446,8 +446,8 @@ struct RenderPort {
   APTR backend_vtable;  /* Backend function table */
   APTR hidd_bitmap_obj; /* Cached HIDD bitmap object for direct operations */
   struct PenCache *pen_cache; /* Backend-specific pen cache (graphics) */
-  struct ColorCache *color_cache;     /* Per-RenderPort color cache */
-  struct PenColorCache *pen_color_cache; /* Per-RenderPort pen color cache */
+  struct ColorCache *color_cache;     /* Per-RenderContext color cache */
+  struct PenColorCache *pen_color_cache; /* Per-RenderContext pen color cache */
 
   /* Batching system */
   BOOL batching_enabled; /* Batch operations for performance */
@@ -458,7 +458,7 @@ struct RenderPort {
   BOOL clipping_enabled;      /* Clipping active */
 
   /* State */
-  BOOL valid; /* RenderPort ready for use */
+  BOOL valid; /* RenderContext ready for use */
 };
 
 /* Texture - Texture data for rendering */
@@ -506,33 +506,33 @@ struct ZuneTexture {
 };
 
 /*****************************************************************************/
-/* RenderPort Management */
+/* RenderContext Management */
 /*****************************************************************************/
 
 /*
- * ZuneCreateRenderPortForWindow - Create a RenderPort bound to a Window
+ * ZuneCreateRenderContextForWindow - Create a RenderContext bound to a Window
  *
- * This is the primary way to create a RenderPort. The RenderPort is bound
+ * This is the primary way to create a RenderContext. The RenderContext is bound
  * to the window and automatically selects the best backend if backend_type is NULL
  * (OpenGL if available, otherwise CyberGraphics).
  *
  * The window reference is required for OpenGL to create a GL context.
  */
-struct RenderPort *ZuneCreateRenderPortForWindow(struct Window *window,
+struct RenderContext *ZuneCreateRenderContextForWindow(struct Window *window,
                                              struct ColorMap *colormap,
                                              UWORD backend_type);
 
 /*
- * ZuneCreateDrawingBoardForRenderPort - Create DrawingBoard bound to a RenderPort
+ * ZuneCreateDrawingBoardForRenderContext - Create DrawingBoard bound to a RenderContext
  *
  * The DrawingBoard always has a BitMap for legacy compatibility (SetAPen, etc).
  * If OpenGL is active, an FBO is also created for accelerated rendering.
  */
-struct DrawingBoard *ZuneCreateDrawingBoardForRenderPort(struct RenderPort *rp,
+struct DrawingBoard *ZuneCreateDrawingBoardForRenderContext(struct RenderContext *rctx,
                                                      UWORD width, UWORD height, ULONG flags);
 
-void ZuneDestroyRenderPort(struct RenderPort *rp);
-void ZuneClearRenderPort(struct RenderPort *rp, ULONG color);
+void ZuneDestroyRenderContext(struct RenderContext *rctx);
+void ZuneClearRenderContext(struct RenderContext *rctx, ULONG color);
 
 /*****************************************************************************/
 /* DrawingBoard Management */
@@ -547,10 +547,10 @@ void ZuneClearRenderPort(struct RenderPort *rp, ULONG color);
  * For OpenGL: Uses glBindFramebuffer() for fast switching
  * For CyberGfx: Updates internal target pointer
  */
-BOOL ZuneSetTarget(struct RenderPort *rp, struct DrawingBoard *board);
+BOOL ZuneSetTarget(struct RenderContext *rctx, struct DrawingBoard *board);
 
-void ZuneDestroyDrawingBoard(struct RenderPort *rp, struct DrawingBoard *board);
-void ZuneClearDrawingBoard(struct RenderPort *rp, ULONG color);
+void ZuneDestroyDrawingBoard(struct RenderContext *rctx, struct DrawingBoard *board);
+void ZuneClearDrawingBoard(struct RenderContext *rctx, ULONG color);
 
 /* Note: SyncDrawingBoard has been removed. Use ZunePresent() or ZuneBlit()
  * instead - they automatically sync the backend buffer before blitting. */
@@ -560,122 +560,122 @@ void ZuneClearDrawingBoard(struct RenderPort *rp, ULONG color);
 /*****************************************************************************/
 
 /* Basic filled shapes */
-void ZuneDrawRectangle(struct RenderPort *rp, struct ZuneRect *rect,
+void ZuneDrawRectangle(struct RenderContext *rctx, struct ZuneRect *rect,
                        const struct ZuneBrush *brush);
-void ZuneDrawCircle(struct RenderPort *rp, struct ZunePoint *center,
+void ZuneDrawCircle(struct RenderContext *rctx, struct ZunePoint *center,
                     UBYTE radius, const struct ZuneBrush *brush);
 
 /* Shape outlines */
-void ZuneDrawRectangleOutline(struct RenderPort *rp, struct ZuneRect *rect,
+void ZuneDrawRectangleOutline(struct RenderContext *rctx, struct ZuneRect *rect,
                               ULONG color);
-void ZuneDrawCircleOutline(struct RenderPort *rp, struct ZunePoint *center,
+void ZuneDrawCircleOutline(struct RenderContext *rctx, struct ZunePoint *center,
                            UBYTE radius, ULONG color);
 
 /* Styled versions - with line width control */
-void ZuneDrawRectangleOutlineStyled(struct RenderPort *rp,
+void ZuneDrawRectangleOutlineStyled(struct RenderContext *rctx,
                                     struct ZuneRect *rect, UBYTE lineWidth,
                                     ULONG color);
-void ZuneDrawCircleOutlineStyled(struct RenderPort *rp,
+void ZuneDrawCircleOutlineStyled(struct RenderContext *rctx,
                                  struct ZunePoint *center, UBYTE radius,
                                  UBYTE lineWidth, ULONG color);
 
 /* Rounded rectangles */
-void ZuneDrawRectangleRounded(struct RenderPort *rp, struct ZuneRect *rect,
+void ZuneDrawRectangleRounded(struct RenderContext *rctx, struct ZuneRect *rect,
                               UBYTE cornerRadius,
                               const struct ZuneBrush *brush);
-void ZuneDrawRectangleRoundedOutline(struct RenderPort *rp,
+void ZuneDrawRectangleRoundedOutline(struct RenderContext *rctx,
                                      struct ZuneRect *rect, UBYTE cornerRadius,
                                      ULONG color);
-void ZuneDrawRectangleRoundedOutlineStyled(struct RenderPort *rp,
+void ZuneDrawRectangleRoundedOutlineStyled(struct RenderContext *rctx,
                                            struct ZuneRect *rect,
                                            UBYTE cornerRadius, UBYTE lineWidth,
                                            ULONG color);
 
 /* Rounded rectangles with fill and border combined */
-void ZuneDrawRectangleRoundedStyled(struct RenderPort *rp,
+void ZuneDrawRectangleRoundedStyled(struct RenderContext *rctx,
                                     struct ZuneRect *rect, UBYTE cornerRadius,
                                     UBYTE borderWidth,
                                     const struct ZuneBrush *fillBrush,
                                     ULONG borderColor);
 
 /* Lines */
-void ZuneDrawLine(struct RenderPort *rp, struct ZunePoint *start,
+void ZuneDrawLine(struct RenderContext *rctx, struct ZunePoint *start,
                   struct ZunePoint *end, ULONG color);
-void ZuneDrawLineStyled(struct RenderPort *rp, struct ZunePoint *start,
+void ZuneDrawLineStyled(struct RenderContext *rctx, struct ZunePoint *start,
                         struct ZunePoint *end, UWORD width, ULONG color);
 
 /* Single pixel */
-void ZuneDrawPixel(struct RenderPort *rp, struct ZunePoint *point, ULONG color);
+void ZuneDrawPixel(struct RenderContext *rctx, struct ZunePoint *point, ULONG color);
 
 /*****************************************************************************/
 /* Antialiased Versions - All shapes support AA */
 /*****************************************************************************/
 
 /* Circle AA */
-void ZuneDrawCircleAA(struct RenderPort *rp, struct ZunePoint *center,
+void ZuneDrawCircleAA(struct RenderContext *rctx, struct ZunePoint *center,
                       UBYTE radius, ULONG color);
-void ZuneFillCircleAA(struct RenderPort *rp, struct ZunePoint *center,
+void ZuneFillCircleAA(struct RenderContext *rctx, struct ZunePoint *center,
                       UWORD radius, const struct ZuneBrush *brush);
-void ZuneFillCircleStyledAA(struct RenderPort *rp, struct ZunePoint *center,
+void ZuneFillCircleStyledAA(struct RenderContext *rctx, struct ZunePoint *center,
                             UWORD radius, UBYTE borderWidth,
                             const struct ZuneBrush *brush, ULONG borderColor);
-void ZuneDrawCircleOutlineStyledAA(struct RenderPort *rp,
+void ZuneDrawCircleOutlineStyledAA(struct RenderContext *rctx,
                                    struct ZunePoint *center, UWORD radius,
                                    UBYTE borderWidth, ULONG color);
 
 /* AA Quality */
 
-void ZuneSetAntialiasingQuality(struct RenderPort *rp, UBYTE quality);
-UBYTE ZuneGetAntialiasingQuality(struct RenderPort *rp);
+void ZuneSetAntialiasingQuality(struct RenderContext *rctx, UBYTE quality);
+UBYTE ZuneGetAntialiasingQuality(struct RenderContext *rctx);
 
 /* Rounded rectangles AA */
-void ZuneFillRectangleRoundedAA(struct RenderPort *rp, struct ZuneRect *rect,
+void ZuneFillRectangleRoundedAA(struct RenderContext *rctx, struct ZuneRect *rect,
                                 UBYTE cornerRadius,
                                 const struct ZuneBrush *brush);
-void ZuneFillRectangleRoundedStyledAA(struct RenderPort *rp,
+void ZuneFillRectangleRoundedStyledAA(struct RenderContext *rctx,
                                       struct ZuneRect *rect, UBYTE cornerRadius,
                                       UBYTE borderWidth,
                                       const struct ZuneBrush *fillBrush,
                                       ULONG borderColor);
-void ZuneDrawRectangleRoundedOutlineStyledAA(struct RenderPort *rp,
+void ZuneDrawRectangleRoundedOutlineStyledAA(struct RenderContext *rctx,
                                              struct ZuneRect *rect,
                                              UBYTE cornerRadius,
                                              UBYTE lineWidth, ULONG color);
-void ZuneDrawRectangleRoundedOutlineAA(struct RenderPort *rp,
+void ZuneDrawRectangleRoundedOutlineAA(struct RenderContext *rctx,
                                        struct ZuneRect *rect,
                                        UBYTE cornerRadius, ULONG color);
 
 /* Lines AA */
-void ZuneDrawLineAA(struct RenderPort *rp, struct ZunePoint *start,
+void ZuneDrawLineAA(struct RenderContext *rctx, struct ZunePoint *start,
                     struct ZunePoint *end, ULONG color);
-void ZuneDrawLineStyledAA(struct RenderPort *rp, struct ZunePoint *start,
+void ZuneDrawLineStyledAA(struct RenderContext *rctx, struct ZunePoint *start,
                           struct ZunePoint *end, UBYTE width, ULONG color);
 
 /*****************************************************************************/
 /* Direct Pixel Access */
 /*****************************************************************************/
 
-APTR ZuneLockDrawingBoardPixels(struct RenderPort *rp, ULONG *pitch);
-void ZuneUnlockDrawingBoardPixels(struct RenderPort *rp);
-ULONG ZuneGetPixel(struct RenderPort *rp, struct ZunePoint *point);
-void ZuneSetPixel(struct RenderPort *rp, struct ZunePoint *point, ULONG color);
+APTR ZuneLockDrawingBoardPixels(struct RenderContext *rctx, ULONG *pitch);
+void ZuneUnlockDrawingBoardPixels(struct RenderContext *rctx);
+ULONG ZuneGetPixel(struct RenderContext *rctx, struct ZunePoint *point);
+void ZuneSetPixel(struct RenderContext *rctx, struct ZunePoint *point, ULONG color);
 
 /*****************************************************************************/
 /* Performance and Batching */
 /*****************************************************************************/
 
-void ZuneBeginBatch(struct RenderPort *rp);
-void ZuneEndBatch(struct RenderPort *rp);
-void ZuneFlushBatch(struct RenderPort *rp);
-BOOL ZuneIsBatchingEnabled(struct RenderPort *rp);
-ULONG ZuneGetBatchCount(struct RenderPort *rp);
+void ZuneBeginBatch(struct RenderContext *rctx);
+void ZuneEndBatch(struct RenderContext *rctx);
+void ZuneFlushBatch(struct RenderContext *rctx);
+BOOL ZuneIsBatchingEnabled(struct RenderContext *rctx);
+ULONG ZuneGetBatchCount(struct RenderContext *rctx);
 
 /*****************************************************************************/
 /* Blitting and Surface Operations */
 /*****************************************************************************/
 
 /*
- * ZuneBlit - General-purpose blit between RenderPorts
+ * ZuneBlit - General-purpose blit between RenderContexts
  *
  * Handles all combinations:
  * - DrawingBoard to DrawingBoard
@@ -687,7 +687,7 @@ ULONG ZuneGetBatchCount(struct RenderPort *rp);
  * Use the helper macros (ZuneBlitBoards, ZuneBlitBoardToScreen, etc.)
  * for convenience when you need to set targets before blitting.
  */
-void ZuneBlit(struct RenderPort *src_rp, struct RenderPort *dst_rp,
+void ZuneBlit(struct RenderContext *src_rctx, struct RenderContext *dst_rctx,
               WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
               UWORD width, UWORD height);
 
@@ -698,7 +698,7 @@ void ZuneBlit(struct RenderPort *src_rp, struct RenderPort *dst_rp,
  * Call it to display what has been rendered to the DrawingBoard.
  * Automatically syncs OpenGL FBO to bitmap before blitting.
  */
-void ZunePresent(struct RenderPort *rp,
+void ZunePresent(struct RenderContext *rctx,
                  WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
                  UWORD width, UWORD height);
 
@@ -709,13 +709,13 @@ void ZunePresent(struct RenderPort *rp,
  * when drawing antialiased graphics over existing content.
  *
  * Parameters:
- *   rp - RenderPort with a DrawingBoard target
+ *   rctx - RenderContext with a DrawingBoard target
  *   src_rp - Source RastPort to read from (e.g., window RastPort or double buffer)
  *   src_x, src_y - Source coordinates in the RastPort
  *   dst_x, dst_y - Destination coordinates in the DrawingBoard
  *   width, height - Size of area to capture
  */
-void ZuneCapture(struct RenderPort *rp, struct RastPort *src_rp,
+void ZuneCapture(struct RenderContext *rctx, struct RastPort *src_rp,
                  WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
                  UWORD width, UWORD height);
 
@@ -724,7 +724,7 @@ void ZuneCapture(struct RenderPort *rp, struct RastPort *src_rp,
  * For OpenGL: copies FBO to bitmap. For CyberGfx: no-op.
  * Call after Zune drawing and before direct bitmap operations.
  */
-BOOL ZuneSync(struct RenderPort *rp);
+BOOL ZuneSync(struct RenderContext *rctx);
 
 /**
  * Reload backend render buffer from DrawingBoard's bitmap.
@@ -732,64 +732,64 @@ BOOL ZuneSync(struct RenderPort *rp);
  * Call after direct bitmap operations and before Zune drawing.
  * This is the inverse of ZuneSync().
  */
-BOOL ZuneReload(struct RenderPort *rp);
+BOOL ZuneReload(struct RenderContext *rctx);
 
 /*****************************************************************************/
 /* Texture Management */
 /*****************************************************************************/
 
-struct ZuneTexture *ZuneCreateTexture(struct RenderPort *rp, UWORD width,
+struct ZuneTexture *ZuneCreateTexture(struct RenderContext *rctx, UWORD width,
                                   UWORD height, UBYTE depth, ULONG format,
                                   ULONG flags);
-struct ZuneTexture *ZuneCreateTextureFromData(struct RenderPort *rp, APTR data,
+struct ZuneTexture *ZuneCreateTextureFromData(struct RenderContext *rctx, APTR data,
                                           UWORD width, UWORD height,
                                           UBYTE depth, ULONG format,
                                           ULONG pitch, ULONG flags);
-struct ZuneTexture *ZuneCreateTextureFromDrawingBoard(struct RenderPort *rp,
+struct ZuneTexture *ZuneCreateTextureFromDrawingBoard(struct RenderContext *rctx,
                                                   ULONG flags);
-struct ZuneTexture *ZuneCreateTextureFromDatatype(struct RenderPort *rp,
+struct ZuneTexture *ZuneCreateTextureFromDatatype(struct RenderContext *rctx,
                                               APTR dt_object, ULONG flags);
-struct ZuneTexture *ZuneCreateTextureFromFile(struct RenderPort *rp,
+struct ZuneTexture *ZuneCreateTextureFromFile(struct RenderContext *rctx,
                                           CONST_STRPTR filename,
                                           struct Screen *screen,
                                           ULONG flags);
-void ZuneDestroyTexture(struct RenderPort *rp, struct ZuneTexture *texture);
+void ZuneDestroyTexture(struct RenderContext *rctx, struct ZuneTexture *texture);
 
 /*****************************************************************************/
 /* Texture Data Operations */
 /*****************************************************************************/
 
-BOOL ZuneUpdateTextureData(struct RenderPort *rp, struct ZuneTexture *texture,
+BOOL ZuneUpdateTextureData(struct RenderContext *rctx, struct ZuneTexture *texture,
                        APTR data, struct ZuneRect *rect);
-APTR ZuneLockTexturePixels(struct RenderPort *rp, struct ZuneTexture *texture,
+APTR ZuneLockTexturePixels(struct RenderContext *rctx, struct ZuneTexture *texture,
                        ULONG *pitch);
-void ZuneUnlockTexturePixels(struct RenderPort *rp, struct ZuneTexture *texture);
-ULONG ZuneGetTexturePixel(struct RenderPort *rp, struct ZuneTexture *texture,
+void ZuneUnlockTexturePixels(struct RenderContext *rctx, struct ZuneTexture *texture);
+ULONG ZuneGetTexturePixel(struct RenderContext *rctx, struct ZuneTexture *texture,
                       struct ZunePoint *point);
-void ZuneSetTexturePixel(struct RenderPort *rp, struct ZuneTexture *texture,
+void ZuneSetTexturePixel(struct RenderContext *rctx, struct ZuneTexture *texture,
                      struct ZunePoint *point, ULONG color);
 
 /*****************************************************************************/
 /* Texture Rendering */
 /*****************************************************************************/
 
-void ZuneDrawTexture(struct RenderPort *rp, struct ZuneTexture *texture,
+void ZuneDrawTexture(struct RenderContext *rctx, struct ZuneTexture *texture,
                      struct ZunePoint *position);
-void ZuneDrawTextureScaled(struct RenderPort *rp, struct ZuneTexture *texture,
+void ZuneDrawTextureScaled(struct RenderContext *rctx, struct ZuneTexture *texture,
                            struct ZuneRect *dest_rect);
-void ZuneDrawTextureRegion(struct RenderPort *rp, struct ZuneTexture *texture,
+void ZuneDrawTextureRegion(struct RenderContext *rctx, struct ZuneTexture *texture,
                            struct ZuneRect *src_rect,
                            struct ZuneRect *dest_rect);
-void ZuneDrawTextureTinted(struct RenderPort *rp, struct ZuneTexture *texture,
+void ZuneDrawTextureTinted(struct RenderContext *rctx, struct ZuneTexture *texture,
                            struct ZunePoint *position, ULONG tint_color);
-void ZuneDrawTextureScaledTinted(struct RenderPort *rp,
+void ZuneDrawTextureScaledTinted(struct RenderContext *rctx,
                                  struct ZuneTexture *texture,
                                  struct ZuneRect *dest_rect, ULONG tint_color);
-void ZuneDrawTextureRegionTinted(struct RenderPort *rp,
+void ZuneDrawTextureRegionTinted(struct RenderContext *rctx,
                                  struct ZuneTexture *texture,
                                  struct ZuneRect *src_rect,
                                  struct ZuneRect *dest_rect, ULONG tint_color);
-void ZuneDrawTextureTiled(struct RenderPort *rp, struct ZuneTexture *texture,
+void ZuneDrawTextureTiled(struct RenderContext *rctx, struct ZuneTexture *texture,
                           struct ZuneRect *dest_rect);
 BOOL ZuneIsTextureValid(struct ZuneTexture *texture);
 
@@ -797,8 +797,8 @@ BOOL ZuneIsTextureValid(struct ZuneTexture *texture);
 /* Clipping */
 /*****************************************************************************/
 
-BOOL ZuneSetClipRegion(struct RenderPort *rp, struct Region *region);
-void ZuneClearClipRegion(struct RenderPort *rp);
+BOOL ZuneSetClipRegion(struct RenderContext *rctx, struct Region *region);
+void ZuneClearClipRegion(struct RenderContext *rctx);
 struct Region *ZuneCombineRegions(struct Region *r1, struct Region *r2,
                                   UBYTE operation);
 struct Region *ZuneCreateCircleRegion(struct ZunePoint *center, WORD radius);
@@ -817,6 +817,6 @@ ULONG ZuneBlendColors(ULONG color1, ULONG color2, UBYTE alpha);
 /* Cache Utilities */
 /*****************************************************************************/
 
-void ZuneInitPenCache(struct RenderPort *rp, LONG *pens, UWORD count);
+void ZuneInitPenCache(struct RenderContext *rctx, LONG *pens, UWORD count);
 
 #endif /* LIBRARIES_ZUNEGFX_H */

@@ -17,12 +17,12 @@
 /****** zunegfx.library/ZuneFillCircleAA ******************************
  *
  *   NAME
- *       ZuneFillCircleAA -- Fill an antialiased circle on a RenderPort.
+ *       ZuneFillCircleAA -- Fill an antialiased circle on a RenderContext.
  *
  *   SYNOPSIS
- *       ZuneFillCircleAA(rp, centerX, centerY, radius, color)
+ *       ZuneFillCircleAA(rctx, centerX, centerY, radius, color)
  *
- *       VOID ZuneFillCircleAA(struct RenderPort *rp, UWORD centerX,
+ *       VOID ZuneFillCircleAA(struct RenderContext *rctx, UWORD centerX,
  *                             UWORD centerY, UWORD radius, ULONG color)
  *
  *   FUNCTION
@@ -31,7 +31,7 @@
  *       visual artifacts.
  *
  *   INPUTS
- *       rp -- The RenderPort to draw on
+ *       rctx -- The RenderContext to draw on
  *       centerX -- X coordinate of the circle center
  *       centerY -- Y coordinate of the circle center
  *       radius -- Radius of the circle in pixels
@@ -40,7 +40,7 @@
  ***************************************************************************/
 
 AROS_LH4(VOID, ZuneFillCircleAA,
-         AROS_LHA(struct RenderPort *, rp, A0),
+         AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(struct ZunePoint *, center, A1),
          AROS_LHA(UWORD, radius, D0),
          AROS_LHA(struct ZuneBrush *, brush, A2),
@@ -49,14 +49,14 @@ AROS_LH4(VOID, ZuneFillCircleAA,
 {
   AROS_LIBFUNC_INIT
 
-  if (!rp || !center) {
+  if (!rctx || !center) {
     return;
   }
 
   const WORD centerX = center->x;
   const WORD centerY = center->y;
 
-  ZUNE_BACKEND_CALL(rp, DrawCircle, centerX, centerY, radius, (UBYTE)0, brush, NULL, TRUE, TRUE);
+  ZUNE_BACKEND_CALL(rctx, DrawCircle, centerX, centerY, radius, (UBYTE)0, brush, NULL, TRUE, TRUE);
 
   AROS_LIBFUNC_EXIT
 }
