@@ -195,7 +195,7 @@ void InterpolateGradientStops(const struct ZuneGradientStop *stops,
   }
 
   /* Find surrounding stops */
-  int i;
+  WORD i;
   for (i = 0; i < stop_count - 1; i++) {
     if (t < stops[i + 1].position)
       break;
@@ -236,8 +236,8 @@ void InterpolateGradientStops(const struct ZuneGradientStop *stops,
 /*****************************************************************************/
 
 /* Helper: Apply texture wrapping to coordinate */
-static inline int ApplyTextureWrap(int coord, int size,
-                                   enum ZuneBrushWrapMode wrap) {
+static inline WORD ApplyTextureWrap(WORD coord, WORD size,
+                                    enum ZuneBrushWrapMode wrap) {
   switch (wrap) {
   case ZUNE_BRUSH_WRAP_REPEAT: {
     coord = coord % size;
@@ -250,7 +250,7 @@ static inline int ApplyTextureWrap(int coord, int size,
     return clamp(coord, 0, size - 1);
 
   case ZUNE_BRUSH_WRAP_MIRROR: {
-    int doubled = size * 2;
+    WORD doubled = size * 2;
     coord = coord % doubled;
     if (coord < 0)
       coord += doubled;
@@ -267,7 +267,7 @@ static inline int ApplyTextureWrap(int coord, int size,
 /*****************************************************************************/
 
 void SampleBrush(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
-                 UWORD rect_w, UWORD rect_h, int px, int py, UBYTE *r, UBYTE *g,
+                 UWORD rect_w, UWORD rect_h, WORD px, WORD py, UBYTE *r, UBYTE *g,
                  UBYTE *b, UBYTE *a) {
 
   if (!brush) {
@@ -294,14 +294,14 @@ void SampleBrush(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
     }
 
     /* Calculate relative position in rectangle */
-    int rel_x = px - rect_x;
-    int rel_y = py - rect_y;
+    WORD rel_x = px - rect_x;
+    WORD rel_y = py - rect_y;
 
     /* Apply wrapping/clamping */
-    int tex_x = ApplyTextureWrap(rel_x, brush->internal.texture_cache.src_w,
-                                 brush->data.texture.wrap_u);
-    int tex_y = ApplyTextureWrap(rel_y, brush->internal.texture_cache.src_h,
-                                 brush->data.texture.wrap_v);
+    WORD tex_x = ApplyTextureWrap(rel_x, brush->internal.texture_cache.src_w,
+                                  brush->data.texture.wrap_u);
+    WORD tex_y = ApplyTextureWrap(rel_y, brush->internal.texture_cache.src_h,
+                                  brush->data.texture.wrap_v);
 
     /* Add source rectangle offset */
     tex_x += brush->internal.texture_cache.src_x;
@@ -329,8 +329,8 @@ void SampleBrush(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
     if (brush->internal.linear_cache.rasterized_pixels &&
         brush->internal.linear_cache.rasterized_width > 0 &&
         brush->internal.linear_cache.rasterized_height > 0) {
-      int rel_x = px - rect_x;
-      int rel_y = py - rect_y;
+      WORD rel_x = px - rect_x;
+      WORD rel_y = py - rect_y;
 
       /* Clamp to valid range */
       if (rel_x < 0) rel_x = 0;
@@ -369,12 +369,12 @@ void SampleBrush(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
     }
 
     /* Calculate relative position in rectangle */
-    int rel_x = px - rect_x;
-    int rel_y = py - rect_y;
+    WORD rel_x = px - rect_x;
+    WORD rel_y = py - rect_y;
 
     /* Pattern is 16x2, repeating */
-    int pat_x = rel_x % 16;
-    int pat_y = rel_y % 2;
+    WORD pat_x = rel_x % 16;
+    WORD pat_y = rel_y % 2;
     if (pat_x < 0) pat_x += 16;
     if (pat_y < 0) pat_y += 2;
 
@@ -402,11 +402,11 @@ void SampleBrush(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
 /*****************************************************************************/
 
 void SampleBrushBatch4(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
-                       UWORD rect_w, UWORD rect_h, const int px[4], int py,
+                       UWORD rect_w, UWORD rect_h, const WORD px[4], WORD py,
                        UBYTE r[4], UBYTE g[4], UBYTE b[4], UBYTE a[4]) {
 
   if (!brush) {
-    for (int i = 0; i < 4; i++) {
+    for (WORD i = 0; i < 4; i++) {
       r[i] = g[i] = b[i] = a[i] = 0;
     }
     return;
@@ -422,7 +422,7 @@ void SampleBrushBatch4(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
     UBYTE sg = ZUNE_GET_GREEN(color);
     UBYTE sb = ZUNE_GET_BLUE(color);
 
-    for (int i = 0; i < 4; i++) {
+    for (WORD i = 0; i < 4; i++) {
       a[i] = sa;
       r[i] = sr;
       g[i] = sg;
@@ -433,7 +433,7 @@ void SampleBrushBatch4(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
 
   case ZUNE_BRUSH_TYPE_LINEAR_GRADIENT: {
     if (!brush->internal.valid) {
-      for (int i = 0; i < 4; i++) {
+      for (WORD i = 0; i < 4; i++) {
         r[i] = g[i] = b[i] = a[i] = 0;
       }
       break;
@@ -443,7 +443,7 @@ void SampleBrushBatch4(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
     if (brush->internal.linear_cache.rasterized_pixels &&
         brush->internal.linear_cache.rasterized_width > 0 &&
         brush->internal.linear_cache.rasterized_height > 0) {
-      int rel_y = py - rect_y;
+      WORD rel_y = py - rect_y;
       if (rel_y < 0) rel_y = 0;
       if (rel_y >= brush->internal.linear_cache.rasterized_height)
         rel_y = brush->internal.linear_cache.rasterized_height - 1;
@@ -452,8 +452,8 @@ void SampleBrushBatch4(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
                    rel_y * brush->internal.linear_cache.rasterized_width;
       UWORD cache_w = brush->internal.linear_cache.rasterized_width;
 
-      for (int i = 0; i < 4; i++) {
-        int rel_x = px[i] - rect_x;
+      for (WORD i = 0; i < 4; i++) {
+        WORD rel_x = px[i] - rect_x;
         if (rel_x < 0) rel_x = 0;
         if (rel_x >= cache_w) rel_x = cache_w - 1;
 
@@ -472,7 +472,7 @@ void SampleBrushBatch4(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
                    rel_y * brush->internal.linear_cache.t_step_y;
 
     /* Sample each pixel with incremental t */
-    for (int i = 0; i < 4; i++) {
+    for (WORD i = 0; i < 4; i++) {
       float rel_x = px[i] - rect_x;
       float t = base_t + rel_x * brush->internal.linear_cache.t_step_x;
 
@@ -485,7 +485,7 @@ void SampleBrushBatch4(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
 
   default:
     /* Fall back to scalar sampling */
-    for (int i = 0; i < 4; i++) {
+    for (WORD i = 0; i < 4; i++) {
       SampleBrush(brush, rect_x, rect_y, rect_w, rect_h, px[i], py, &r[i],
                   &g[i], &b[i], &a[i]);
     }
@@ -517,11 +517,11 @@ void CleanupBrushInternalState(struct ZuneBrush *brush) {
 /*****************************************************************************/
 
 void SampleBrushBatch8(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
-                       UWORD rect_w, UWORD rect_h, const int px[8], int py,
+                       UWORD rect_w, UWORD rect_h, const WORD px[8], WORD py,
                        UBYTE r[8], UBYTE g[8], UBYTE b[8], UBYTE a[8]) {
 
   if (!brush) {
-    for (int i = 0; i < 8; i++) {
+    for (WORD i = 0; i < 8; i++) {
       r[i] = g[i] = b[i] = a[i] = 0;
     }
     return;
@@ -537,7 +537,7 @@ void SampleBrushBatch8(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
     UBYTE sg = ZUNE_GET_GREEN(color);
     UBYTE sb = ZUNE_GET_BLUE(color);
 
-    for (int i = 0; i < 8; i++) {
+    for (WORD i = 0; i < 8; i++) {
       a[i] = sa;
       r[i] = sr;
       g[i] = sg;
@@ -548,7 +548,7 @@ void SampleBrushBatch8(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
 
   case ZUNE_BRUSH_TYPE_LINEAR_GRADIENT: {
     if (!brush->internal.valid) {
-      for (int i = 0; i < 8; i++) {
+      for (WORD i = 0; i < 8; i++) {
         r[i] = g[i] = b[i] = a[i] = 0;
       }
       break;
@@ -558,7 +558,7 @@ void SampleBrushBatch8(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
     if (brush->internal.linear_cache.rasterized_pixels &&
         brush->internal.linear_cache.rasterized_width > 0 &&
         brush->internal.linear_cache.rasterized_height > 0) {
-      int rel_y = py - rect_y;
+      WORD rel_y = py - rect_y;
       if (rel_y < 0) rel_y = 0;
       if (rel_y >= brush->internal.linear_cache.rasterized_height)
         rel_y = brush->internal.linear_cache.rasterized_height - 1;
@@ -567,8 +567,8 @@ void SampleBrushBatch8(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
                    rel_y * brush->internal.linear_cache.rasterized_width;
       UWORD cache_w = brush->internal.linear_cache.rasterized_width;
 
-      for (int i = 0; i < 8; i++) {
-        int rel_x = px[i] - rect_x;
+      for (WORD i = 0; i < 8; i++) {
+        WORD rel_x = px[i] - rect_x;
         if (rel_x < 0) rel_x = 0;
         if (rel_x >= cache_w) rel_x = cache_w - 1;
 
@@ -587,7 +587,7 @@ void SampleBrushBatch8(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
                    rel_y * brush->internal.linear_cache.t_step_y;
 
     /* Sample each pixel with incremental t */
-    for (int i = 0; i < 8; i++) {
+    for (WORD i = 0; i < 8; i++) {
       float rel_x = px[i] - rect_x;
       float t = base_t + rel_x * brush->internal.linear_cache.t_step_x;
 
@@ -600,7 +600,7 @@ void SampleBrushBatch8(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
 
   default:
     /* Fall back to scalar sampling */
-    for (int i = 0; i < 8; i++) {
+    for (WORD i = 0; i < 8; i++) {
       SampleBrush(brush, rect_x, rect_y, rect_w, rect_h, px[i], py, &r[i],
                   &g[i], &b[i], &a[i]);
     }

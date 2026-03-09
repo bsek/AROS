@@ -13,7 +13,6 @@
 
 #include "clib/graphics_protos.h"
 #include "exec/semaphores.h"
-#include <stdint.h>
 
 #ifndef EXEC_LIBRARIES_H
 #include <exec/libraries.h>

@@ -130,19 +130,19 @@ void ZuneFallback_DrawLine(struct RenderContext *rctx, WORD start_x, WORD start_
     goto restore;
 
   /* Bresenham fallback */
-  int dx = ABS(end_x - start_x);
-  int sx = start_x < end_x ? 1 : -1;
-  int dy = -ABS(end_y - start_y);
-  int sy = start_y < end_y ? 1 : -1;
-  int err = dx + dy;
+  WORD dx = ABS(end_x - start_x);
+  WORD sx = start_x < end_x ? 1 : -1;
+  WORD dy = -ABS(end_y - start_y);
+  WORD sy = start_y < end_y ? 1 : -1;
+  WORD err = dx + dy;
 
-  int cx = start_x;
-  int cy = start_y;
+  WORD cx = start_x;
+  WORD cy = start_y;
   while (1) {
     WritePixel(rast, cx, cy);
     if (cx == end_x && cy == end_y)
       break;
-    int e2 = 2 * err;
+    WORD e2 = 2 * err;
     if (e2 >= dy) {
       err += dy;
       cx += sx;
@@ -244,9 +244,9 @@ void ZuneFallback_DrawCircle(struct RenderContext *rctx, WORD center_x,
       border_color && fallback_set_pen(rctx, rctx ? rctx->colormap : NULL,
                                        border_color, rast);
 
-  int x = radius;
-  int y = 0;
-  int decision_over2 = 1 - x;
+  WORD x = radius;
+  WORD y = 0;
+  WORD decision_over2 = 1 - x;
 
   while (y <= x) {
     if (have_fill) {

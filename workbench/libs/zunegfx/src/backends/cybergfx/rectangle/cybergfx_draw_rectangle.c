@@ -18,7 +18,7 @@ struct timer { /* Timer struct used to record times   */
  * and prints it, along with a '\n'
  */
 void delta(struct timer *finish, struct timer *start) {
-    int dsec, dmic;
+    LONG dsec, dmic;
 
     dmic = finish->micros - start->micros;
     dsec = finish->seconds - start->seconds;

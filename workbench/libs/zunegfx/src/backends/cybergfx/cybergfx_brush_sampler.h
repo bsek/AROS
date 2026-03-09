@@ -54,7 +54,7 @@ void PrepareBrushForRendering(struct RenderContext *rctx, struct ZuneBrush *brus
  *   - Clamps gradient t-values to [0, 1]
  */
 void SampleBrush(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
-                 UWORD rect_w, UWORD rect_h, int px, int py, UBYTE *r, UBYTE *g,
+                 UWORD rect_w, UWORD rect_h, WORD px, WORD py, UBYTE *r, UBYTE *g,
                  UBYTE *b, UBYTE *a);
 
 /**
@@ -75,7 +75,7 @@ void SampleBrush(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
  *   - All 4 pixels must be on the same scanline
  */
 void SampleBrushBatch4(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
-                       UWORD rect_w, UWORD rect_h, const int px[4], int py,
+                       UWORD rect_w, UWORD rect_h, const WORD px[4], WORD py,
                        UBYTE r[4], UBYTE g[4], UBYTE b[4], UBYTE a[4]);
 
 /**
@@ -96,7 +96,7 @@ void SampleBrushBatch4(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
  *   - All 8 pixels must be on the same scanline
  */
 void SampleBrushBatch8(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
-                       UWORD rect_w, UWORD rect_h, const int px[8], int py,
+                       UWORD rect_w, UWORD rect_h, const WORD px[8], WORD py,
                        UBYTE r[8], UBYTE g[8], UBYTE b[8], UBYTE a[8]);
 
 /**

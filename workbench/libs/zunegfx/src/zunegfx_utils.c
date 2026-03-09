@@ -54,7 +54,7 @@ void CleanupPenCache(struct PenCache *cache) {
     return;
   /* Release any allocated pens */
   if (cache->colormap) {
-    for (int i = 0; i < cache->count; i++) {
+    for (WORD i = 0; i < cache->count; i++) {
       ReleasePen(cache->colormap, cache->pens[i]);
     }
   }
@@ -66,7 +66,7 @@ LONG GetCachedPen(struct PenCache *cache, ULONG color) {
     return -1;
 
   /* Check if color is already cached */
-  for (int i = 0; i < cache->count; i++) {
+  for (WORD i = 0; i < cache->count; i++) {
     if (cache->entries[i] == color) {
       return cache->pens[i];
     }
@@ -110,7 +110,7 @@ BOOL GetCachedInternalColor(struct ColorCache *cache, ULONG color, ULONG pixel_f
     return FALSE;
 
   /* Check if color and pixel format combination is already cached */
-  for (int i = 0; i < cache->count; i++) {
+  for (WORD i = 0; i < cache->count; i++) {
     if (cache->color_keys[i] == color && cache->pixel_formats[i] == pixel_format) {
       *out_color = cache->colors[i];
       D(bug("ColorCache: HIT - color=0x%08X, format=%d, slot=%d\n", color, pixel_format, i));
@@ -126,7 +126,7 @@ void CacheInternalColor(struct ColorCache *cache, ULONG color, ULONG pixel_forma
   if (!cache || !internal_color)
     return;
 
-  int slot;
+  WORD slot;
 
   /* If cache is not full, use next available slot */
   if (cache->count < COLOR_CACHE_SIZE) {
@@ -170,7 +170,7 @@ BOOL GetCachedPenInternalColor(struct PenColorCache *cache, LONG pen, struct Col
     return FALSE;
 
   /* Check if pen, colormap, and pixel format combination is already cached */
-  for (int i = 0; i < cache->count; i++) {
+  for (WORD i = 0; i < cache->count; i++) {
     if (cache->pen_keys[i] == pen &&
         cache->colormaps[i] == cmap &&
         cache->pixel_formats[i] == pixel_format) {
@@ -188,7 +188,7 @@ void CachePenInternalColor(struct PenColorCache *cache, LONG pen, struct ColorMa
   if (!cache || !internal_color || !cmap)
     return;
 
-  int slot;
+  WORD slot;
 
   /* If cache is not full, use next available slot */
   if (cache->count < PEN_COLOR_CACHE_SIZE) {

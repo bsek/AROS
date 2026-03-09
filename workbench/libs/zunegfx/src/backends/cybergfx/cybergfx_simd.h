@@ -67,7 +67,7 @@ void cybergfx_sdf_roundrect_batch8(const float rel_x[8], float rel_y,
 void cybergfx_compute_alphas_batch4(const float dist_inner[4],
                                     const float dist_outer[4],
                                     float aa_edge_neg, float aa_edge_pos,
-                                    int hasFill, int hasBorder,
+                                    BOOL hasFill, BOOL hasBorder,
                                     float alphaFill_out[4],
                                     float alphaLine_out[4]);
 
@@ -75,7 +75,7 @@ void cybergfx_compute_alphas_batch4(const float dist_inner[4],
 void cybergfx_compute_alphas_batch8(const float dist_inner[8],
                                     const float dist_outer[8],
                                     float aa_edge_neg, float aa_edge_pos,
-                                    int hasFill, int hasBorder,
+                                    BOOL hasFill, BOOL hasBorder,
                                     float alphaFill_out[8],
                                     float alphaLine_out[8]);
 
@@ -101,16 +101,16 @@ void cybergfx_blend_aa_pixels_batch4(
     const ULONG bg_pixels[4], const float alphaFill[4],
     const float alphaLine[4], UBYTE fc_r, UBYTE fc_g, UBYTE fc_b,
     float fc_alpha_scale, UBYTE o_r, UBYTE o_g, UBYTE o_b, float o_alpha_scale,
-    int hasFill, int hasBorder, ULONG result_pixels[4],
-    unsigned int *changed_mask);
+    BOOL hasFill, BOOL hasBorder, ULONG result_pixels[4],
+    ULONG *changed_mask);
 
 /* Batch pixel blending for 8 pixels (AVX2 optimized) */
 void cybergfx_blend_aa_pixels_batch8(
     const ULONG bg_pixels[8], const float alphaFill[8],
     const float alphaLine[8], UBYTE fc_r, UBYTE fc_g, UBYTE fc_b,
     float fc_alpha_scale, UBYTE o_r, UBYTE o_g, UBYTE o_b, float o_alpha_scale,
-    int hasFill, int hasBorder, ULONG result_pixels[8],
-    unsigned int *changed_mask);
+    BOOL hasFill, BOOL hasBorder, ULONG result_pixels[8],
+    ULONG *changed_mask);
 
 /* Pack RGBA components into ARGB32 format (batch of 4)
  *
@@ -129,7 +129,7 @@ void cybergfx_make_argb32_batch4(const UBYTE a[4], const UBYTE r[4],
                                  ULONG pixels_out[4]);
 
 /* Texture helpers */
-void cybergfx_blit_argb32_unity(const UBYTE *src, ULONG *dst, int width,
+void cybergfx_blit_argb32_unity(const UBYTE *src, ULONG *dst, LONG width,
                                 const struct InternalColor *tint);
 
 /* Circle helpers */
@@ -138,10 +138,10 @@ void cybergfx_sdf_circle_batch4(const float rel_x[4], float rel_y, float radius,
 void cybergfx_sdf_circle_batch8(const float rel_x[8], float rel_y, float radius,
                                 float dist_out[8]);
 void cybergfx_circle_alphas_batch4(const float dist[4], float border_width,
-                                   int hasFill, int hasBorder, float fill_a[4],
+                                   BOOL hasFill, BOOL hasBorder, float fill_a[4],
                                    float border_a[4]);
 void cybergfx_circle_alphas_batch8(const float dist[8], float border_width,
-                                   int hasFill, int hasBorder, float fill_a[8],
+                                   BOOL hasFill, BOOL hasBorder, float fill_a[8],
                                    float border_a[8]);
 
 /* Texture alpha blending - batch operations for ARGB32 textures
@@ -171,6 +171,6 @@ void cybergfx_blend_argb32_batch8(ULONG dst[8], const ULONG src[8]);
  *   src: Source pixel buffer (ARGB32 format)
  *   count: Number of pixels to blend
  */
-void cybergfx_blend_argb32_row(ULONG *dst, const ULONG *src, int count);
+void cybergfx_blend_argb32_row(ULONG *dst, const ULONG *src, LONG count);
 
 #endif /* CYBERGFX_SIMD_H */

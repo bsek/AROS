@@ -9,9 +9,9 @@
 #define DEBUG 0
 #include <aros/debug.h>
 
-#define CYBERGFX_AA_SMOOTHNESS 1.0f /* Sharper edges for UI elements */
+#define CYBERGFX_AA_SMOOTHNESS 0.8f /* Sharper edges for UI elements */
 #define CYBERGFX_AA_MIN_ALPHA_THRESHOLD 0.005f
-extern int cybergfx_aa_quality;
+extern WORD cybergfx_aa_quality;
 extern float cybergfx_aa_smoothness;
 
 /*
@@ -32,7 +32,7 @@ extern CybergfxCornerCache cybergfx_corner_cache;
 /* Fast inverse square root (Quake III algorithm) */
 static inline float fast_invsqrt(float x) {
     float xhalf = 0.5f * x;
-    int i = *(int *)&x;
+    LONG i = *(LONG *)&x;
     i = 0x5f375a86 - (i >> 1);
     x = *(float *)&i;
     x = x * (1.5f - xhalf * x * x); /* One Newton-Raphson iteration */
@@ -51,8 +51,8 @@ static inline void cybergfx_init_corner_cache(void) {
     if (cybergfx_corner_cache.valid)
         return;
 
-    for (int dy = 0; dy < CYBERGFX_CORNER_CACHE_SIZE; dy++) {
-        for (int dx = 0; dx < CYBERGFX_CORNER_CACHE_SIZE; dx++) {
+    for (WORD dy = 0; dy < CYBERGFX_CORNER_CACHE_SIZE; dy++) {
+        for (WORD dx = 0; dx < CYBERGFX_CORNER_CACHE_SIZE; dx++) {
             /* Pre-compute distance from origin for each integer offset */
             float fdx = (float)dx + 0.5f; /* pixel center */
             float fdy = (float)dy + 0.5f;
@@ -63,9 +63,9 @@ static inline void cybergfx_init_corner_cache(void) {
 }
 
 /* Fast corner distance lookup - returns distance from corner center */
-static inline float cybergfx_corner_dist_lookup(int dx, int dy) {
-    int adx = dx < 0 ? -dx : dx;
-    int ady = dy < 0 ? -dy : dy;
+static inline float cybergfx_corner_dist_lookup(WORD dx, WORD dy) {
+    WORD adx = dx < 0 ? -dx : dx;
+    WORD ady = dy < 0 ? -dy : dy;
 
     if (adx < CYBERGFX_CORNER_CACHE_SIZE && ady < CYBERGFX_CORNER_CACHE_SIZE) {
         return cybergfx_corner_cache.dist[ady][adx];
@@ -96,8 +96,8 @@ static inline float sdf_roundrect(float x, float y, float width, float height, f
     float outside;
     if (dx > 0.0f && dy > 0.0f) {
         /* In corner region - use cached distance lookup if possible */
-        int idx = (int)dx;
-        int idy = (int)dy;
+        WORD idx = (WORD)dx;
+        WORD idy = (WORD)dy;
         if (idx < CYBERGFX_CORNER_CACHE_SIZE && idy < CYBERGFX_CORNER_CACHE_SIZE && cybergfx_corner_cache.valid) {
             /* Interpolate between cached integer positions for sub-pixel accuracy */
             outside = cybergfx_corner_cache.dist[idy][idx];
@@ -124,8 +124,8 @@ static inline void mix(struct InternalColor a, struct InternalColor b, float t, 
 
 static inline void blend_over(UBYTE *r, UBYTE *g, UBYTE *b, UBYTE cr, UBYTE cg, UBYTE cb, float a) {
     /* Fixed-point blending: alpha scaled to 0-256 for efficient integer math */
-    unsigned int alpha = (unsigned int)(a * 256.0f + 0.5f);
-    unsigned int inv_alpha = 256 - alpha;
+    UWORD alpha = (UWORD)(a * 256.0f + 0.5f);
+    UWORD inv_alpha = 256 - alpha;
     *r = (UBYTE)((inv_alpha * (*r) + alpha * cr) >> 8);
     *g = (UBYTE)((inv_alpha * (*g) + alpha * cg) >> 8);
     *b = (UBYTE)((inv_alpha * (*b) + alpha * cb) >> 8);
@@ -140,10 +140,10 @@ static inline float smoothstep(float edge0, float edge1, float x) {
 
 static inline void mul(struct InternalColor color1, struct InternalColor color2, UBYTE *r, UBYTE *g, UBYTE *b, UBYTE *a) {
     /* Integer multiply with divide by 255: (a*b + 127) / 255 ≈ (a*b + 128) >> 8 for speed */
-    *r = (UBYTE)(((unsigned int)color1.r * color2.r + 128) / 255);
-    *g = (UBYTE)(((unsigned int)color1.g * color2.g + 128) / 255);
-    *b = (UBYTE)(((unsigned int)color1.b * color2.b + 128) / 255);
-    *a = (UBYTE)(((unsigned int)color1.a * color2.a + 128) / 255);
+    *r = (UBYTE)(((UWORD)color1.r * color2.r + 128) / 255);
+    *g = (UBYTE)(((UWORD)color1.g * color2.g + 128) / 255);
+    *b = (UBYTE)(((UWORD)color1.b * color2.b + 128) / 255);
+    *a = (UBYTE)(((UWORD)color1.a * color2.a + 128) / 255);
 }
 
 /* Structure to hold AA rectangle computation parameters */
@@ -154,17 +154,17 @@ typedef struct {
     float center_y;
     float half_w;
     float half_h;
-    int min_x;
-    int min_y;
-    int max_x;
-    int max_y;
+    WORD min_x;
+    WORD min_y;
+    WORD max_x;
+    WORD max_y;
     float aa_edge_neg;
     float aa_edge_pos;
 } cybergfx_aa_rect_params;
 
 /* Compute common parameters for AA rectangle rendering */
-static inline void cybergfx_compute_aa_rect_params(UWORD x, UWORD y, UWORD width, UWORD height, UBYTE radius, float lineWidth, int board_width,
-                                                   int board_height, cybergfx_aa_rect_params *params) {
+static inline void cybergfx_compute_aa_rect_params(UWORD x, UWORD y, UWORD width, UWORD height, UBYTE radius, float lineWidth, UWORD board_width,
+                                                   UWORD board_height, cybergfx_aa_rect_params *params) {
 
     params->halfLine = lineWidth * 0.5f;
     params->max_radius = fminf(radius, fminf(width * 0.5f, height * 0.5f));
@@ -186,7 +186,7 @@ static inline void cybergfx_compute_aa_rect_params(UWORD x, UWORD y, UWORD width
 }
 
 /* Compute alpha values for fill and border from SDF distances */
-static inline void cybergfx_compute_alphas(float dist_inner, float dist_outer, float aa_edge_neg, float aa_edge_pos, int hasFill, int hasBorder,
+static inline void cybergfx_compute_alphas(float dist_inner, float dist_outer, float aa_edge_neg, float aa_edge_pos, BOOL hasFill, BOOL hasBorder,
                                            float *alphaFill, float *alphaLine) {
 
     float alphaOuter = 0.0f;
@@ -215,16 +215,16 @@ static inline void cybergfx_compute_alphas(float dist_inner, float dist_outer, f
 
 /* Blend fill and border colors onto background pixel */
 static inline BOOL cybergfx_blend_aa_pixel(UBYTE *bg_r, UBYTE *bg_g, UBYTE *bg_b, float alphaFill, float alphaLine, UBYTE fc_r, UBYTE fc_g,
-                                           UBYTE fc_b, float fc_alpha_scale, UBYTE o_r, UBYTE o_g, UBYTE o_b, float o_alpha_scale, int hasFill,
-                                           int hasBorder) {
+                                           UBYTE fc_b, float fc_alpha_scale, UBYTE o_r, UBYTE o_g, UBYTE o_b, float o_alpha_scale, BOOL hasFill,
+                                           BOOL hasBorder) {
 
-    BOOL pixel_changed = 0;
+    BOOL pixel_changed = FALSE;
 
     if (hasFill && alphaFill > CYBERGFX_AA_MIN_ALPHA_THRESHOLD) {
         float final_alpha = fc_alpha_scale * alphaFill;
         if (final_alpha > 0.0f) {
             blend_over(bg_r, bg_g, bg_b, fc_r, fc_g, fc_b, final_alpha);
-            pixel_changed = 1;
+            pixel_changed = TRUE;
         }
     }
 
@@ -232,7 +232,7 @@ static inline BOOL cybergfx_blend_aa_pixel(UBYTE *bg_r, UBYTE *bg_g, UBYTE *bg_b
         float final_alpha = o_alpha_scale * alphaLine;
         if (final_alpha > 0.0f) {
             blend_over(bg_r, bg_g, bg_b, o_r, o_g, o_b, final_alpha);
-            pixel_changed = 1;
+            pixel_changed = TRUE;
         }
     }
 

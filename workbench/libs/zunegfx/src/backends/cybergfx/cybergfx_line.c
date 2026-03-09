@@ -339,7 +339,7 @@ static inline void write_wu_pixels(struct RastPort *rp, ULONG *pixels, ULONG pit
         UBYTE bg_a, bg_r, bg_g, bg_b;
         extract_pixel_value(bg, &bg_a, &bg_r, &bg_g, &bg_b);
         blend_over(&bg_r, &bg_g, &bg_b, color->r, color->g, color->b, alpha);
-        unpack_argb32(*pixel_ptr, &bg_a, &bg_r, &bg_g, &bg_b);
+        *pixel_ptr = pack_argb32(bg_a, bg_r, bg_g, bg_b);
     }
 }
 
@@ -408,8 +408,8 @@ void CybergfxDrawLineAA(struct RenderContext *rctx, WORD x1, WORD y1, WORD x2, W
     float xend = x0;
     float yend = y0 + gradient * (xend - x0);
     float xgap = rfpart(x0 + 0.5f);
-    int xpxl1 = cybergfx_fast_ftoi(xend);
-    int ypxl1 = cybergfx_fast_ftoi(yend);
+    WORD xpxl1 = cybergfx_fast_ftoi(xend);
+    WORD ypxl1 = cybergfx_fast_ftoi(yend);
 
     /* Draw first endpoint pixels */
     if (steep) {
@@ -426,8 +426,8 @@ void CybergfxDrawLineAA(struct RenderContext *rctx, WORD x1, WORD y1, WORD x2, W
     xend = x_end;
     yend = y_end + gradient * (xend - x_end);
     xgap = fpart(x_end + 0.5f);
-    int xpxl2 = cybergfx_fast_ftoi(xend);
-    int ypxl2 = cybergfx_fast_ftoi(yend);
+    WORD xpxl2 = cybergfx_fast_ftoi(xend);
+    WORD ypxl2 = cybergfx_fast_ftoi(yend);
 
     /* Draw second endpoint pixels */
     if (steep) {
@@ -439,8 +439,8 @@ void CybergfxDrawLineAA(struct RenderContext *rctx, WORD x1, WORD y1, WORD x2, W
     }
 
     /* Main loop - draw antialiased pixels between endpoints */
-    for (int x = xpxl1 + 1; x < xpxl2; x++) {
-        int py = cybergfx_fast_ftoi(intery);
+    for (WORD x = xpxl1 + 1; x < xpxl2; x++) {
+        WORD py = cybergfx_fast_ftoi(intery);
         if (steep) {
             write_wu_pixels(rastport, pixels, pitch_pixels, py, x, rfpart(intery), color, bitmap_width, bitmap_height);
             write_wu_pixels(rastport, pixels, pitch_pixels, py + 1, x, fpart(intery), color, bitmap_width, bitmap_height);

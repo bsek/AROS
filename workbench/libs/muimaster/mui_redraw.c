@@ -113,7 +113,8 @@
         }
         else
         {
-            l = muiRenderInfo(obj)->mri_RastPort->Layer;
+            struct RastPort *rp = muiRenderInfo(obj)->mri_RastPort;
+            l = rp ? rp->Layer : NULL;
         }
 
         if (l && (region = l->ClipRegion))
@@ -250,9 +251,6 @@
             else
             {
                 /* Not in batch/refresh mode: flush immediately */
-                D(bug("MUI_Redraw: immediate FlushDoubleBufferRegion for obj=%p rect=(%ld,%ld %ldx%ld)\n",
-                      obj, _left(obj), _top(obj), _width(obj), _height(obj)));
-                D(bug("MUI_Redraw: This redraw was triggered outside of WindowOpen batch mode\n"));
                 FlushDoubleBufferRegion(ri, _left(obj), _top(obj), _width(obj), _height(obj));
             }
         }

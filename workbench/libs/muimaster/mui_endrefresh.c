@@ -11,6 +11,9 @@
 #include "mui.h"
 #include "muimaster_intern.h"
 
+#define DEBUG 0
+#include <aros/debug.h>
+
 /*****************************************************************************
 
     NAME */

@@ -26,12 +26,12 @@ void CybergfxDrawRoundedRectangleToRasterPort(struct RenderContext *renderport, 
         return;
     }
 
-    int r = (int)border_radius;
-    if (r > (int)(width / 2)) {
-        r = (int)(width / 2);
+    WORD r = (WORD)border_radius;
+    if (r > (WORD)(width / 2)) {
+        r = (WORD)(width / 2);
     }
-    if (r > (int)(height / 2)) {
-        r = (int)(height / 2);
+    if (r > (WORD)(height / 2)) {
+        r = (WORD)(height / 2);
     }
 
     if (filled && (!fill_brush || !fill_brush->internal.valid)) {
@@ -42,10 +42,10 @@ void CybergfxDrawRoundedRectangleToRasterPort(struct RenderContext *renderport, 
     }
 
     BOOL draw_border = (border_width > 0);
-    int bw = draw_border ? (int)border_width : 0;
+    WORD bw = draw_border ? (WORD)border_width : 0;
     if (bw < 1 && draw_border) bw = 1;
 
-    int inner_r = r - bw;
+    WORD inner_r = r - bw;
     if (inner_r < 0) inner_r = 0;
 
     /* Get fill color for solid brushes */
@@ -57,70 +57,70 @@ void CybergfxDrawRoundedRectangleToRasterPort(struct RenderContext *renderport, 
     }
 
     /* Allocate row buffer for WritePixelArray */
-    ULONG *row_buffer = malloc((size_t)width * sizeof(ULONG));
+    ULONG *row_buffer = malloc((ULONG)width * sizeof(ULONG));
     if (!row_buffer) {
         return;
     }
 
     /* Allocate mask to track which pixels to write */
-    UBYTE *pixel_mask = malloc((size_t)width);
+    UBYTE *pixel_mask = malloc((ULONG)width);
     if (!pixel_mask) {
         free(row_buffer);
         return;
     }
 
     /* Corner center positions - centers are at radius distance from edges */
-    int tl_cx = x + r;              /* Top-left */
-    int tl_cy = y + r;
-    int tr_cx = x + width - 1 - r;  /* Top-right */
-    int tr_cy = y + r;
-    int bl_cx = x + r;              /* Bottom-left */
-    int bl_cy = y + height - 1 - r;
-    int br_cx = x + width - 1 - r;  /* Bottom-right */
-    int br_cy = y + height - 1 - r;
+    WORD tl_cx = x + r;              /* Top-left */
+    WORD tl_cy = y + r;
+    WORD tr_cx = x + width - 1 - r;  /* Top-right */
+    WORD tr_cy = y + r;
+    WORD bl_cx = x + r;              /* Bottom-left */
+    WORD bl_cy = y + height - 1 - r;
+    WORD br_cx = x + width - 1 - r;  /* Bottom-right */
+    WORD br_cy = y + height - 1 - r;
 
-    int r_sq = r * r;
-    int inner_r_sq = inner_r * inner_r;
+    LONG r_sq = r * r;
+    LONG inner_r_sq = inner_r * inner_r;
 
     /* Process each scanline */
-    for (int py = y; py < (int)(y + height); py++) {
+    for (WORD py = y; py < (WORD)(y + height); py++) {
         /* Clear mask for this row */
-        for (int i = 0; i < (int)width; i++) {
+        for (WORD i = 0; i < (WORD)width; i++) {
             pixel_mask[i] = 0;
         }
 
-        for (int px = x; px < (int)(x + width); px++) {
-            int buf_x = px - x;
+        for (WORD px = x; px < (WORD)(x + width); px++) {
+            WORD buf_x = px - x;
             BOOL is_border = FALSE;
             BOOL is_fill = FALSE;
 
             /* Determine which region this pixel is in */
             BOOL in_corner = FALSE;
-            int dist_sq = 0;
+            LONG dist_sq = 0;
 
             /* Check if we're in a corner region */
             if (px < tl_cx && py < tl_cy) {
                 /* Top-left corner */
-                int dx = px - tl_cx;
-                int dy = py - tl_cy;
+                WORD dx = px - tl_cx;
+                WORD dy = py - tl_cy;
                 dist_sq = dx * dx + dy * dy;
                 in_corner = TRUE;
             } else if (px > tr_cx && py < tr_cy) {
                 /* Top-right corner */
-                int dx = px - tr_cx;
-                int dy = py - tr_cy;
+                WORD dx = px - tr_cx;
+                WORD dy = py - tr_cy;
                 dist_sq = dx * dx + dy * dy;
                 in_corner = TRUE;
             } else if (px < bl_cx && py > bl_cy) {
                 /* Bottom-left corner */
-                int dx = px - bl_cx;
-                int dy = py - bl_cy;
+                WORD dx = px - bl_cx;
+                WORD dy = py - bl_cy;
                 dist_sq = dx * dx + dy * dy;
                 in_corner = TRUE;
             } else if (px > br_cx && py > br_cy) {
                 /* Bottom-right corner */
-                int dx = px - br_cx;
-                int dy = py - br_cy;
+                WORD dx = px - br_cx;
+                WORD dy = py - br_cy;
                 dist_sq = dx * dx + dy * dy;
                 in_corner = TRUE;
             }
@@ -170,16 +170,16 @@ void CybergfxDrawRoundedRectangleToRasterPort(struct RenderContext *renderport, 
         }
 
         /* Write contiguous segments of pixels that are set in the mask */
-        int seg_start = -1;
-        for (int i = 0; i <= (int)width; i++) {
-            BOOL has_pixel = (i < (int)width) ? pixel_mask[i] : 0;
+        WORD seg_start = -1;
+        for (WORD i = 0; i <= (WORD)width; i++) {
+            BOOL has_pixel = (i < (WORD)width) ? pixel_mask[i] : 0;
             
             if (has_pixel && seg_start < 0) {
                 /* Start of a new segment */
                 seg_start = i;
             } else if (!has_pixel && seg_start >= 0) {
                 /* End of segment - write it */
-                int seg_width = i - seg_start;
+                WORD seg_width = i - seg_start;
                 WritePixelArray(&row_buffer[seg_start], 0, 0, (ULONG)seg_width * 4, rp,
                                x + seg_start, py, seg_width, 1, CYBERGFX_PIXELFORMAT_ARGB32);
                 seg_start = -1;

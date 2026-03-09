@@ -24,7 +24,6 @@
 #include "cybergfx_pixel_format.h"
 #include "cybergfx_simd.h"
 #include "libraries/zunegfx.h"
-#include <stdbool.h>
 #include <string.h>
 
 #define DEBUG 0
@@ -499,7 +498,7 @@ void CybergfxDrawTextureToDrawingBoard(
       ULONG *dest_pixels = (ULONG *)board->pixels;
       ULONG pitch_pixels = board->pitch / 4;
 
-      bool unity_scale = (scale_x == 0x10000 && scale_y == 0x10000 &&
+      BOOL unity_scale = (scale_x == 0x10000 && scale_y == 0x10000 &&
                           dest_width == src_width && dest_height == src_height);
 
       /* Fast path: ARGB32 copy/tint with unity scale */

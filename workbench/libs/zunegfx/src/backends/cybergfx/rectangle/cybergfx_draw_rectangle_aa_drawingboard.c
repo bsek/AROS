@@ -43,17 +43,17 @@ static void cybergfx_init_fill_state(struct ZuneBrush *brush, BOOL draw_fill, cy
     }
 }
 
-static void cybergfx_sample_fill_block(const cybergfx_fill_state *state, WORD rect_x, WORD rect_y, UWORD rect_w, UWORD rect_h, int px_start, int py,
+static void cybergfx_sample_fill_block(const cybergfx_fill_state *state, WORD rect_x, WORD rect_y, UWORD rect_w, UWORD rect_h, WORD px_start, WORD py,
                                        UBYTE out_r[4], UBYTE out_g[4], UBYTE out_b[4]) {
     if (!state->enabled) {
-        for (int i = 0; i < 4; ++i) {
+        for (WORD i = 0; i < 4; ++i) {
             out_r[i] = out_g[i] = out_b[i] = 0;
         }
         return;
     }
 
     if (state->solid) {
-        for (int i = 0; i < 4; ++i) {
+        for (WORD i = 0; i < 4; ++i) {
             out_r[i] = state->solid_r;
             out_g[i] = state->solid_g;
             out_b[i] = state->solid_b;
@@ -61,8 +61,8 @@ static void cybergfx_sample_fill_block(const cybergfx_fill_state *state, WORD re
         return;
     }
 
-    int px_coords[4];
-    for (int i = 0; i < 4; ++i) {
+    WORD px_coords[4];
+    for (WORD i = 0; i < 4; ++i) {
         px_coords[i] = px_start + i;
     }
 
@@ -71,7 +71,7 @@ static void cybergfx_sample_fill_block(const cybergfx_fill_state *state, WORD re
 }
 
 static BOOL cybergfx_prefill_solid_core_board(struct DrawingBoard *board, const cybergfx_fill_state *state, BOOL hasBorder,
-                                              const cybergfx_aa_rect_params *params, int *out_min_x, int *out_max_x, int *out_min_y, int *out_max_y) {
+                                              const cybergfx_aa_rect_params *params, WORD *out_min_x, WORD *out_max_x, WORD *out_min_y, WORD *out_max_y) {
     if (!state->solid || !state->brush || !state->brush->internal.valid) {
         return FALSE;
     }
@@ -87,27 +87,27 @@ static BOOL cybergfx_prefill_solid_core_board(struct DrawingBoard *board, const 
     }
     float inset = fmaxf(params->max_radius, margin);
 
-    int min_x = (int)ceilf(rect_left + inset);
-    int max_x = (int)floorf(rect_right - inset);
-    int min_y = (int)ceilf(rect_top + inset);
-    int max_y = (int)floorf(rect_bottom - inset);
+    WORD min_x = (WORD)ceilf(rect_left + inset);
+    WORD max_x = (WORD)floorf(rect_right - inset);
+    WORD min_y = (WORD)ceilf(rect_top + inset);
+    WORD max_y = (WORD)floorf(rect_bottom - inset);
 
     if (min_x > max_x || min_y > max_y) {
         return FALSE;
     }
 
     /* Debug the solid fill color values */
-    D(bug("cybergfx_prefill_solid_core: solid rgb = (%d, %d, %d)\n", (int)state->solid_r, (int)state->solid_g, (int)state->solid_b));
+    D(bug("cybergfx_prefill_solid_core: solid rgb = (%d, %d, %d)\n", (WORD)state->solid_r, (WORD)state->solid_g, (WORD)state->solid_b));
 
     /* Use pack_argb32 to create pixel in correct format for direct memory access */
     ULONG solid_pixel = pack_argb32(255, state->solid_r, state->solid_g, state->solid_b);
     ULONG *pixels = (ULONG *)board->pixels;
     ULONG pitch_pixels = board->pitch / 4;
 
-    for (int py = min_y; py <= max_y; ++py) {
-        ULONG *row_ptr = pixels + (size_t)py * pitch_pixels;
+    for (WORD py = min_y; py <= max_y; ++py) {
+        ULONG *row_ptr = pixels + (ULONG)py * pitch_pixels;
         ULONG *dest = row_ptr + min_x;
-        for (int px = min_x; px <= max_x; ++px) {
+        for (WORD px = min_x; px <= max_x; ++px) {
             *dest++ = solid_pixel;
         }
     }
@@ -145,8 +145,8 @@ void CybergfxAARectangleDrawingBoard(struct DrawingBoard *board, UWORD x, UWORD 
 
     /* Debug fill brush RGB values if available */
     if (fill_brush && fill_brush->internal.valid) {
-        D(bug("Fill brush RGBA: (%d, %d, %d, %d)\n", (int)fill_brush->internal.color.r, (int)fill_brush->internal.color.g,
-              (int)fill_brush->internal.color.b, (int)fill_brush->internal.color.a));
+        D(bug("Fill brush RGBA: (%d, %d, %d, %d)\n", (WORD)fill_brush->internal.color.r, (WORD)fill_brush->internal.color.g,
+              (WORD)fill_brush->internal.color.b, (WORD)fill_brush->internal.color.a));
     } else if (fill_brush) {
         D(bug("Fill brush present but no valid color information\n"));
     } else {
@@ -160,7 +160,7 @@ void CybergfxAARectangleDrawingBoard(struct DrawingBoard *board, UWORD x, UWORD 
         return;
     }
 
-    int core_min_x = 0, core_max_x = -1, core_min_y = 0, core_max_y = -1;
+    WORD core_min_x = 0, core_max_x = -1, core_min_y = 0, core_max_y = -1;
     BOOL core_prefilled = FALSE;
     if (fill_state.solid) {
         core_prefilled =
@@ -169,13 +169,16 @@ void CybergfxAARectangleDrawingBoard(struct DrawingBoard *board, UWORD x, UWORD 
 
     /* Debug fill brush RGB values if available */
     if (fill_state.solid) {
-        D(bug("Fill state RGBA: (%d, %d, %d)\n", (int)fill_state.solid_r, (int)fill_state.solid_g, (int)fill_state.solid_b));
+        D(bug("Fill state RGBA: (%d, %d, %d)\n", (WORD)fill_state.solid_r, (WORD)fill_state.solid_g, (WORD)fill_state.solid_b));
     }
 
     UBYTE o_a = 0, o_r = 0, o_g = 0, o_b = 0;
     float o_alpha_scale = 0.0f;
     if (hasBorder) {
-        mul(*outline_color, *outline_tint, &o_r, &o_g, &o_b, &o_a);
+        o_r = outline_color->r;
+        o_g = outline_color->g;
+        o_b = outline_color->b;
+        o_a = outline_color->a;
         o_alpha_scale = o_a / 255.0f;
     }
 
@@ -188,23 +191,23 @@ void CybergfxAARectangleDrawingBoard(struct DrawingBoard *board, UWORD x, UWORD 
     float outer_half_h = params.half_h + params.halfLine;
     float outer_radius = params.max_radius + params.halfLine;
 
-    for (int py = params.min_y; py <= params.max_y; ++py) {
+    for (WORD py = params.min_y; py <= params.max_y; ++py) {
         float rel_y = (py + 0.5f) - params.center_y;
         float rel_y_abs = fabsf(rel_y);
         if (rel_y_abs > outer_half_h + cybergfx_aa_smoothness) {
             continue;
         }
 
-        ULONG *row_ptr = pixels + (size_t)py * pitch_pixels;
+        ULONG *row_ptr = pixels + (ULONG)py * pitch_pixels;
         BOOL row_in_core = core_prefilled && py >= core_min_y && py <= core_max_y;
 
-        for (int px = params.min_x; px <= params.max_x; px += 4) {
+        for (WORD px = params.min_x; px <= params.max_x; px += 4) {
             if (row_in_core && px >= core_min_x && px + 3 <= core_max_x) {
                 continue;
             }
 
             float rel_x[4];
-            for (int i = 0; i < 4; ++i) {
+            for (WORD i = 0; i < 4; ++i) {
                 rel_x[i] = px + i + base_rel_x;
             }
 
@@ -228,8 +231,8 @@ void CybergfxAARectangleDrawingBoard(struct DrawingBoard *board, UWORD x, UWORD 
                 cybergfx_sample_fill_block(&fill_state, x, y, width, height, px, py, fc_r, fc_g, fc_b);
             }
 
-            int valid = (px + 3 <= params.max_x) ? 4 : (params.max_x - px + 1);
-            for (int i = 0; i < valid; ++i) {
+            WORD valid = (px + 3 <= params.max_x) ? 4 : (params.max_x - px + 1);
+            for (WORD i = 0; i < valid; ++i) {
                 float totalAlpha = alphaFill[i] + alphaLine[i];
                 if (totalAlpha < CYBERGFX_AA_MIN_ALPHA_THRESHOLD) {
                     continue; /* Skip fully transparent pixels */

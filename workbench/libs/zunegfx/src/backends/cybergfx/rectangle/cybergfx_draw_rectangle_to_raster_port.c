@@ -41,9 +41,9 @@ void CybergfxDrawRectangleToRasterPort(struct RenderContext *renderport,
   height = (UWORD)clipped_height;
 
   if (filled) {
-    if (!fill_brush->internal.valid) {
+    if (!fill_brush || !fill_brush->internal.valid) {
       D(bug("Brush preperation has failed!\n"));
-      filled = 0; /* Brush preparation failed */
+      filled = 0; /* Brush preparation failed or no brush */
     }
   }
 
@@ -67,35 +67,35 @@ void CybergfxDrawRectangleToRasterPort(struct RenderContext *renderport,
       /* Pattern/gradient brushes require per-pixel sampling */
       /* Use multi-scanline batching to reduce WritePixelArray syscall overhead */
       #define SCANLINE_BATCH 32
-      int row_width = (int)width;
-      int total_height = (int)height;
+      WORD row_width = (WORD)width;
+      WORD total_height = (WORD)height;
       
       /* Allocate buffer for multiple scanlines */
       ULONG *batch_buffer =
           (row_width > 0 && total_height > 0) 
-              ? malloc((size_t)row_width * SCANLINE_BATCH * sizeof(ULONG)) 
+              ? malloc((ULONG)row_width * SCANLINE_BATCH * sizeof(ULONG)) 
               : NULL;
       if (!batch_buffer) {
         return;
       }
 
       /* Process rows in batches */
-      for (int batch_start = 0; batch_start < total_height; batch_start += SCANLINE_BATCH) {
-        int batch_height = (batch_start + SCANLINE_BATCH <= total_height) 
+      for (WORD batch_start = 0; batch_start < total_height; batch_start += SCANLINE_BATCH) {
+        WORD batch_height = (batch_start + SCANLINE_BATCH <= total_height) 
                               ? SCANLINE_BATCH 
                               : (total_height - batch_start);
         
         /* Fill the batch buffer with multiple scanlines */
-        for (int row_in_batch = 0; row_in_batch < batch_height; ++row_in_batch) {
-          int row = batch_start + row_in_batch;
+        for (WORD row_in_batch = 0; row_in_batch < batch_height; ++row_in_batch) {
+          WORD row = batch_start + row_in_batch;
           WORD py = y + row;
           ULONG *row_buffer = batch_buffer + (row_in_batch * row_width);
-          int px = 0;
+          WORD px = 0;
 
           /* Process 4 pixels at a time using SIMD batch sampling */
           for (; px <= row_width - 4; px += 4) {
-            int px_coords[4];
-            for (int i = 0; i < 4; ++i) {
+            WORD px_coords[4];
+            for (WORD i = 0; i < 4; ++i) {
               px_coords[i] = x + px + i;
             }
 
@@ -111,7 +111,7 @@ void CybergfxDrawRectangleToRasterPort(struct RenderContext *renderport,
 
           /* Process remaining pixels one at a time */
           for (; px < row_width; ++px) {
-            int actual_x = x + px;
+            WORD actual_x = x + px;
             UBYTE fc_r, fc_g, fc_b, fc_a;
             SampleBrush(fill_brush, x, y, width, height, actual_x, py, &fc_r,
                         &fc_g, &fc_b, &fc_a);
@@ -136,7 +136,7 @@ void CybergfxDrawRectangleToRasterPort(struct RenderContext *renderport,
     D(bug("CybergfxDrawRectangleToRasterPort: Drawing rectangle outline with 4 "
           "edges\n"));
     /* Draw rectangle outline using FillPixelArray */
-    int line_width = (int)(border_width + 0.5f); /* Round to nearest int */
+    WORD line_width = (WORD)(border_width + 0.5f); /* Round to nearest int */
     if (line_width < 1)
       line_width = 1;
 

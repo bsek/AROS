@@ -11,7 +11,7 @@
 #include <proto/muimaster.h>
 #include <proto/utility.h>
 
-/*  #define MYDEBUG 1 */
+#define MYDEBUG 0
 #include "debug.h"
 #include "locale.h"
 #include "mui.h"
@@ -159,19 +159,25 @@ IPTR Popframe__MUIM_Popframe_CloseWindow(
     struct Popframe_DATA *data = INST_DATA(cl, obj);
     int ok = msg->ok;
 
+    D(bug("Popframe_CloseWindow(%p): ok=%d wnd=%p\n", obj, ok, data->wnd));
+
     set(data->wnd, MUIA_Window_Open, FALSE);
 
     if (ok) {
         STRPTR spec = NULL;
         get(data->frameadjust, MUIA_Frameadjust_Spec, &spec);
-        /*          D(bug("popframe: got %s\n", spec)); */
+        D(bug("Popframe_CloseWindow(%p): spec='%s'\n", obj, spec ? spec : (STRPTR)"(null)"));
         set(obj, MUIA_Framedisplay_Spec, (IPTR)spec);
+        D(bug("Popframe_CloseWindow(%p): set spec done\n", obj));
     }
 
+    D(bug("Popframe_CloseWindow(%p): OM_REMMEMBER wnd=%p\n", obj, data->wnd));
     DoMethod(_app(obj), OM_REMMEMBER, (IPTR)data->wnd);
+    D(bug("Popframe_CloseWindow(%p): MUI_DisposeObject wnd=%p\n", obj, data->wnd));
     MUI_DisposeObject(data->wnd);
     data->wnd = NULL;
     data->frameadjust = NULL;
+    D(bug("Popframe_CloseWindow(%p): done\n", obj));
     return 1;
 }
 

@@ -45,7 +45,7 @@
 
 /* SIMD capability detection */
 cybergfx_simd_level cybergfx_get_simd_level(void) {
-  static int initialized = 0;
+  static BOOL initialized = FALSE;
   static cybergfx_simd_level cached = CYBERGFX_SIMD_NONE;
 
   if (initialized) {
@@ -76,7 +76,7 @@ cybergfx_simd_level cybergfx_get_simd_level(void) {
   cached = CYBERGFX_SIMD_NONE;
 #endif
 
-  initialized = 1;
+  initialized = TRUE;
   D(bug("Using SIMD level: %d\n", cached));
   return cached;
 }
@@ -96,8 +96,8 @@ static inline float sdf_roundrect_scalar(float x, float y, float half_w,
   float outside;
   if (dx > 0.0f && dy > 0.0f) {
     /* In corner region - use cached distance lookup if possible */
-    int idx = (int)dx;
-    int idy = (int)dy;
+    WORD idx = (WORD)dx;
+    WORD idy = (WORD)dy;
     if (idx < CYBERGFX_CORNER_CACHE_SIZE && idy < CYBERGFX_CORNER_CACHE_SIZE && cybergfx_corner_cache.valid) {
       outside = cybergfx_corner_cache.dist[idy][idx];
     } else {
@@ -118,7 +118,7 @@ static void cybergfx_sdf_roundrect_batch4_scalar(const float rel_x[4],
                                                  float rel_y, float half_w,
                                                  float half_h, float radius,
                                                  float dist_out[4]) {
-  for (int i = 0; i < 4; i++) {
+  for (WORD i = 0; i < 4; i++) {
     dist_out[i] = sdf_roundrect_scalar(rel_x[i], rel_y, half_w, half_h, radius);
   }
 }
@@ -156,7 +156,7 @@ static inline float sdf_circle_scalar(float px, float py, float cx, float cy,
 
 static void cybergfx_sdf_circle_batch4_scalar(const float rel_x[4], float rel_y,
                                               float radius, float dist_out[4]) {
-  for (int i = 0; i < 4; i++) {
+  for (WORD i = 0; i < 4; i++) {
     float dx = rel_x[i];
     float dy = rel_y;
     dist_out[i] = fast_sqrtf(dx * dx + dy * dy) - radius;
@@ -165,7 +165,7 @@ static void cybergfx_sdf_circle_batch4_scalar(const float rel_x[4], float rel_y,
 
 static void cybergfx_sdf_circle_batch8_scalar(const float rel_x[8], float rel_y,
                                               float radius, float dist_out[8]) {
-  for (int i = 0; i < 8; i++) {
+  for (WORD i = 0; i < 8; i++) {
     float dx = rel_x[i];
     float dy = rel_y;
     dist_out[i] = fast_sqrtf(dx * dx + dy * dy) - radius;
@@ -174,10 +174,10 @@ static void cybergfx_sdf_circle_batch8_scalar(const float rel_x[8], float rel_y,
 
 static void cybergfx_circle_alphas_batch4_scalar(const float dist[4],
                                                  float border_width,
-                                                 int hasFill, int hasBorder,
+                                                 BOOL hasFill, BOOL hasBorder,
                                                  float fill_a[4],
                                                  float border_a[4]) {
-  for (int i = 0; i < 4; i++) {
+  for (WORD i = 0; i < 4; i++) {
     float d = dist[i];
     float outer_alpha = 1.0f - smoothstep_half_scalar(d);
     float fa = 0.0f;
@@ -198,10 +198,10 @@ static void cybergfx_circle_alphas_batch4_scalar(const float dist[4],
 
 static void cybergfx_circle_alphas_batch8_scalar(const float dist[8],
                                                  float border_width,
-                                                 int hasFill, int hasBorder,
+                                                 BOOL hasFill, BOOL hasBorder,
                                                  float fill_a[8],
                                                  float border_a[8]) {
-  for (int i = 0; i < 8; i++) {
+  for (WORD i = 0; i < 8; i++) {
     float d = dist[i];
     float outer_alpha = 1.0f - smoothstep_half_scalar(d);
     float fa = 0.0f;
@@ -253,9 +253,9 @@ static inline __m128i cybergfx_tint_argb32_sse2(__m128i pixels,
 
 static void cybergfx_compute_alphas_batch4_scalar(
     const float dist_inner[4], const float dist_outer[4], float aa_edge_neg,
-    float aa_edge_pos, int hasFill, int hasBorder, float alphaFill_out[4],
+    float aa_edge_pos, BOOL hasFill, BOOL hasBorder, float alphaFill_out[4],
     float alphaLine_out[4]) {
-  for (int i = 0; i < 4; i++) {
+  for (WORD i = 0; i < 4; i++) {
     float alphaOuter = 0.0f;
     float alphaInner = 0.0f;
 
@@ -286,7 +286,7 @@ static void cybergfx_compute_alphas_batch4_scalar(
 
 static void cybergfx_compute_alphas_batch8_fallback(
     const float dist_inner[8], const float dist_outer[8], float aa_edge_neg,
-    float aa_edge_pos, int hasFill, int hasBorder, float alphaFill_out[8],
+    float aa_edge_pos, BOOL hasFill, BOOL hasBorder, float alphaFill_out[8],
     float alphaLine_out[8]) {
   cybergfx_compute_alphas_batch4(&dist_inner[0], &dist_outer[0], aa_edge_neg,
                                  aa_edge_pos, hasFill, hasBorder,
@@ -383,8 +383,8 @@ static void cybergfx_sdf_circle_batch4_sse2(const float rel_x[4], float rel_y,
 }
 
 static void cybergfx_circle_alphas_batch4_sse2(const float dist[4],
-                                               float border_width, int hasFill,
-                                               int hasBorder, float fill_a[4],
+                                               float border_width, BOOL hasFill,
+                                               BOOL hasBorder, float fill_a[4],
                                                float border_a[4]) {
   __m128 d_vec = _mm_loadu_ps(dist);
   __m128 outer_alpha =
@@ -413,7 +413,7 @@ static void cybergfx_circle_alphas_batch4_sse2(const float dist[4],
 
 static void cybergfx_compute_alphas_batch4_sse2(
     const float dist_inner[4], const float dist_outer[4], float aa_edge_neg,
-    float aa_edge_pos, int hasFill, int hasBorder, float alphaFill_out[4],
+    float aa_edge_pos, BOOL hasFill, BOOL hasBorder, float alphaFill_out[4],
     float alphaLine_out[4]) {
   __m128 d_inner = _mm_loadu_ps(dist_inner);
   __m128 d_outer = _mm_loadu_ps(dist_outer);
@@ -530,7 +530,7 @@ cybergfx_smoothstep_ps256(__m256 edge0, __m256 edge1, __m256 x) {
 
 static void CYBERGFX_TARGET_AVX2 cybergfx_compute_alphas_batch8_avx2(
     const float dist_inner[8], const float dist_outer[8], float aa_edge_neg,
-    float aa_edge_pos, int hasFill, int hasBorder, float alphaFill_out[8],
+    float aa_edge_pos, BOOL hasFill, BOOL hasBorder, float alphaFill_out[8],
     float alphaLine_out[8]) {
   __m256 d_inner = _mm256_loadu_ps(dist_inner);
   __m256 d_outer = _mm256_loadu_ps(dist_outer);
@@ -631,7 +631,7 @@ cybergfx_smoothstep_f32(float32x4_t edge0, float32x4_t edge1, float32x4_t x) {
 
 static void cybergfx_compute_alphas_batch4_neon(
     const float dist_inner[4], const float dist_outer[4], float aa_edge_neg,
-    float aa_edge_pos, int hasFill, int hasBorder, float alphaFill_out[4],
+    float aa_edge_pos, BOOL hasFill, BOOL hasBorder, float alphaFill_out[4],
     float alphaLine_out[4]) {
   float32x4_t d_inner = vld1q_f32(dist_inner);
   float32x4_t d_outer = vld1q_f32(dist_outer);
@@ -676,12 +676,12 @@ static void cybergfx_blend_aa_pixels_batch4_neon(
     const ULONG bg_pixels[4], const float alphaFill[4],
     const float alphaLine[4], UBYTE fc_r, UBYTE fc_g, UBYTE fc_b,
     float fc_alpha_scale, UBYTE o_r, UBYTE o_g, UBYTE o_b, float o_alpha_scale,
-    int hasFill, int hasBorder, ULONG result_pixels[4],
-    unsigned int *changed_mask) {
+    BOOL hasFill, BOOL hasBorder, ULONG result_pixels[4],
+    ULONG *changed_mask) {
   *changed_mask = 0;
 
   /* Process each pixel (scalar for now) */
-  for (int i = 0; i < 4; i++) {
+  for (WORD i = 0; i < 4; i++) {
     UBYTE bg_a, bg_r, bg_g, bg_b;
     extract_pixel_value(bg_pixels[i], &bg_a, &bg_r, &bg_g, &bg_b);
 
@@ -689,7 +689,7 @@ static void cybergfx_blend_aa_pixels_batch4_neon(
     float g = (float)bg_g;
     float b = (float)bg_b;
 
-    int pixel_changed = 0;
+    BOOL pixel_changed = FALSE;
 
     if (hasFill && alphaFill[i] > CYBERGFX_AA_MIN_ALPHA_THRESHOLD) {
       float final_alpha = fc_alpha_scale * alphaFill[i];
@@ -698,7 +698,7 @@ static void cybergfx_blend_aa_pixels_batch4_neon(
         r = inv_alpha * r + final_alpha * fc_r;
         g = inv_alpha * g + final_alpha * fc_g;
         b = inv_alpha * b + final_alpha * fc_b;
-        pixel_changed = 1;
+        pixel_changed = TRUE;
       }
     }
 
@@ -709,7 +709,7 @@ static void cybergfx_blend_aa_pixels_batch4_neon(
         r = inv_alpha * r + final_alpha * o_r;
         g = inv_alpha * g + final_alpha * o_g;
         b = inv_alpha * b + final_alpha * o_b;
-        pixel_changed = 1;
+        pixel_changed = TRUE;
       }
     }
 
@@ -732,12 +732,12 @@ static void cybergfx_blend_aa_pixels_batch4_sse2(
     const ULONG bg_pixels[4], const float alphaFill[4],
     const float alphaLine[4], UBYTE fc_r, UBYTE fc_g, UBYTE fc_b,
     float fc_alpha_scale, UBYTE o_r, UBYTE o_g, UBYTE o_b, float o_alpha_scale,
-    int hasFill, int hasBorder, ULONG result_pixels[4],
-    unsigned int *changed_mask) {
+    BOOL hasFill, BOOL hasBorder, ULONG result_pixels[4],
+    ULONG *changed_mask) {
   *changed_mask = 0;
 
   /* Process each pixel (scalar for now - full SIMD unpack/pack is complex) */
-  for (int i = 0; i < 4; i++) {
+  for (WORD i = 0; i < 4; i++) {
     UBYTE bg_a, bg_r, bg_g, bg_b;
     extract_pixel_value(bg_pixels[i], &bg_a, &bg_r, &bg_g, &bg_b);
 
@@ -745,7 +745,7 @@ static void cybergfx_blend_aa_pixels_batch4_sse2(
     float g = (float)bg_g;
     float b = (float)bg_b;
 
-    int pixel_changed = 0;
+    BOOL pixel_changed = FALSE;
 
     if (hasFill && alphaFill[i] > CYBERGFX_AA_MIN_ALPHA_THRESHOLD) {
       float final_alpha = fc_alpha_scale * alphaFill[i];
@@ -754,7 +754,7 @@ static void cybergfx_blend_aa_pixels_batch4_sse2(
         r = inv_alpha * r + final_alpha * fc_r;
         g = inv_alpha * g + final_alpha * fc_g;
         b = inv_alpha * b + final_alpha * fc_b;
-        pixel_changed = 1;
+        pixel_changed = TRUE;
       }
     }
 
@@ -765,7 +765,7 @@ static void cybergfx_blend_aa_pixels_batch4_sse2(
         r = inv_alpha * r + final_alpha * o_r;
         g = inv_alpha * g + final_alpha * o_g;
         b = inv_alpha * b + final_alpha * o_b;
-        pixel_changed = 1;
+        pixel_changed = TRUE;
       }
     }
 
@@ -783,11 +783,11 @@ static void cybergfx_blend_aa_pixels_batch4_scalar(
     const ULONG bg_pixels[4], const float alphaFill[4],
     const float alphaLine[4], UBYTE fc_r, UBYTE fc_g, UBYTE fc_b,
     float fc_alpha_scale, UBYTE o_r, UBYTE o_g, UBYTE o_b, float o_alpha_scale,
-    int hasFill, int hasBorder, ULONG result_pixels[4],
-    unsigned int *changed_mask) {
+    BOOL hasFill, BOOL hasBorder, ULONG result_pixels[4],
+    ULONG *changed_mask) {
   *changed_mask = 0;
 
-  for (int i = 0; i < 4; i++) {
+  for (WORD i = 0; i < 4; i++) {
     UBYTE bg_a, bg_r, bg_g, bg_b;
     extract_pixel_value(bg_pixels[i], &bg_a, &bg_r, &bg_g, &bg_b);
 
@@ -795,7 +795,7 @@ static void cybergfx_blend_aa_pixels_batch4_scalar(
     float g = (float)bg_g;
     float b = (float)bg_b;
 
-    int pixel_changed = 0;
+    BOOL pixel_changed = FALSE;
 
     if (hasFill && alphaFill[i] > CYBERGFX_AA_MIN_ALPHA_THRESHOLD) {
       float final_alpha = fc_alpha_scale * alphaFill[i];
@@ -804,7 +804,7 @@ static void cybergfx_blend_aa_pixels_batch4_scalar(
         r = inv_alpha * r + final_alpha * fc_r;
         g = inv_alpha * g + final_alpha * fc_g;
         b = inv_alpha * b + final_alpha * fc_b;
-        pixel_changed = 1;
+        pixel_changed = TRUE;
       }
     }
 
@@ -815,7 +815,7 @@ static void cybergfx_blend_aa_pixels_batch4_scalar(
         r = inv_alpha * r + final_alpha * o_r;
         g = inv_alpha * g + final_alpha * o_g;
         b = inv_alpha * b + final_alpha * o_b;
-        pixel_changed = 1;
+        pixel_changed = TRUE;
       }
     }
 
@@ -832,9 +832,9 @@ static void cybergfx_blend_aa_pixels_batch8_fallback(
     const ULONG bg_pixels[8], const float alphaFill[8],
     const float alphaLine[8], UBYTE fc_r, UBYTE fc_g, UBYTE fc_b,
     float fc_alpha_scale, UBYTE o_r, UBYTE o_g, UBYTE o_b, float o_alpha_scale,
-    int hasFill, int hasBorder, ULONG result_pixels[8],
-    unsigned int *changed_mask) {
-  unsigned int mask1 = 0, mask2 = 0;
+    BOOL hasFill, BOOL hasBorder, ULONG result_pixels[8],
+    ULONG *changed_mask) {
+  ULONG mask1 = 0, mask2 = 0;
 
   cybergfx_blend_aa_pixels_batch4(&bg_pixels[0], &alphaFill[0], &alphaLine[0],
                                   fc_r, fc_g, fc_b, fc_alpha_scale, o_r, o_g,
@@ -905,10 +905,10 @@ void cybergfx_sdf_roundrect_batch8(const float rel_x[8], float rel_y,
 void cybergfx_compute_alphas_batch4(const float dist_inner[4],
                                     const float dist_outer[4],
                                     float aa_edge_neg, float aa_edge_pos,
-                                    int hasFill, int hasBorder,
+                                    BOOL hasFill, BOOL hasBorder,
                                     float alphaFill_out[4],
                                     float alphaLine_out[4]) {
-  static void (*impl)(const float *, const float *, float, float, int, int,
+  static void (*impl)(const float *, const float *, float, float, BOOL, BOOL,
                       float *, float *) = NULL;
 
   if (!impl) {
@@ -936,10 +936,10 @@ void cybergfx_compute_alphas_batch4(const float dist_inner[4],
 void cybergfx_compute_alphas_batch8(const float dist_inner[8],
                                     const float dist_outer[8],
                                     float aa_edge_neg, float aa_edge_pos,
-                                    int hasFill, int hasBorder,
+                                    BOOL hasFill, BOOL hasBorder,
                                     float alphaFill_out[8],
                                     float alphaLine_out[8]) {
-  static void (*impl)(const float *, const float *, float, float, int, int,
+  static void (*impl)(const float *, const float *, float, float, BOOL, BOOL,
                       float *, float *) = NULL;
 
   if (!impl) {
@@ -963,11 +963,11 @@ void cybergfx_blend_aa_pixels_batch4(
     const ULONG bg_pixels[4], const float alphaFill[4],
     const float alphaLine[4], UBYTE fc_r, UBYTE fc_g, UBYTE fc_b,
     float fc_alpha_scale, UBYTE o_r, UBYTE o_g, UBYTE o_b, float o_alpha_scale,
-    int hasFill, int hasBorder, ULONG result_pixels[4],
-    unsigned int *changed_mask) {
+    BOOL hasFill, BOOL hasBorder, ULONG result_pixels[4],
+    ULONG *changed_mask) {
   static void (*impl)(const ULONG *, const float *, const float *, UBYTE, UBYTE,
-                      UBYTE, float, UBYTE, UBYTE, UBYTE, float, int, int,
-                      ULONG *, unsigned int *) = NULL;
+                      UBYTE, float, UBYTE, UBYTE, UBYTE, float, BOOL, BOOL,
+                      ULONG *, ULONG *) = NULL;
 
   if (!impl) {
     cybergfx_simd_level level = cybergfx_get_simd_level();
@@ -996,11 +996,11 @@ void cybergfx_blend_aa_pixels_batch8(
     const ULONG bg_pixels[8], const float alphaFill[8],
     const float alphaLine[8], UBYTE fc_r, UBYTE fc_g, UBYTE fc_b,
     float fc_alpha_scale, UBYTE o_r, UBYTE o_g, UBYTE o_b, float o_alpha_scale,
-    int hasFill, int hasBorder, ULONG result_pixels[8],
-    unsigned int *changed_mask) {
+    BOOL hasFill, BOOL hasBorder, ULONG result_pixels[8],
+    ULONG *changed_mask) {
   static void (*impl)(const ULONG *, const float *, const float *, UBYTE, UBYTE,
-                      UBYTE, float, UBYTE, UBYTE, UBYTE, float, int, int,
-                      ULONG *, unsigned int *) = NULL;
+                      UBYTE, float, UBYTE, UBYTE, UBYTE, float, BOOL, BOOL,
+                      ULONG *, ULONG *) = NULL;
 
   if (!impl) {
     cybergfx_simd_level level = cybergfx_get_simd_level();
@@ -1067,9 +1067,9 @@ void cybergfx_sdf_circle_batch8(const float rel_x[8], float rel_y, float radius,
 }
 
 void cybergfx_circle_alphas_batch4(const float dist[4], float border_width,
-                                   int hasFill, int hasBorder, float fill_a[4],
+                                   BOOL hasFill, BOOL hasBorder, float fill_a[4],
                                    float border_a[4]) {
-  static void (*impl)(const float *, float, int, int, float *, float *) = NULL;
+  static void (*impl)(const float *, float, BOOL, BOOL, float *, float *) = NULL;
 
   if (!impl) {
     cybergfx_simd_level level = cybergfx_get_simd_level();
@@ -1087,9 +1087,9 @@ void cybergfx_circle_alphas_batch4(const float dist[4], float border_width,
 }
 
 void cybergfx_circle_alphas_batch8(const float dist[8], float border_width,
-                                   int hasFill, int hasBorder, float fill_a[8],
+                                   BOOL hasFill, BOOL hasBorder, float fill_a[8],
                                    float border_a[8]) {
-  static void (*impl)(const float *, float, int, int, float *, float *) = NULL;
+  static void (*impl)(const float *, float, BOOL, BOOL, float *, float *) = NULL;
 
   if (!impl) {
     cybergfx_simd_level level = cybergfx_get_simd_level();
@@ -1118,20 +1118,20 @@ void cybergfx_circle_alphas_batch8(const float dist[8], float border_width,
 /*****************************************************************************/
 
 static void
-cybergfx_blit_argb32_unity_scalar(const UBYTE *src, ULONG *dst, int width,
+cybergfx_blit_argb32_unity_scalar(const UBYTE *src, ULONG *dst, LONG width,
                                   const struct InternalColor *tint) {
   if (width <= 0) {
     return;
   }
 
   if (!tint) {
-    memcpy(dst, src, (size_t)width * sizeof(ULONG));
+    memcpy(dst, src, (ULONG)width * sizeof(ULONG));
     return;
   }
 
   UBYTE tr = tint->r, tg = tint->g, tb = tint->b, ta = tint->a;
 
-  for (int i = 0; i < width; i++) {
+  for (LONG i = 0; i < width; i++) {
     ULONG pixel = *(const ULONG *)(src + i * 4);
     UBYTE a = (pixel >> 24) & 0xFF;
     UBYTE r = (pixel >> 16) & 0xFF;
@@ -1153,21 +1153,21 @@ cybergfx_blit_argb32_unity_scalar(const UBYTE *src, ULONG *dst, int width,
 
 #if defined(__SSE2__)
 static void cybergfx_blit_argb32_unity_sse2(const UBYTE *src, ULONG *dst,
-                                            int width,
+                                            LONG width,
                                             const struct InternalColor *tint) {
   if (width <= 0) {
     return;
   }
 
   if (!tint) {
-    memcpy(dst, src, (size_t)width * sizeof(ULONG));
+    memcpy(dst, src, (ULONG)width * sizeof(ULONG));
     return;
   }
 
   __m128i tint16_sse = _mm_setr_epi16(tint->a, tint->r, tint->g, tint->b,
                                       tint->a, tint->r, tint->g, tint->b);
 
-  int i = 0;
+  LONG i = 0;
   for (; i + 3 < width; i += 4) {
     __m128i pixels = _mm_loadu_si128((const __m128i *)(src + i * 4));
     __m128i out = cybergfx_tint_argb32_sse2(pixels, tint16_sse);
@@ -1182,13 +1182,13 @@ static void cybergfx_blit_argb32_unity_sse2(const UBYTE *src, ULONG *dst,
 
 #if CYBERGFX_CAN_BUILD_AVX2
 static void CYBERGFX_TARGET_AVX2 cybergfx_blit_argb32_unity_avx2(
-    const UBYTE *src, ULONG *dst, int width, const struct InternalColor *tint) {
+    const UBYTE *src, ULONG *dst, LONG width, const struct InternalColor *tint) {
   if (width <= 0) {
     return;
   }
 
   if (!tint) {
-    memcpy(dst, src, (size_t)width * sizeof(ULONG));
+    memcpy(dst, src, (ULONG)width * sizeof(ULONG));
     return;
   }
 
@@ -1196,7 +1196,7 @@ static void CYBERGFX_TARGET_AVX2 cybergfx_blit_argb32_unity_avx2(
       tint->a, tint->r, tint->g, tint->b, tint->a, tint->r, tint->g, tint->b,
       tint->a, tint->r, tint->g, tint->b, tint->a, tint->r, tint->g, tint->b);
 
-  int i = 0;
+  LONG i = 0;
   for (; i + 7 < width; i += 8) {
     __m256i pixels = _mm256_loadu_si256((const __m256i *)(src + i * 4));
     __m256i out = cybergfx_tint_argb32_avx2(pixels, tint16_avx);
@@ -1209,9 +1209,9 @@ static void CYBERGFX_TARGET_AVX2 cybergfx_blit_argb32_unity_avx2(
 }
 #endif
 
-void cybergfx_blit_argb32_unity(const UBYTE *src, ULONG *dst, int width,
+void cybergfx_blit_argb32_unity(const UBYTE *src, ULONG *dst, LONG width,
                                 const struct InternalColor *tint) {
-  static void (*impl)(const UBYTE *, ULONG *, int,
+  static void (*impl)(const UBYTE *, ULONG *, LONG,
                       const struct InternalColor *) = NULL;
 
   if (!impl) {
@@ -1244,7 +1244,7 @@ static void cybergfx_make_argb32_batch4_scalar(const UBYTE a[4],
                                                const UBYTE g[4],
                                                const UBYTE b[4],
                                                ULONG pixels_out[4]) {
-  for (int i = 0; i < 4; i++) {
+  for (WORD i = 0; i < 4; i++) {
     pixels_out[i] = (((ULONG)a[i]) << 24) | (((ULONG)r[i]) << 16) |
                     (((ULONG)g[i]) << 8) | ((ULONG)b[i]);
   }
@@ -1364,7 +1364,7 @@ void cybergfx_make_argb32_batch4(const UBYTE a[4], const UBYTE r[4],
 
 /* Scalar implementation of Porter-Duff "source over" blending */
 static void cybergfx_blend_argb32_batch4_scalar(ULONG dst[4], const ULONG src[4]) {
-  for (int i = 0; i < 4; i++) {
+  for (WORD i = 0; i < 4; i++) {
     ULONG s = src[i];
     UBYTE sa = (s >> 24) & 0xFF;
     
@@ -1390,8 +1390,8 @@ static void cybergfx_blend_argb32_batch4_scalar(ULONG dst[4], const ULONG src[4]
     UBYTE db = d & 0xFF;
     
     /* Fixed-point blending: alpha in 1-256 range */
-    unsigned int alpha = sa + 1;
-    unsigned int inv_alpha = 257 - alpha;
+    ULONG alpha = sa + 1;
+    ULONG inv_alpha = 257 - alpha;
     
     UBYTE or = (UBYTE)((alpha * sr + inv_alpha * dr) >> 8);
     UBYTE og = (UBYTE)((alpha * sg + inv_alpha * dg) >> 8);
@@ -1655,11 +1655,11 @@ void cybergfx_blend_argb32_batch8(ULONG dst[8], const ULONG src[8]) {
 }
 
 /* Row blending - process entire scanlines efficiently */
-void cybergfx_blend_argb32_row(ULONG *dst, const ULONG *src, int count) {
+void cybergfx_blend_argb32_row(ULONG *dst, const ULONG *src, LONG count) {
   if (count <= 0)
     return;
   
-  int i = 0;
+  LONG i = 0;
   
   /* Process 8 pixels at a time when possible */
 #if CYBERGFX_CAN_BUILD_AVX2
@@ -1698,8 +1698,8 @@ void cybergfx_blend_argb32_row(ULONG *dst, const ULONG *src, int count) {
     UBYTE dg = (d >> 8) & 0xFF;
     UBYTE db = d & 0xFF;
     
-    unsigned int alpha = sa + 1;
-    unsigned int inv_alpha = 257 - alpha;
+    ULONG alpha = sa + 1;
+    ULONG inv_alpha = 257 - alpha;
     
     UBYTE or = (UBYTE)((alpha * sr + inv_alpha * dr) >> 8);
     UBYTE og = (UBYTE)((alpha * sg + inv_alpha * dg) >> 8);
