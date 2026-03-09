@@ -129,8 +129,8 @@ static inline ULONG blend_argb32(ULONG dst_pixel, ULONG src_pixel) {
     unpack_argb32(dst_pixel, &dst_a, &dst_r, &dst_g, &dst_b);
     
     /* Fixed-point blending: scale alpha to 0-256 for efficient integer math */
-    unsigned int alpha = src_a + 1;  /* 1-256 range avoids divide by 255 */
-    unsigned int inv_alpha = 257 - alpha;  /* Complementary for 256 total */
+    UWORD alpha = src_a + 1;  /* 1-256 range avoids divide by 255 */
+    UWORD inv_alpha = 257 - alpha;  /* Complementary for 256 total */
     
     UBYTE out_r = (UBYTE)((alpha * src_r + inv_alpha * dst_r) >> 8);
     UBYTE out_g = (UBYTE)((alpha * src_g + inv_alpha * dst_g) >> 8);
@@ -166,8 +166,8 @@ static inline ULONG blend_argb32_alpha(ULONG dst_pixel, UBYTE src_a, UBYTE src_r
     unpack_argb32(dst_pixel, &dst_a, &dst_r, &dst_g, &dst_b);
     
     /* Fixed-point blending: scale alpha to 0-256 for efficient integer math */
-    unsigned int alpha = src_a + 1;
-    unsigned int inv_alpha = 257 - alpha;
+    UWORD alpha = src_a + 1;
+    UWORD inv_alpha = 257 - alpha;
     
     UBYTE out_r = (UBYTE)((alpha * src_r + inv_alpha * dst_r) >> 8);
     UBYTE out_g = (UBYTE)((alpha * src_g + inv_alpha * dst_g) >> 8);

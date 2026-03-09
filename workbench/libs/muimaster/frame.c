@@ -34,7 +34,7 @@
 #include <libraries/zunegfx.h>
 #include <datatypes/pictureclass.h>
 
-#define DEBUG 1
+#define DEBUG 0
 #include <aros/debug.h>
 
 extern struct Library *MUIMasterBase;
@@ -1712,6 +1712,8 @@ static void frame_rounded_draw(struct dt_frame_image *fi,
                                int height, MPen light_pen, MPen dark_pen)
 {
     struct RastPort *rp = mri->mri_RastPort;
+    if (!rp)
+        return;
 
     /* Use the radius from the frame image struct */
     int radius = fi ? fi->border_radius : 8;

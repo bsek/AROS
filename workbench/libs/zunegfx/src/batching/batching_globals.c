@@ -125,7 +125,7 @@ BOOL AddCommandToBatch(struct BatchState *batch, BatchCommandType type, WORD x,
   batch->deferred.needsSort = TRUE;
 
   D(bug("ZuneRenderer: Batched command type %d (%d/%d)\n",
-        (int)type, (int)batch->deferred.count, DEFERRED_BATCH_SIZE));
+        (LONG)type, (LONG)batch->deferred.count, DEFERRED_BATCH_SIZE));
 
   return TRUE;
 }
@@ -156,8 +156,8 @@ BOOL AddStyledCommandToBatch(struct BatchState *batch, BatchCommandType type,
   batch->deferred.needsSort = TRUE;
 
   D(bug("ZuneRenderer: Batched styled command type %d bw=%d (%d/%d)\n",
-        (int)type, (int)border_width,
-        (int)batch->deferred.count, DEFERRED_BATCH_SIZE));
+        (LONG)type, (LONG)border_width,
+        (LONG)batch->deferred.count, DEFERRED_BATCH_SIZE));
 
   return TRUE;
 }
@@ -178,7 +178,7 @@ void ExecuteBatchCommands(struct BatchState *batch) {
   struct RenderContext *rctx = batch->render_port;
 
   D(bug("ZuneRenderer: Executing %d batched commands\n",
-        (int)batch->deferred.count));
+        (LONG)batch->deferred.count));
 
   /* Optimize: merge adjacent same-color fill rects */
   OptimizeBatchCommands(batch);
@@ -198,9 +198,11 @@ void ExecuteBatchCommands(struct BatchState *batch) {
 
     switch (cmd->type) {
     case BATCH_CMD_FILL_RECT:
-      if (backend->ops->DrawRectangle)
+      if (backend->ops->DrawRectangle) {
+        struct ZuneBrush fill_brush = ZUNE_BRUSH_LITERAL_SOLID(cmd->color);
         backend->ops->DrawRectangle(rctx, cmd->x, cmd->y, cmd->width,
-                                    cmd->height, 0, 0, NULL, &ic, TRUE, FALSE);
+                                    cmd->height, 0, 0, &fill_brush, &ic, TRUE, FALSE);
+      }
       break;
     case BATCH_CMD_DRAW_RECT:
       if (backend->ops->DrawRectangle)

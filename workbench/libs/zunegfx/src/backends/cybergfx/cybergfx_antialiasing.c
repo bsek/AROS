@@ -10,7 +10,7 @@
 #include "cybergfx_antialiasing.h"
 #include "cybergfx_backend.h"
 
-int cybergfx_aa_quality = 2;
+WORD cybergfx_aa_quality = 2;
 float cybergfx_aa_smoothness = CYBERGFX_AA_SMOOTHNESS;
 
 /* Corner distance cache - pre-computed sqrt values for corner pixels */

@@ -352,5 +352,5 @@ void CybergfxWritePixelClamped(ULONG *pixels, UWORD pitch_pixels,
         return;
     }
 
-    pixels[(size_t)y * pitch_pixels + (size_t)x] = pixel;
+    pixels[(ULONG)y * pitch_pixels + (ULONG)x] = pixel;
 }

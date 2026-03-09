@@ -127,12 +127,16 @@ IPTR Framedisplay__MUIM_Draw(struct IClass *cl, Object *obj,
     WORD startX, startY, endX, endY, delta;
     int i;
 
+    D(bug("Framedisplay__MUIM_Draw(%p): type=%d state=%d flags=0x%lx\n",
+          obj, data->fs_intern.type, data->fs_intern.state, msg->flags));
+
     DoSuperMethodA(cl, obj, (Msg)msg);
 
     if (!(msg->flags & MADF_DRAWOBJECT))
         return 0;
 
     zframe = zune_zframe_get(obj, &data->fs_intern);
+    D(bug("Framedisplay__MUIM_Draw(%p): zframe=%p draw=%p\n", obj, zframe, zframe ? zframe->draw : NULL));
     if (!zframe)
         return 0;
 

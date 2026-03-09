@@ -67,7 +67,7 @@ AROS_LH4(VOID, ZuneFillRectangleRoundedAA,
 
   D(bug(
       "ZuneFillRectangleRoundedAA: CALLING backend with cornerRadius=%d\n",
-      (int)cornerRadius));
+      (WORD)cornerRadius));
   ZUNE_BACKEND_CALL(rctx, DrawRectangle, x, y, width, height, (UBYTE)0, cornerRadius,
                     brush, NULL, TRUE, TRUE);
 

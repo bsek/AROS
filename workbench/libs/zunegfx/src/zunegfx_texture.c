@@ -262,7 +262,7 @@ static struct ZuneTexture *CreateTextureFromDatatypeInternal(APTR dt_handle, ULO
     Object *dt_obj = (Object *)dt_handle;
     struct BitMapHeader *bmhd = NULL;
     struct BitMap *bm = NULL;
-    int tex_w = 0, tex_h = 0;
+    WORD tex_w = 0, tex_h = 0;
     UBYTE mask = 0;
 
     if (!dt_obj) {
@@ -287,7 +287,7 @@ static struct ZuneTexture *CreateTextureFromDatatypeInternal(APTR dt_handle, ULO
         return NULL;
     }
 
-    size_t buf_size = (size_t)tex_w * (size_t)tex_h * 4;
+    ULONG buf_size = (ULONG)tex_w * (ULONG)tex_h * 4;
     ULONG *pixels = AllocVec(buf_size, MEMF_ANY);
     if (!pixels) {
         D(bug("ZuneRenderer: ZuneCreateTextureFromDatatype - failed to alloc %lu bytes\n", (ULONG)buf_size));
@@ -309,8 +309,8 @@ static struct ZuneTexture *CreateTextureFromDatatypeInternal(APTR dt_handle, ULO
 
     D(bug("ZuneRenderer: ZuneCreateTextureFromDatatype - after PDTM_READPIXELARRAY:\n"));
     D(bug("  First 4 pixels: %08lx %08lx %08lx %08lx\n",
-          (unsigned long)pixels[0], (unsigned long)pixels[1],
-          (unsigned long)pixels[2], (unsigned long)pixels[3]));
+          (ULONG)pixels[0], (ULONG)pixels[1],
+          (ULONG)pixels[2], (ULONG)pixels[3]));
 
     /*
      * Fix alpha channel for images without alpha.

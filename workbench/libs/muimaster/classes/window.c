@@ -305,7 +305,7 @@ BOOL WindowObtainObjectDrawBuffer(struct MUI_RenderInfo *mri, Object *obj, UWORD
          * New API: Create RenderContext first (bound to window), then DrawingBoard.
          * The RenderContext selects the best backend (OpenGL if available).
          */
-        entry->port = ZuneCreateRenderContextForWindow(mri->mri_Window, mri->mri_Colormap, BACKEND_OPENGL);
+        entry->port = ZuneCreateRenderContextForWindow(mri->mri_Window, mri->mri_Colormap, BACKEND_CYBERGFX);
         if (!entry->port) {
             RemoveDrawBufferEntry(data, entry);
             return FALSE;
@@ -1032,8 +1032,6 @@ static VOID RefreshWindow(Object *oWin, struct MUI_WindowData *data) {
     struct MUI_RenderInfo *mri = &data->wd_RenderInfo;
     BOOL using_double_buffer = (mri->mri_DrawingBoard != NULL);
 
-    D(bug("RefreshWindow: using_double_buffer=%s (DrawingBoard=%p)\n", using_double_buffer ? "YES" : "NO", mri->mri_DrawingBoard));
-
     if (data->wd_Flags & MUIWF_RESIZING) {
         // LONG left,top,right,bottom;
         if (MUI_BeginRefresh(&data->wd_RenderInfo, 0)) {
@@ -1104,7 +1102,6 @@ static VOID RefreshWindow(Object *oWin, struct MUI_WindowData *data) {
 
             if (using_double_buffer) {
                 WindowSyncBitmapToFbo(mri);
-                D(bug("RefreshWindow: Flushing double buffer (normal refresh)\n"));
                 WindowEndBufferedBatch(mri);
             }
 
@@ -1601,7 +1598,9 @@ BOOL HandleWindowEvent(Object *oWin, struct MUI_WindowData *data, struct IntuiMe
     case IDCMP_REFRESHWINDOW:
         ReplyMsg((struct Message *)imsg);
         replied = TRUE;
+        D(bug("HandleWindowEvent: IDCMP_REFRESHWINDOW - calling RefreshWindow\n"));
         RefreshWindow(oWin, data);
+        D(bug("HandleWindowEvent: IDCMP_REFRESHWINDOW - RefreshWindow done\n"));
         break;
 
     case IDCMP_CLOSEWINDOW:

@@ -194,9 +194,9 @@ struct ZuneBrush {
     /* Cached data for TEXTURE - fast pixel access */
     struct {
       ULONG *pixels;    /* Direct pointer to texture pixel data */
-      int pitch_pixels; /* Pitch in pixels (not bytes) */
-      int src_x, src_y; /* Source rectangle start coordinates */
-      int src_w, src_h; /* Source rectangle dimensions */
+      WORD pitch_pixels; /* Pitch in pixels (not bytes) */
+      WORD src_x, src_y; /* Source rectangle start coordinates */
+      UWORD src_w, src_h; /* Source rectangle dimensions */
     } texture_cache;
 
     /* Cached data for PATTERN - pre-computed colors */

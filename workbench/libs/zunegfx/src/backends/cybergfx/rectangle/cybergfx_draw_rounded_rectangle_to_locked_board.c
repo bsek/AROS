@@ -19,20 +19,20 @@ void CybergfxDrawRoundedRectangleToLockedDrawingBoard(struct RenderContext *rctx
         return;
     }
 
-    int r = (int)border_radius;
-    if (r > (int)width / 2)
-        r = (int)width / 2;
-    if (r > (int)height / 2)
-        r = (int)height / 2;
+    WORD r = (WORD)border_radius;
+    if (r > (WORD)width / 2)
+        r = (WORD)width / 2;
+    if (r > (WORD)height / 2)
+        r = (WORD)height / 2;
 
     ULONG *pixels = (ULONG *)board->pixels;
     ULONG pitch_pixels = board->pitch / 4;
 
     BOOL draw_border = (border_width > 0);
-    int bw = draw_border ? (int)border_width : 0;
+    WORD bw = draw_border ? (WORD)border_width : 0;
     if (bw < 1 && draw_border) bw = 1;
 
-    int inner_r = r - bw;
+    WORD inner_r = r - bw;
     if (inner_r < 0) inner_r = 0;
 
     /* Get fill color for solid brushes */
@@ -47,51 +47,51 @@ void CybergfxDrawRoundedRectangleToLockedDrawingBoard(struct RenderContext *rctx
     }
 
     /* Corner center positions */
-    int tl_cx = x + r;              /* Top-left */
-    int tl_cy = y + r;
-    int tr_cx = x + width - r - 1;  /* Top-right */
-    int tr_cy = y + r;
-    int bl_cx = x + r;              /* Bottom-left */
-    int bl_cy = y + height - r - 1;
-    int br_cx = x + width - r - 1;  /* Bottom-right */
-    int br_cy = y + height - r - 1;
+    WORD tl_cx = x + r;              /* Top-left */
+    WORD tl_cy = y + r;
+    WORD tr_cx = x + width - r - 1;  /* Top-right */
+    WORD tr_cy = y + r;
+    WORD bl_cx = x + r;              /* Bottom-left */
+    WORD bl_cy = y + height - r - 1;
+    WORD br_cx = x + width - r - 1;  /* Bottom-right */
+    WORD br_cy = y + height - r - 1;
 
-    int r_sq = r * r;
-    int inner_r_sq = inner_r * inner_r;
+    LONG r_sq = r * r;
+    LONG inner_r_sq = inner_r * inner_r;
 
     /* Process each pixel */
-    for (int py = y; py < (int)(y + height); py++) {
-        for (int px = x; px < (int)(x + width); px++) {
+    for (WORD py = y; py < (WORD)(y + height); py++) {
+        for (WORD px = x; px < (WORD)(x + width); px++) {
             BOOL is_border = FALSE;
             BOOL is_fill = FALSE;
 
             /* Determine which region this pixel is in */
             BOOL in_corner = FALSE;
-            int dist_sq = 0;
+            LONG dist_sq = 0;
 
             /* Check if we're in a corner region */
             if (px < tl_cx && py < tl_cy) {
                 /* Top-left corner */
-                int dx = px - tl_cx;
-                int dy = py - tl_cy;
+                WORD dx = px - tl_cx;
+                WORD dy = py - tl_cy;
                 dist_sq = dx * dx + dy * dy;
                 in_corner = TRUE;
             } else if (px > tr_cx && py < tr_cy) {
                 /* Top-right corner */
-                int dx = px - tr_cx;
-                int dy = py - tr_cy;
+                WORD dx = px - tr_cx;
+                WORD dy = py - tr_cy;
                 dist_sq = dx * dx + dy * dy;
                 in_corner = TRUE;
             } else if (px < bl_cx && py > bl_cy) {
                 /* Bottom-left corner */
-                int dx = px - bl_cx;
-                int dy = py - bl_cy;
+                WORD dx = px - bl_cx;
+                WORD dy = py - bl_cy;
                 dist_sq = dx * dx + dy * dy;
                 in_corner = TRUE;
             } else if (px > br_cx && py > br_cy) {
                 /* Bottom-right corner */
-                int dx = px - br_cx;
-                int dy = py - br_cy;
+                WORD dx = px - br_cx;
+                WORD dy = py - br_cy;
                 dist_sq = dx * dx + dy * dy;
                 in_corner = TRUE;
             }

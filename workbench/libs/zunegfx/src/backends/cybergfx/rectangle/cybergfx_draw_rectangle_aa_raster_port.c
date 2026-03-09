@@ -42,17 +42,17 @@ static void cybergfx_init_fill_state(struct ZuneBrush *brush, BOOL draw_fill, cy
     }
 }
 
-static void cybergfx_sample_fill_block(const cybergfx_fill_state *state, WORD rect_x, WORD rect_y, UWORD rect_w, UWORD rect_h, int px_start, int py,
+static void cybergfx_sample_fill_block(const cybergfx_fill_state *state, WORD rect_x, WORD rect_y, UWORD rect_w, UWORD rect_h, WORD px_start, WORD py,
                                        UBYTE out_r[4], UBYTE out_g[4], UBYTE out_b[4]) {
     if (!state->enabled) {
-        for (int i = 0; i < 4; ++i) {
+        for (WORD i = 0; i < 4; ++i) {
             out_r[i] = out_g[i] = out_b[i] = 0;
         }
         return;
     }
 
     if (state->solid) {
-        for (int i = 0; i < 4; ++i) {
+        for (WORD i = 0; i < 4; ++i) {
             out_r[i] = state->solid_r;
             out_g[i] = state->solid_g;
             out_b[i] = state->solid_b;
@@ -60,8 +60,8 @@ static void cybergfx_sample_fill_block(const cybergfx_fill_state *state, WORD re
         return;
     }
 
-    int px_coords[4];
-    for (int i = 0; i < 4; ++i) {
+    WORD px_coords[4];
+    for (WORD i = 0; i < 4; ++i) {
         px_coords[i] = px_start + i;
     }
 
@@ -100,13 +100,13 @@ void CybergfxAARectangleRasterPort(struct RastPort *rp, UWORD x, UWORD y, UWORD 
     }
 
     cybergfx_aa_rect_params params;
-    cybergfx_compute_aa_rect_params(x, y, width, height, radius, line_width, (int)bitmap_width, (int)bitmap_height, &params);
+    cybergfx_compute_aa_rect_params(x, y, width, height, radius, line_width, (UWORD)bitmap_width, (UWORD)bitmap_height, &params);
     if (params.max_x < params.min_x || params.max_y < params.min_y) {
         EXIT_FUNCTION("CybergfxAARectangleRasterPort");
         return;
     }
 
-    int core_min_x = 0, core_max_x = -1, core_min_y = 0, core_max_y = -1;
+    WORD core_min_x = 0, core_max_x = -1, core_min_y = 0, core_max_y = -1;
     BOOL core_prefilled = FALSE;
     if (fill_state.solid) {
         float rect_left = params.center_x - params.half_w;
@@ -120,14 +120,14 @@ void CybergfxAARectangleRasterPort(struct RastPort *rp, UWORD x, UWORD y, UWORD 
         }
         float inset = fmaxf(params.max_radius, margin);
 
-        core_min_x = (int)ceilf(rect_left + inset);
-        core_max_x = (int)floorf(rect_right - inset);
-        core_min_y = (int)ceilf(rect_top + inset);
-        core_max_y = (int)floorf(rect_bottom - inset);
+        core_min_x = (WORD)ceilf(rect_left + inset);
+        core_max_x = (WORD)floorf(rect_right - inset);
+        core_min_y = (WORD)ceilf(rect_top + inset);
+        core_max_y = (WORD)floorf(rect_bottom - inset);
 
         if (core_min_x <= core_max_x && core_min_y <= core_max_y) {
-            int core_width = core_max_x - core_min_x + 1;
-            int core_height = core_max_y - core_min_y + 1;
+            WORD core_width = core_max_x - core_min_x + 1;
+            WORD core_height = core_max_y - core_min_y + 1;
             if (core_width > 0 && core_height > 0 && fill_state.brush && fill_state.brush->internal.valid) {
                 ULONG solid_pixel = fill_state.brush->internal.color.original_pixel;
                 FillPixelArray(rp, (UWORD)core_min_x, (UWORD)core_min_y, (UWORD)core_width, (UWORD)core_height, solid_pixel);
@@ -136,7 +136,7 @@ void CybergfxAARectangleRasterPort(struct RastPort *rp, UWORD x, UWORD y, UWORD 
         }
     }
 
-    int row_width = params.max_x - params.min_x + 1;
+    WORD row_width = params.max_x - params.min_x + 1;
     if (row_width <= 0) {
         EXIT_FUNCTION("CybergfxAARectangleRasterPort");
         return;
@@ -144,9 +144,9 @@ void CybergfxAARectangleRasterPort(struct RastPort *rp, UWORD x, UWORD y, UWORD 
 
     /* Use multi-scanline batching to reduce ReadPixelArray/WritePixelArray syscall overhead */
     #define SCANLINE_BATCH 32
-    int total_height = params.max_y - params.min_y + 1;
+    WORD total_height = params.max_y - params.min_y + 1;
     
-    ULONG *batch_buffer = malloc((size_t)row_width * SCANLINE_BATCH * sizeof(ULONG));
+    ULONG *batch_buffer = malloc((ULONG)row_width * SCANLINE_BATCH * sizeof(ULONG));
     if (!batch_buffer) {
         D(bug("CybergfxAARectangleRasterPort: Failed to allocate batch buffer\n"));
         return;
@@ -158,7 +158,10 @@ void CybergfxAARectangleRasterPort(struct RastPort *rp, UWORD x, UWORD y, UWORD 
     UBYTE o_a = 0, o_r = 0, o_g = 0, o_b = 0;
     float o_alpha_scale = 0.0f;
     if (hasBorder) {
-        mul(*outline_color, *outline_tint, &o_r, &o_g, &o_b, &o_a);
+        o_r = outline_color->r;
+        o_g = outline_color->g;
+        o_b = outline_color->b;
+        o_a = outline_color->a;
         o_alpha_scale = o_a / 255.0f;
     }
 
@@ -170,8 +173,8 @@ void CybergfxAARectangleRasterPort(struct RastPort *rp, UWORD x, UWORD y, UWORD 
     float outer_radius = params.max_radius + params.halfLine;
 
     /* Process rows in batches */
-    for (int batch_start_y = params.min_y; batch_start_y <= params.max_y; batch_start_y += SCANLINE_BATCH) {
-        int batch_height = (batch_start_y + SCANLINE_BATCH <= params.max_y + 1) 
+    for (WORD batch_start_y = params.min_y; batch_start_y <= params.max_y; batch_start_y += SCANLINE_BATCH) {
+        WORD batch_height = (batch_start_y + SCANLINE_BATCH <= params.max_y + 1) 
                               ? SCANLINE_BATCH 
                               : (params.max_y - batch_start_y + 1);
         
@@ -180,14 +183,14 @@ void CybergfxAARectangleRasterPort(struct RastPort *rp, UWORD x, UWORD y, UWORD 
                        params.min_x, batch_start_y, row_width, batch_height, CYBERGFX_PIXELFORMAT_ARGB32);
         
         /* Reset dirty flags */
-        for (int i = 0; i < batch_height; ++i) {
+        for (WORD i = 0; i < batch_height; ++i) {
             batch_dirty[i] = FALSE;
         }
         
         BOOL any_dirty = FALSE;
 
-        for (int row_in_batch = 0; row_in_batch < batch_height; ++row_in_batch) {
-            int py = batch_start_y + row_in_batch;
+        for (WORD row_in_batch = 0; row_in_batch < batch_height; ++row_in_batch) {
+            WORD py = batch_start_y + row_in_batch;
             ULONG *row_buffer = batch_buffer + (row_in_batch * row_width);
             
             float rel_y = (py + 0.5f) - params.center_y;
@@ -198,13 +201,13 @@ void CybergfxAARectangleRasterPort(struct RastPort *rp, UWORD x, UWORD y, UWORD 
 
             BOOL row_in_core = core_prefilled && py >= core_min_y && py <= core_max_y;
 
-            for (int px = params.min_x; px <= params.max_x; px += 4) {
+            for (WORD px = params.min_x; px <= params.max_x; px += 4) {
                 if (row_in_core && px >= core_min_x && px + 3 <= core_max_x) {
                     continue;
                 }
 
                 float rel_x[4];
-                for (int i = 0; i < 4; ++i) {
+                for (WORD i = 0; i < 4; ++i) {
                     rel_x[i] = px + i + base_rel_x;
                 }
 
@@ -228,10 +231,10 @@ void CybergfxAARectangleRasterPort(struct RastPort *rp, UWORD x, UWORD y, UWORD 
                     cybergfx_sample_fill_block(&fill_state, x, y, width, height, px, py, fc_r, fc_g, fc_b);
                 }
 
-                int valid = (px + 3 <= params.max_x) ? 4 : (params.max_x - px + 1);
-                int buffer_index = px - params.min_x;
+                WORD valid = (px + 3 <= params.max_x) ? 4 : (params.max_x - px + 1);
+                WORD buffer_index = px - params.min_x;
 
-                for (int i = 0; i < valid; ++i) {
+                for (WORD i = 0; i < valid; ++i) {
                     float totalAlpha = alphaFill[i] + alphaLine[i];
                     if (totalAlpha < CYBERGFX_AA_MIN_ALPHA_THRESHOLD) {
                         continue; /* Skip fully transparent pixels */
@@ -283,14 +286,14 @@ void CybergfxAARectangleRasterPort(struct RastPort *rp, UWORD x, UWORD y, UWORD 
 
         /* Write back dirty rows - find contiguous dirty regions for optimal writes */
         if (any_dirty) {
-            int write_start = -1;
-            for (int i = 0; i <= batch_height; ++i) {
+            WORD write_start = -1;
+            for (WORD i = 0; i <= batch_height; ++i) {
                 BOOL is_dirty = (i < batch_height) && batch_dirty[i];
                 if (is_dirty && write_start < 0) {
                     write_start = i;
                 } else if (!is_dirty && write_start >= 0) {
                     /* Write contiguous dirty region */
-                    int write_height = i - write_start;
+                    WORD write_height = i - write_start;
                     WritePixelArray(batch_buffer + (write_start * row_width), 0, 0, (ULONG)row_width * 4, 
                                     rp, params.min_x, batch_start_y + write_start, row_width, write_height, 
                                     CYBERGFX_PIXELFORMAT_ARGB32);

@@ -999,8 +999,8 @@ static GLuint OpenGL_BrushToTexture(struct RenderContext *rctx, struct ZuneBrush
         UBYTE *dst = buffer;
         for (py = 0; py < height; py++) {
             for (px = 0; px < width; px++) {
-                int tex_x = px;
-                int tex_y = py;
+                WORD tex_x = px;
+                WORD tex_y = py;
 
                 /* Apply wrapping */
                 switch (wrap_u) {
@@ -1009,7 +1009,7 @@ static GLuint OpenGL_BrushToTexture(struct RenderContext *rctx, struct ZuneBrush
                     if (tex_x < 0) tex_x += src_w;
                     break;
                 case ZUNE_BRUSH_WRAP_MIRROR: {
-                    int doubled = src_w * 2;
+                    WORD doubled = src_w * 2;
                     tex_x = tex_x % doubled;
                     if (tex_x < 0) tex_x += doubled;
                     if (tex_x >= src_w) tex_x = (doubled - 1) - tex_x;
@@ -1027,7 +1027,7 @@ static GLuint OpenGL_BrushToTexture(struct RenderContext *rctx, struct ZuneBrush
                     if (tex_y < 0) tex_y += src_h;
                     break;
                 case ZUNE_BRUSH_WRAP_MIRROR: {
-                    int doubled = src_h * 2;
+                    WORD doubled = src_h * 2;
                     tex_y = tex_y % doubled;
                     if (tex_y < 0) tex_y += doubled;
                     if (tex_y >= src_h) tex_y = (doubled - 1) - tex_y;
@@ -1255,11 +1255,11 @@ static GLuint OpenGL_BrushToTexture(struct RenderContext *rctx, struct ZuneBrush
 
         UBYTE *dst = buffer;
         for (py = 0; py < height; py++) {
-            int pat_y = py % 2;
+            WORD pat_y = py % 2;
             UWORD pat_row = brush->data.pattern.pattern[pat_y];
 
             for (px = 0; px < width; px++) {
-                int pat_x = px % 16;
+                WORD pat_x = px % 16;
                 BOOL is_fg = (pat_row >> (15 - pat_x)) & 1;
 
                 if (is_fg) {
@@ -1515,7 +1515,7 @@ static GLuint OpenGL_CompileShader(GLenum type, const GLchar *source)
 {
     GLuint shader;
     GLint compiled;
-    char log[512];
+    TEXT log[512];
 
     D(bug("[ZuneGfx:OpenGL] CompileShader: type=%s\n", 
           type == GL_VERTEX_SHADER ? "VERTEX" : "FRAGMENT"));
@@ -1543,7 +1543,7 @@ static GLuint OpenGL_CompileShader(GLenum type, const GLchar *source)
         if (!compiled) {
             if (glGetShaderInfoLog_ptr) {
                 log[0] = 0;
-                glGetShaderInfoLog_ptr(shader, sizeof(log), NULL, log);
+                glGetShaderInfoLog_ptr(shader, sizeof(log), NULL, (char *)log);
                 D(bug("[ZuneGfx:OpenGL] CompileShader: compile error: %s\n", log));
             }
             if (glDeleteShader_ptr) {
@@ -1567,7 +1567,7 @@ static GLuint OpenGL_CompileShader(GLenum type, const GLchar *source)
 static BOOL OpenGL_CreateRoundedRectShader(void)
 {
     GLint linked;
-    char log[512];
+    TEXT log[512];
 
     D(bug("[ZuneGfx:OpenGL] CreateRoundedRectShader: starting\n"));
 
@@ -1623,7 +1623,7 @@ static BOOL OpenGL_CreateRoundedRectShader(void)
         if (!linked) {
             if (glGetProgramInfoLog_ptr) {
                 log[0] = 0;
-                glGetProgramInfoLog_ptr(g_rounded_rect_program, sizeof(log), NULL, log);
+                glGetProgramInfoLog_ptr(g_rounded_rect_program, sizeof(log), NULL, (char *)log);
                 D(bug("[ZuneGfx:OpenGL] CreateRoundedRectShader: link error: %s\n", log));
             }
             OpenGL_DestroyShaders();
@@ -1774,7 +1774,7 @@ static void OpenGL_DestroyShaders(void)
 static BOOL OpenGL_InitShadersInternal(void)
 {
     const GLubyte *version_str;
-    int major = 0, minor = 0;
+    LONG major = 0, minor = 0;
 
     if (g_shaders_available) {
         return TRUE;
@@ -2276,7 +2276,7 @@ static void OpenGL_BlitFBOToFBO(struct DrawingBoard *src, struct DrawingBoard *d
 static BOOL OpenGL_CreateMasterContext(struct Window *window)
 {
     struct TagItem tags[10];
-    int tag_idx = 0;
+    WORD tag_idx = 0;
     GLAContext master_ctx;
     APTR master_pipe_screen;
 
@@ -2691,7 +2691,7 @@ static OpenGLWindowContext *OpenGL_CreateWindowContext(struct Window *window)
 {
     OpenGLWindowContext *ctx;
     struct TagItem tags[12];  /* Extra space for GLA_ShareContext */
-    int tag_idx = 0;
+    WORD tag_idx = 0;
     BOOL use_shared_context = FALSE;
 
     if (!window || !GLBase) {
@@ -2990,7 +2990,7 @@ void OpenGL_BlitToRastPortDirect(struct RastPort *dst_rp, WORD dst_x, WORD dst_y
                                  UWORD width, UWORD height)
 {
     struct TagItem setrast_tags[8];
-    int tag_idx = 0;
+    WORD tag_idx = 0;
 
     if (!g_opengl_priv || !g_opengl_priv->gl_context || !dst_rp) {
         return;
@@ -3543,7 +3543,7 @@ static ULONG OpenGLGetPixelFormat(struct BitMap *bitmap)
 static BOOL OpenGL_EnsureGlobalContext(struct Window *window)
 {
     struct TagItem tags[12];  /* Extra space for GLA_ShareContext */
-    int tag_idx = 0;
+    WORD tag_idx = 0;
     GLAContext gl_ctx;
     BOOL use_shared_context = FALSE;
 
@@ -3894,7 +3894,7 @@ fallback_setrast:
         g_opengl_priv->current_height != height) {
 
         struct TagItem setrast_tags[6];
-        int tag_idx = 0;
+        WORD tag_idx = 0;
 
         /* Build tags for glASetRast */
         setrast_tags[tag_idx].ti_Tag = GLA_Window;
@@ -4687,7 +4687,7 @@ static void OpenGLDrawRectangle(struct RenderContext *rctx, WORD x, WORD y,
 
                     #define CORNER_SEGMENTS_FILL 16
                     {
-                        int i;
+                        WORD i;
                         float angle, angle_step;
                         WORD cx = x + width / 2;
                         WORD cy = y + height / 2;
@@ -4788,7 +4788,7 @@ static void OpenGLDrawRectangle(struct RenderContext *rctx, WORD x, WORD y,
             /* Handle border */
             if (border_width > 0 && border_color) {
                 #define CORNER_SEGMENTS 16
-                int i;
+                WORD i;
                 float angle, angle_step;
 
                 OpenGL_SetColor(border_color);
@@ -4858,7 +4858,7 @@ static void OpenGLDrawCircle(struct RenderContext *rctx, WORD center_x, WORD cen
 {
     /* Use more segments for smoother circles, especially for AA */
     #define CIRCLE_SEGMENTS 64
-    int i;
+    WORD i;
     float angle, angle_step;
 
     if (!rctx) {
