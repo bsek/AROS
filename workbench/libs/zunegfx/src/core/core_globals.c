@@ -1,17 +1,16 @@
 /*
     Copyright (C) 2025, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - Simplified Core Implementation
+    Zune Renderer Library - Core Internal Functions
 
-    This module provides the core functionality for the simplified Zune Renderer
-    library, including RenderContext management, library initialization, and
-    backend detection. The simplified approach eliminates complex abstractions
-    while preserving all essential functionality.
+    This module provides internal core functionality including library
+    initialization, RenderContext management, and backend detection.
 */
 
 #include "exec/lists.h"
-#include "include/zunegfx.h"
+#include "../../include/zunegfx.h"
 #include <aros/libcall.h>
+#include <clib/arossupport_protos.h>
 #define DEBUG 0
 #include <aros/debug.h>
 #include <cybergraphx/cybergraphics.h>
@@ -30,15 +29,8 @@
 
 #include "graphics/view.h"
 
-#include "backends/backend_interface.h"
-#include "zunegfx_intern.h"
-
-BOOL ValidateRenderContext(struct RenderContext *rctx);
-struct RenderContext *CreateRenderContextInternal(struct IntZuneGfxBase *base,
-                                            struct ColorMap *colormap,
-                                            struct RastPort *rastport);
-void DestroyRenderContextInternal(struct IntZuneGfxBase *base,
-                               struct RenderContext *rctx);
+#include "../backends/backend_interface.h"
+#include "../zunegfx_intern.h"
 
 /*****************************************************************************/
 /* Library Helper Functions */
@@ -179,6 +171,7 @@ void CleanupZuneRenderer(struct IntZuneGfxBase *base) {
 /*****************************************************************************/
 /* RenderContext Internal Functions */
 /*****************************************************************************/
+
 void InitializeRenderContext(struct RenderContext *rctx) {
   ENTER_FUNCTION("InitializeRenderContext");
 
@@ -266,39 +259,14 @@ void RemoveRenderContextFromList(struct IntZuneGfxBase *base,
 }
 
 /*****************************************************************************/
-/* Public API Implementation */
+/* Internal RenderContext Creation */
 /*****************************************************************************/
 
-
-
-/*****************************************************************************
-
-    NAME */
 struct RenderContext *CreateRenderContextForWindowInternal(
     struct IntZuneGfxBase *base,
     struct Window *window,
     struct ColorMap *colormap,
     UWORD backend_type)
-
-/*  FUNCTION
-    Creates a new RenderContext bound to a Window.
-
-    This is the primary way to create a RenderContext in the new architecture.
-    The RenderContext is bound to the window and automatically selects the best
-    backend (OpenGL if available, otherwise CyberGraphics).
-
-    The window reference is required for OpenGL to create a GL context.
-
-INPUTS
-    base - Library base
-    window - Target window (must not be NULL)
-    colormap - ColorMap for color conversions (must not be NULL)
-    backend_type - Backend to be used
-
-RESULT
-    Pointer to new RenderContext structure, or NULL if creation failed.
-
-*****************************************************************************/
 {
   struct RenderContext *rctx;
   ZuneBackend *backend;
@@ -378,120 +346,6 @@ RESULT
 
   EXIT_FUNCTION("CreateRenderContextForWindowInternal");
   return rctx;
-}
-
-/*****************************************************************************
-
-    NAME */
-AROS_LH3(struct RenderContext *, ZuneCreateRenderContextForWindow,
-
-         /*  SYNOPSIS */
-         AROS_LHA(struct Window *, window, A0),
-         AROS_LHA(struct ColorMap *, colormap, A1),
-         AROS_LHA(UWORD, backend_type, D0),
-
-         /*  LOCATION */
-         struct Library *, ZuneGfxBase, 5, zunegfx)
-
-/*  FUNCTION
-    Creates a new RenderContext bound to a Window.
-    See CreateRenderContextForWindowInternal for details.
-
-*****************************************************************************/
-{
-  AROS_LIBFUNC_INIT
-  ENTER_FUNCTION("ZuneCreateRenderContextForWindow");
-
-  struct IntZuneGfxBase *base = ZRB(ZuneGfxBase);
-  return CreateRenderContextForWindowInternal(base, window, colormap, backend_type);
-
-  EXIT_FUNCTION("ZuneCreateRenderContextForWindow");
-  AROS_LIBFUNC_EXIT
-}
-
-/*****************************************************************************
-
-    NAME */
-AROS_LH2(BOOL, ZuneSetTarget,
-
-         /*  SYNOPSIS */
-         AROS_LHA(struct RenderContext *, rctx, A0),
-         AROS_LHA(struct DrawingBoard *, board, A1),
-
-         /*  LOCATION */
-         struct Library *, ZuneGfxBase, 10, zunegfx)
-
-/*  FUNCTION
-    Switch the render target of a RenderContext.
-
-    board = NULL: Render to the window's RastPort
-    board != NULL: Render to the DrawingBoard
-
-    For OpenGL backend: Uses glBindFramebuffer() for fast FBO switching
-    For CyberGfx backend: Updates internal target pointer
-
-INPUTS
-    rctx - RenderContext to modify
-    board - Target DrawingBoard, or NULL for window
-
-RESULT
-    TRUE if target was switched successfully, FALSE otherwise.
-
-*****************************************************************************/
-{
-  AROS_LIBFUNC_INIT
-
-  ENTER_FUNCTION("ZuneSetTarget");
-
-  if (!rctx || !rctx->valid) {
-    D(bug("ZuneRenderer: ZuneSetTarget - invalid RenderContext\n"));
-    EXIT_FUNCTION("ZuneSetTarget");
-    return FALSE;
-  }
-
-  if (board && !board->valid) {
-    D(bug("ZuneRenderer: ZuneSetTarget - invalid DrawingBoard\n"));
-    EXIT_FUNCTION("ZuneSetTarget");
-    return FALSE;
-  }
-
-  D(bug("ZuneRenderer: ZuneSetTarget(rctx=%p, board=%p)\n", rctx, board));
-
-  /* Update target */
-  rctx->target_board = board;
-
-  if (board) {
-    /* Switching to DrawingBoard */
-    rctx->target_rastport = board->rastport;
-    if (board->bitmap) {
-      rctx->hidd_bitmap_obj = HIDD_BM_OBJ(board->bitmap);
-    }
-    D(bug("ZuneRenderer: Target set to DrawingBoard %p (%dx%d)\n",
-          board, board->width, board->height));
-  } else {
-    /* Switching to window */
-    if (rctx->window) {
-      rctx->target_rastport = rctx->window->RPort;
-      if (rctx->window->RPort && rctx->window->RPort->BitMap) {
-        rctx->hidd_bitmap_obj = HIDD_BM_OBJ(rctx->window->RPort->BitMap);
-      }
-      D(bug("ZuneRenderer: Target set to window %p RastPort\n", rctx->window));
-    } else {
-      D(bug("ZuneRenderer: Warning - no window, keeping current target_rastport\n"));
-    }
-  }
-
-  /*
-   * Note: For OpenGL backend, glBindFramebuffer is called lazily by
-   * OpenGL_SwitchToTarget() when the next draw operation occurs.
-   * This avoids unnecessary FBO switches when multiple ZuneSetTarget
-   * calls happen without drawing in between.
-   */
-
-  EXIT_FUNCTION("ZuneSetTarget");
-  return TRUE;
-
-  AROS_LIBFUNC_EXIT
 }
 
 void DestroyRenderContextInternal(struct IntZuneGfxBase *base,
@@ -595,124 +449,6 @@ struct RenderContext *CreateRenderContextInternal(struct IntZuneGfxBase *base,
   return rctx;
 }
 
-/*****************************************************************************
-
-    NAME */
-AROS_LH1(void, ZuneDestroyRenderContext,
-
-         /*  SYNOPSIS */
-         AROS_LHA(struct RenderContext *, rctx, A0),
-
-         /*  LOCATION */
-         struct Library *, ZuneGfxBase, 7, zunegfx)
-
-/*  FUNCTION
-    Destroys a RenderContext and frees all associated resources.
-    Any pending batch operations are automatically flushed.
-
-INPUTS
-    rctx - RenderContext to destroy (may be NULL)
-
-RESULT
-    None
-
-NOTES
-    After calling this function, the RenderContext pointer is no longer valid.
-    It is safe to pass NULL to this function.
-
-SEE ALSO
-    CreateRenderContext(), CreateRenderContextWithDrawingBoard()
-
-*****************************************************************************/
-{
-  AROS_LIBFUNC_INIT
-
-  struct IntZuneGfxBase *base = ZRB(ZuneGfxBase);
-
-  ENTER_FUNCTION("ZuneDestroyRenderContext");
-
-  D(bug("ZuneRenderer: ZuneDestroyRenderContext(rctx=%p)\n", rctx));
-
-  if (!rctx) {
-    D(bug("ZuneRenderer: NULL RenderContext, nothing to destroy\n"));
-    return;
-  }
-
-  /* Flush any pending batch operations */
-  if (rctx->batch_state && rctx->batching_enabled) {
-    struct BatchState *batch = (struct BatchState *)rctx->batch_state;
-    if (batch->immediate.count > 0 || batch->deferred.count > 0) {
-      D(bug("ZuneRenderer: Flushing pending batch operations\n"));
-      // FlushBatchState(batch);
-    }
-  }
-
-  /* Remove from tracking list */
-  RemoveRenderContextFromList(base, rctx);
-
-  /* Cleanup RenderContext */
-  CleanupRenderContext(rctx);
-
-  /* Free the structure */
-  FreeVec(rctx);
-
-  D(bug("ZuneRenderer: RenderContext destroyed\n"));
-
-  EXIT_FUNCTION("ZuneDestroyRenderContext");
-
-  AROS_LIBFUNC_EXIT
-}
-
-/*****************************************************************************
-
-    NAME */
-AROS_LH2(void, ZuneClearRenderContext,
-
-         /*  SYNOPSIS */
-         AROS_LHA(struct RenderContext *, rctx, A0), AROS_LHA(ULONG, color, D0),
-
-         /*  LOCATION */
-         struct Library *, ZuneGfxBase, 8, zunegfx)
-
-/*  FUNCTION
-    Clears the entire RenderContext with the specified color.
-
-INPUTS
-    rctx - RenderContext to clear (must not be NULL)
-    color - Clear color in ARGB format (0xAARRGGBB)
-
-RESULT
-    None
-
-NOTES
-    This function uses the most efficient clearing method available
-    based on the active backend.
-
-SEE ALSO
-    FillRectangle(), ZuneClearDrawingBoard()
-
-*****************************************************************************/
-{
-  AROS_LIBFUNC_INIT
-
-  ENTER_FUNCTION("ZuneClearRenderContext");
-
-  D(bug("ZuneRenderer: ZuneClearRenderContext(rctx=%p, color=0x%08x)\n", rctx, color));
-
-  if (!ValidateRenderContext(rctx)) {
-    D(bug("ZuneRenderer: Invalid RenderContext\n"));
-    return;
-  }
-
-  struct InternalColor internal_color =
-      ZuneColorToInternal(rctx, color, rctx->pixel_format);
-  ZUNE_BACKEND_CALL(rctx, ClearRenderContext, &internal_color);
-
-  EXIT_FUNCTION("ZuneClearRenderContext");
-
-  AROS_LIBFUNC_EXIT
-}
-
 /*****************************************************************************/
 /* Validation Functions */
 /*****************************************************************************/
@@ -725,49 +461,5 @@ BOOL ValidateRenderContext(struct RenderContext *rctx) {
   if (!rctx->target_rastport && !rctx->target_board)
     return FALSE;
 
-  /* Additional validation may be added here once clipping/batching mature */
-
   return TRUE;
-}
-
-/*****************************************************************************
-
-    NAME */
-AROS_LH0(APTR, ZuneGetMasterGLContext,
-
-         /*  LOCATION */
-         struct Library *, ZuneGfxBase, 104, zunegfx)
-
-/*  FUNCTION
-    Returns the master OpenGL context used by zunegfx for context sharing.
-    This context can be passed to ZuneCreateLayerCompositorShared() to ensure
-    the compositor shares the same pipe_screen as zunegfx windows.
-
-INPUTS
-    None
-
-RESULT
-    Pointer to the master GL context, or NULL if not available.
-    The context is only available after at least one OpenGL-based
-    RenderContext has been created and used.
-
-NOTES
-    This function is primarily intended for use by the Layer Compositor
-    to enable shared GL contexts between zunegfx and the compositor.
-    Without shared contexts, the compositor may create a separate
-    pipe_screen which cannot access zunegfx FBO contents.
-
-SEE ALSO
-    ZuneCreateLayerCompositorShared()
-
-*****************************************************************************/
-{
-  AROS_LIBFUNC_INIT
-
-  /* OpenGL_GetMasterContext is defined in backends/opengl/opengl_backend.c */
-  extern APTR OpenGL_GetMasterContext(void);
-  
-  return OpenGL_GetMasterContext();
-
-  AROS_LIBFUNC_EXIT
 }
