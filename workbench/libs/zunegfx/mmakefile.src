@@ -122,6 +122,13 @@ BACKEND_FILES := \
         src/backends/cybergfx/cybergfx_line \
         src/backends/cybergfx/cybergfx_circle \
         src/backends/cybergfx/cybergfx_brush_sampler \
+        src/backends/opengl/opengl_globals \
+        src/backends/opengl/opengl_shaders \
+        src/backends/opengl/opengl_fbo \
+        src/backends/opengl/opengl_context \
+        src/backends/opengl/opengl_sync \
+        src/backends/opengl/opengl_pixel_utils \
+        src/backends/opengl/opengl_drawing \
         src/backends/opengl/opengl_backend
 
 COMPOSITOR_FILES := \
