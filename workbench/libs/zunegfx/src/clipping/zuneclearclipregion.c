@@ -1,0 +1,70 @@
+/*
+    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+
+    Zune Renderer Library - ZuneClearClipRegion
+*/
+
+#include <aros/libcall.h>
+#include <exec/types.h>
+#include <graphics/gfx.h>
+#include <graphics/rastport.h>
+#include <proto/exec.h>
+#include <proto/graphics.h>
+
+#include "../backends/backend_interface.h"
+#include "../../include/zunegfx.h"
+#include "../zunegfx_intern.h"
+
+#define DEBUG 0
+#include <aros/debug.h>
+
+/*****************************************************************************
+
+    NAME */
+AROS_LH1(void, ZuneClearClipRegion,
+
+         /*  SYNOPSIS */
+         AROS_LHA(struct RenderContext *, rctx, A0),
+
+         /*  LOCATION */
+         struct Library *, ZuneGfxBase, 29, zunegfx)
+
+/*  FUNCTION
+    Clears the clipping region for a RenderContext, disabling clipping.
+
+INPUTS
+    rctx - RenderContext to clear clipping for
+
+RESULT
+    None
+
+NOTES
+    This function automatically frees the existing region if present.
+    After calling this function, all drawing operations will be unclipped.
+
+SEE ALSO
+    ZuneSetClipRegion(), ZuneCombineRegions()
+
+*****************************************************************************/
+{
+  AROS_LIBFUNC_INIT
+
+  ENTER_FUNCTION("ZuneClearClipRegion");
+
+  if (!ValidateRenderContext(rctx)) {
+    EXIT_FUNCTION("ZuneClearClipRegion");
+    return;
+  }
+
+  rctx->clipping_enabled = FALSE;
+  if (rctx->clip_region) {
+    DisposeRegion(rctx->clip_region);
+    rctx->clip_region = NULL;
+  }
+
+  D(bug("ZuneRenderer: Clipping disabled\n"));
+
+  EXIT_FUNCTION("ZuneClearClipRegion");
+
+  AROS_LIBFUNC_EXIT
+}

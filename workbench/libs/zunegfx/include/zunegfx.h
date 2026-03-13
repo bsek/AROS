@@ -33,6 +33,10 @@
 #include <intuition/screens.h>
 #endif
 
+#ifndef UTILITY_TAGITEM_H
+#include <utility/tagitem.h>
+#endif
+
 /*****************************************************************************/
 /* Library Information */
 /*****************************************************************************/
@@ -114,6 +118,48 @@
 #define ZUNE_TEXTURE_FORMAT_RGB16 3  /* 16-bit RGB */
 #define ZUNE_TEXTURE_FORMAT_L8 4     /* 8-bit luminance */
 #define ZUNE_TEXTURE_FORMAT_A8 5     /* 8-bit alpha */
+
+/*****************************************************************************/
+/* Tag Definitions for Tag-Based Creation API                                */
+/*****************************************************************************/
+
+#define ZUNE_TAG_BASE       (TAG_USER + 0x00060000)
+
+/* RenderContext creation tags (ZuneCreateRenderContextA) */
+#define ZUNE_RenderContext_Window       (ZUNE_TAG_BASE + 1)   /* struct Window *     (required) */
+#define ZUNE_RenderContext_ColorMap     (ZUNE_TAG_BASE + 2)   /* struct ColorMap *   (required) */
+#define ZUNE_RenderContext_Backend      (ZUNE_TAG_BASE + 3)   /* UWORD backend type  (default: BACKEND_BEST_AVAILABLE) */
+
+/* DrawingBoard creation tags (ZuneCreateDrawingBoardA) */
+#define ZUNE_DrawingBoard_RenderContext (ZUNE_TAG_BASE + 16)  /* struct RenderContext * (required) */
+#define ZUNE_DrawingBoard_Width        (ZUNE_TAG_BASE + 17)   /* UWORD               (required) */
+#define ZUNE_DrawingBoard_Height       (ZUNE_TAG_BASE + 18)   /* UWORD               (required) */
+#define ZUNE_DrawingBoard_Flags        (ZUNE_TAG_BASE + 19)   /* ULONG               (default: 0) */
+
+/* Texture creation tags (ZuneCreateTextureA - unified) */
+#define ZUNE_Texture_RenderContext     (ZUNE_TAG_BASE + 32)   /* struct RenderContext * (optional) */
+#define ZUNE_Texture_Width             (ZUNE_TAG_BASE + 33)   /* UWORD               (required unless Source*) */
+#define ZUNE_Texture_Height            (ZUNE_TAG_BASE + 34)   /* UWORD               (required unless Source*) */
+#define ZUNE_Texture_Depth             (ZUNE_TAG_BASE + 35)   /* UBYTE               (default: 32) */
+#define ZUNE_Texture_Format            (ZUNE_TAG_BASE + 36)   /* ULONG               (default: ARGB32) */
+#define ZUNE_Texture_Flags             (ZUNE_TAG_BASE + 37)   /* ULONG               (default: 0) */
+#define ZUNE_Texture_Data              (ZUNE_TAG_BASE + 38)   /* APTR pixel data     (optional) */
+#define ZUNE_Texture_Pitch             (ZUNE_TAG_BASE + 39)   /* ULONG bytes/row     (required if Data) */
+#define ZUNE_Texture_SourceDrawingBoard (ZUNE_TAG_BASE + 40)  /* BOOL - use rctx's target_board */
+#define ZUNE_Texture_SourceDatatype    (ZUNE_TAG_BASE + 41)   /* APTR dt_object      (optional) */
+#define ZUNE_Texture_SourceFile        (ZUNE_TAG_BASE + 42)   /* CONST_STRPTR        (optional) */
+#define ZUNE_Texture_Screen            (ZUNE_TAG_BASE + 43)   /* struct Screen *     (for file loading) */
+
+/* LayerCompositor creation tags (ZuneCreateLayerCompositorA) */
+#define ZUNE_Compositor_Screen         (ZUNE_TAG_BASE + 48)   /* struct Screen *     (required) */
+#define ZUNE_Compositor_MasterGLContext (ZUNE_TAG_BASE + 49)  /* APTR                (optional, for shared) */
+
+/* CompositorWindow registration tags (ZuneCompositorRegisterWindowA) */
+#define ZUNE_CompositorWin_Compositor  (ZUNE_TAG_BASE + 56)   /* struct LayerCompositor * (required) */
+#define ZUNE_CompositorWin_Window      (ZUNE_TAG_BASE + 57)   /* struct Window *     (required) */
+#define ZUNE_CompositorWin_GLContext   (ZUNE_TAG_BASE + 58)   /* APTR                (optional) */
+#define ZUNE_CompositorWin_DrawingBoard (ZUNE_TAG_BASE + 59)  /* struct DrawingBoard * (optional) */
+#define ZUNE_CompositorWin_Alpha       (ZUNE_TAG_BASE + 60)   /* UBYTE               (default: 255) */
 
 /*****************************************************************************/
 /* Core Structures */
@@ -818,5 +864,15 @@ ULONG ZuneBlendColors(ULONG color1, ULONG color2, UBYTE alpha);
 /*****************************************************************************/
 
 void ZuneInitPenCache(struct RenderContext *rctx, LONG *pens, UWORD count);
+
+/*****************************************************************************/
+/* Tag-Based Creation API                                                    */
+/*****************************************************************************/
+
+struct RenderContext *ZuneCreateRenderContextA(struct TagItem *tags);
+struct DrawingBoard *ZuneCreateDrawingBoardA(struct TagItem *tags);
+struct ZuneTexture *ZuneCreateTextureA(struct TagItem *tags);
+struct LayerCompositor *ZuneCreateLayerCompositorA(struct TagItem *tags);
+struct CompositorWindow *ZuneCompositorRegisterWindowA(struct TagItem *tags);
 
 #endif /* LIBRARIES_ZUNEGFX_H */

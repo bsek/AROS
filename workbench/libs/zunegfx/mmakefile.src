@@ -9,12 +9,61 @@ FUNCS :=
 
 # Source files organized by module
 CORE_FILES := \
-        src/zunegfx_core           \
-        src/zunegfx_drawingboard   \
-        src/zunegfx_clipping       \
-        src/zunegfx_utils          \
-        src/zunegfx_texture        \
+        src/core/core_globals                    \
+        src/core/zunecreaterendercontextforwindow \
+        src/core/zunesettarget                   \
+        src/core/zunedestroyrendercontext        \
+        src/core/zuneclearrendercontext          \
+        src/core/zunegetmasterglcontext          \
+        src/core/zunecreaterendercontexta        \
+        src/zunegfx_utils                        \
         src/zunegfx_fallback
+
+TEXTURE_FILES := \
+        src/texture/texture_globals                    \
+        src/texture/zunecreatetexture                  \
+        src/texture/zunecreatetexturefromdata           \
+        src/texture/zunecreatetexturefromdrawingboard   \
+        src/texture/zunecreatetexturefromdatatype       \
+        src/texture/zunecreatetexturefromfile            \
+        src/texture/zunedestroytexture                  \
+        src/texture/zuneupdatetexturedata               \
+        src/texture/zunelocktexturepixels               \
+        src/texture/zuneunlocktexturepixels             \
+        src/texture/zunegettexturepixel                 \
+        src/texture/zunesettexturepixel                 \
+        src/texture/zunedrawtexture                     \
+        src/texture/zunedrawtexturescaled               \
+        src/texture/zunedrawtextureregion               \
+        src/texture/zunedrawtexturetinted               \
+        src/texture/zunedrawtexturescaledtinted         \
+        src/texture/zunedrawtextureregiontinted         \
+        src/texture/zunedrawtexturetiled                \
+        src/texture/zuneistexturevalid                  \
+        src/texture/zunecreatetexturea
+
+DRAWINGBOARD_FILES := \
+        src/drawingboard/drawingboard_globals                    \
+        src/drawingboard/zunecreatedrawingboardforrendercontext  \
+        src/drawingboard/zunedestroydrawingboard                 \
+        src/drawingboard/zunecleardrawingboard                   \
+        src/drawingboard/zunelockdrawingboardpixels              \
+        src/drawingboard/zuneunlockdrawingboardpixels            \
+        src/drawingboard/zunegetpixel                            \
+        src/drawingboard/zunesetpixel                            \
+        src/drawingboard/zuneblit                                \
+        src/drawingboard/zunepresent                             \
+        src/drawingboard/zunecapture                             \
+        src/drawingboard/zunesync                                \
+        src/drawingboard/zunereload                              \
+        src/drawingboard/zunecreatedrawingboarda
+
+CLIPPING_FILES := \
+        src/clipping/zunesetclipregion            \
+        src/clipping/zuneclearclipregion           \
+        src/clipping/zunecombineregions            \
+        src/clipping/zunecreatecircleregion        \
+        src/clipping/zunecreateroundedrectregion
 
 BATCHING_FILES := \
         src/batching/batching_globals           \
@@ -25,8 +74,21 @@ BATCHING_FILES := \
         src/batching/zunegetbatchcount
 
 DRAWING_FILES := \
-        src/zunegfx_drawing        \
-        src/zunegfx_rectangle
+        src/drawing/zunefillcircle              \
+        src/drawing/zunedrawcircleoutline       \
+        src/drawing/zunedrawline                \
+        src/drawing/zunedrawcircleoutlinestyled \
+        src/drawing/zunedrawlinestyled          \
+        src/drawing/zunedrawpixel
+
+RECTANGLE_FILES := \
+        src/rectangle/zunefillrectangle                      \
+        src/rectangle/zunefillrectanglerounded               \
+        src/rectangle/zunedrawrectangleoutline                \
+        src/rectangle/zunedrawrectangleroundedoutline         \
+        src/rectangle/zunedrawrectangleoutlinestyled          \
+        src/rectangle/zunedrawrectangleroundedoutlinestyled   \
+        src/rectangle/zunedrawrectangleroundedstyled
 
 ANTIALIASING_FILES := \
         src/antialiasing/antialiasing_globals                   \
@@ -64,7 +126,21 @@ BACKEND_FILES := \
 
 COMPOSITOR_FILES := \
         src/layer_compositor \
-        src/zunegfx_compositor
+        src/compositor/zunecreatelayercompositor          \
+        src/compositor/zunecreatelayercompositorshared    \
+        src/compositor/zunedestroylayercompositor         \
+        src/compositor/zuneactivatelayercompositor        \
+        src/compositor/zunedeactivatelayercompositor      \
+        src/compositor/zunecompositorregisterwindow       \
+        src/compositor/zunecompositorunregisterwindow     \
+        src/compositor/zunecompositorsetwindowalpha       \
+        src/compositor/zunecompositormarkwindowdirty      \
+        src/compositor/zunecompositorfindwindow           \
+        src/compositor/zunecompositorupdate               \
+        src/compositor/zunecompositorrefresh              \
+        src/compositor/zunecompositorsetshadow            \
+        src/compositor/zunecreatelayercompositora         \
+        src/compositor/zunecompositorregisterwindowa
 
 ROOT_FILES := \
         zunegfx_init
@@ -72,8 +148,12 @@ ROOT_FILES := \
 # Combine all source files
 FILES := \
         $(CORE_FILES)                   \
+        $(TEXTURE_FILES)                \
+        $(DRAWINGBOARD_FILES)           \
+        $(CLIPPING_FILES)               \
         $(BATCHING_FILES)               \
         $(DRAWING_FILES)                \
+        $(RECTANGLE_FILES)              \
         $(ANTIALIASING_FILES)           \
         $(BACKEND_FILES)                \
         $(COMPOSITOR_FILES)             \
