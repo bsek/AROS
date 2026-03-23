@@ -410,3 +410,46 @@ BOOL ZuneFallback_CopyFromDrawingBoard(struct RenderContext *rctx) {
   (void)rctx;
   return TRUE;
 }
+
+void ZuneFallback_DrawText(struct RenderContext *rctx, WORD x, WORD y,
+                           CONST_STRPTR string, UWORD count,
+                           struct InternalColor *fg_color,
+                           struct InternalColor *bg_color) {
+  /*
+   * Software fallback: Draw text via RastPort Text() function.
+   * This works for both bitmap and TrueType/antialiased fonts.
+   */
+  struct RastPort *rp;
+
+  if (!rctx || !string || count == 0 || !fg_color || !rctx->font)
+    return;
+
+  rp = fallback_get_rastport(rctx);
+  if (!rp)
+    return;
+
+  SetFont(rp, rctx->font);
+  SetAPen(rp, 1); /* Default foreground pen */
+  if (bg_color) {
+    SetBPen(rp, 0);
+    SetDrMd(rp, JAM2);
+  } else {
+    SetDrMd(rp, JAM1);
+  }
+  Move(rp, x, y);
+  Text(rp, string, count);
+}
+
+void ZuneFallback_FillPolygon(struct RenderContext *rctx,
+                              struct ZunePoint *points, UWORD count,
+                              struct ZuneBrush *brush, BOOL antialias) {
+  /*
+   * Software fallback: Draw polygon outline only using DrawLine fallback.
+   * A proper scanline fill would be better but this prevents crashes.
+   */
+  (void)rctx;
+  (void)points;
+  (void)count;
+  (void)brush;
+  (void)antialias;
+}

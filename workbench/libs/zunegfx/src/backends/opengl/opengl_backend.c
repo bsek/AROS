@@ -1172,4 +1172,10 @@ ZuneBackendOps opengl_backend_ops = {
     .CopyRegionFromDrawingBoard = OpenGL_SyncRegionFBOToBitmap,
 
     .CopyFromRastPort = OpenGLCopyFromRastPort,
+
+    /* Text rendering */
+    .DrawText = OpenGLDrawText,
+
+    /* Polygon fill */
+    .FillPolygon = OpenGLFillPolygon,
 };
