@@ -316,6 +316,22 @@ void OpenGL_SetupOrthoProjection(UWORD width, UWORD height);
 void OpenGL_SetColor(struct InternalColor *color);
 
 /*****************************************************************************/
+/* Internal Function Declarations - Text (opengl_text.c)                     */
+/*****************************************************************************/
+
+BOOL OpenGL_CreateTextShader(void);
+void OpenGL_DestroyTextShader(void);
+void OpenGL_CleanupAtlasCache(void);
+void OpenGLDrawText(struct RenderContext *rctx, WORD x, WORD y,
+                    CONST_STRPTR string, UWORD count,
+                    struct InternalColor *fg_color,
+                    struct InternalColor *bg_color);
+void OpenGLFillPolygon(struct RenderContext *rctx, struct ZunePoint *points,
+                       UWORD count, struct ZuneBrush *brush, BOOL antialias);
+
+extern GLuint g_text_program;
+
+/*****************************************************************************/
 /* Fallback Functions (from zunegfx_fallback.c)                              */
 /*****************************************************************************/
 

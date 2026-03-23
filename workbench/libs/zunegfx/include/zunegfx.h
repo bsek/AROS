@@ -150,17 +150,6 @@
 #define ZUNE_Texture_SourceFile        (ZUNE_TAG_BASE + 42)   /* CONST_STRPTR        (optional) */
 #define ZUNE_Texture_Screen            (ZUNE_TAG_BASE + 43)   /* struct Screen *     (for file loading) */
 
-/* LayerCompositor creation tags (ZuneCreateLayerCompositorA) */
-#define ZUNE_Compositor_Screen         (ZUNE_TAG_BASE + 48)   /* struct Screen *     (required) */
-#define ZUNE_Compositor_MasterGLContext (ZUNE_TAG_BASE + 49)  /* APTR                (optional, for shared) */
-
-/* CompositorWindow registration tags (ZuneCompositorRegisterWindowA) */
-#define ZUNE_CompositorWin_Compositor  (ZUNE_TAG_BASE + 56)   /* struct LayerCompositor * (required) */
-#define ZUNE_CompositorWin_Window      (ZUNE_TAG_BASE + 57)   /* struct Window *     (required) */
-#define ZUNE_CompositorWin_GLContext   (ZUNE_TAG_BASE + 58)   /* APTR                (optional) */
-#define ZUNE_CompositorWin_DrawingBoard (ZUNE_TAG_BASE + 59)  /* struct DrawingBoard * (optional) */
-#define ZUNE_CompositorWin_Alpha       (ZUNE_TAG_BASE + 60)   /* UBYTE               (default: 255) */
-
 /*****************************************************************************/
 /* Core Structures */
 /*****************************************************************************/
@@ -502,6 +491,9 @@ struct RenderContext {
   /* Clipping */
   struct Region *clip_region; /* Clipping region */
   BOOL clipping_enabled;      /* Clipping active */
+
+  /* Text rendering */
+  struct TextFont *font;      /* Current font for text operations */
 
   /* State */
   BOOL valid; /* RenderContext ready for use */
@@ -852,6 +844,88 @@ struct Region *ZuneCreateRoundedRectRegion(struct ZuneRect *rect,
                                            WORD corner_radius);
 
 /*****************************************************************************/
+/* Text Rendering */
+/*****************************************************************************/
+
+/*
+ * ZuneSetFont - Set the current font for text operations
+ *
+ * Accepts any TextFont* including TrueType fonts loaded via OpenDiskFont().
+ * The font is stored on the RenderContext and applied when text is drawn.
+ */
+void ZuneSetFont(struct RenderContext *rctx, struct TextFont *font);
+
+/*
+ * ZuneTextLength - Measure the pixel width of a string
+ *
+ * Returns the pixel width of 'count' characters from 'string' using the
+ * current font set via ZuneSetFont(). Accounts for kerning and spacing.
+ */
+UWORD ZuneTextLength(struct RenderContext *rctx, CONST_STRPTR string, UWORD count);
+
+/*
+ * ZuneTextFit - Determine how many characters fit in a pixel width
+ *
+ * Returns the number of characters from 'string' that fit within 'maxWidth'
+ * pixels using the current font.
+ */
+UWORD ZuneTextFit(struct RenderContext *rctx, CONST_STRPTR string, UWORD count, UWORD maxWidth);
+
+/*
+ * ZuneDrawText - Draw text at a position with foreground color
+ *
+ * Position.y is the TOP of the text line (not baseline).
+ * The implementation adds tf_Baseline internally.
+ * Draws with transparent background (JAM1 mode).
+ */
+void ZuneDrawText(struct RenderContext *rctx, struct ZunePoint *position,
+                  CONST_STRPTR string, UWORD count, ULONG color);
+
+/*
+ * ZuneDrawTextBackground - Draw text with foreground and background colors
+ *
+ * Same as ZuneDrawText but fills the text background with bgColor (JAM2 mode).
+ * Useful for text selections and highlighted text.
+ */
+void ZuneDrawTextBackground(struct RenderContext *rctx, struct ZunePoint *position,
+                            CONST_STRPTR string, UWORD count,
+                            ULONG fgColor, ULONG bgColor);
+
+/* Convenience macros */
+#define ZuneDrawTextAt(rctx, x, y, str, count, color) \
+    ZuneDrawText((rctx), ZUNE_POINT_PTR((x),(y)), (str), (count), (color))
+#define ZuneDrawTextBackgroundAt(rctx, x, y, str, count, fg, bg) \
+    ZuneDrawTextBackground((rctx), ZUNE_POINT_PTR((x),(y)), (str), (count), (fg), (bg))
+
+/*****************************************************************************/
+/* Polyline and Polygon Drawing */
+/*****************************************************************************/
+
+/*
+ * ZuneDrawPolyline - Draw connected line segments through a series of points
+ *
+ * Draws lines from points[0]→points[1]→...→points[count-1].
+ * Requires count >= 2. Uses 1-pixel line width.
+ */
+void ZuneDrawPolyline(struct RenderContext *rctx, struct ZunePoint *points,
+                      UWORD count, ULONG color);
+
+/*
+ * ZuneDrawPolylineStyled - Draw connected line segments with custom width
+ */
+void ZuneDrawPolylineStyled(struct RenderContext *rctx, struct ZunePoint *points,
+                            UWORD count, UWORD lineWidth, ULONG color);
+
+/*
+ * ZuneFillPolygon - Fill a closed polygon defined by a series of points
+ *
+ * The polygon is automatically closed (last point connects to first).
+ * Requires count >= 3. Uses scanline fill algorithm.
+ */
+void ZuneFillPolygon(struct RenderContext *rctx, struct ZunePoint *points,
+                     UWORD count, const struct ZuneBrush *brush);
+
+/*****************************************************************************/
 /* Color Utilities */
 /*****************************************************************************/
 
@@ -872,7 +946,5 @@ void ZuneInitPenCache(struct RenderContext *rctx, LONG *pens, UWORD count);
 struct RenderContext *ZuneCreateRenderContextA(struct TagItem *tags);
 struct DrawingBoard *ZuneCreateDrawingBoardA(struct TagItem *tags);
 struct ZuneTexture *ZuneCreateTextureA(struct TagItem *tags);
-struct LayerCompositor *ZuneCreateLayerCompositorA(struct TagItem *tags);
-struct CompositorWindow *ZuneCompositorRegisterWindowA(struct TagItem *tags);
 
 #endif /* LIBRARIES_ZUNEGFX_H */

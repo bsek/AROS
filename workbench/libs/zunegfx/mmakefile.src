@@ -79,7 +79,17 @@ DRAWING_FILES := \
         src/drawing/zunedrawline                \
         src/drawing/zunedrawcircleoutlinestyled \
         src/drawing/zunedrawlinestyled          \
-        src/drawing/zunedrawpixel
+        src/drawing/zunedrawpixel               \
+        src/drawing/zunedrawpolyline            \
+        src/drawing/zunedrawpolylinestyled      \
+        src/drawing/zunefillpolygon
+
+TEXT_FILES := \
+        src/text/zunesetfont                    \
+        src/text/zunetextlength                 \
+        src/text/zunetextfit                    \
+        src/text/zunedrawtext                   \
+        src/text/zunedrawtextbg
 
 RECTANGLE_FILES := \
         src/rectangle/zunefillrectangle                      \
@@ -129,25 +139,10 @@ BACKEND_FILES := \
         src/backends/opengl/opengl_sync \
         src/backends/opengl/opengl_pixel_utils \
         src/backends/opengl/opengl_drawing \
-        src/backends/opengl/opengl_backend
-
-COMPOSITOR_FILES := \
-        src/layer_compositor \
-        src/compositor/zunecreatelayercompositor          \
-        src/compositor/zunecreatelayercompositorshared    \
-        src/compositor/zunedestroylayercompositor         \
-        src/compositor/zuneactivatelayercompositor        \
-        src/compositor/zunedeactivatelayercompositor      \
-        src/compositor/zunecompositorregisterwindow       \
-        src/compositor/zunecompositorunregisterwindow     \
-        src/compositor/zunecompositorsetwindowalpha       \
-        src/compositor/zunecompositormarkwindowdirty      \
-        src/compositor/zunecompositorfindwindow           \
-        src/compositor/zunecompositorupdate               \
-        src/compositor/zunecompositorrefresh              \
-        src/compositor/zunecompositorsetshadow            \
-        src/compositor/zunecreatelayercompositora         \
-        src/compositor/zunecompositorregisterwindowa
+        src/backends/opengl/opengl_backend \
+        src/backends/cybergfx/cybergfx_text \
+        src/backends/cybergfx/cybergfx_polygon \
+        src/backends/opengl/opengl_text
 
 ROOT_FILES := \
         zunegfx_init
@@ -160,10 +155,10 @@ FILES := \
         $(CLIPPING_FILES)               \
         $(BATCHING_FILES)               \
         $(DRAWING_FILES)                \
+        $(TEXT_FILES)                    \
         $(RECTANGLE_FILES)              \
         $(ANTIALIASING_FILES)           \
         $(BACKEND_FILES)                \
-        $(COMPOSITOR_FILES)             \
         $(ROOT_FILES)
 
 #MM- workbench-libs-zunegfx : linklibs
@@ -181,7 +176,7 @@ INCLUDE_FILES := $(call WILDCARD, include/*.h)
 %build_module mmake=workbench-libs-zunegfx \
   modname=zunegfx modtype=library \
   files="$(FUNCS) $(FILES)" \
-  uselibs="graphics cybergraphics layers GL"
+  uselibs="graphics cybergraphics layers GL diskfont"
 
 # Additional build flags for debugging
 USER_CPPFLAGS := -DDEBUG=1 -DAROS_LITTLE_ENDIAN=1 -mavx2

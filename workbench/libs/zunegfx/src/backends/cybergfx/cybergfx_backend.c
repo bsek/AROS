@@ -85,6 +85,16 @@ static void CybergfxCopyFromRastPort(struct RenderContext *rctx, struct RastPort
                                      WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
                                      UWORD width, UWORD height);
 
+/* Text rendering (cybergfx_text.c) */
+void CybergfxDrawText(struct RenderContext *rctx, WORD x, WORD y,
+                      CONST_STRPTR string, UWORD count,
+                      struct InternalColor *fg_color,
+                      struct InternalColor *bg_color);
+
+/* Polygon fill (cybergfx_polygon.c) */
+void CybergfxFillPolygon(struct RenderContext *rctx, struct ZunePoint *points,
+                         UWORD count, struct ZuneBrush *brush, BOOL antialias);
+
 /*****************************************************************************/
 /* Backend Operations Table */
 /*****************************************************************************/
@@ -148,6 +158,12 @@ ZuneBackendOps cybergfx_backend_ops = {.name = "CyberGraphics",
                                        .ClearClipping = CybergfxClearClipping,
 
                                        .CopyFromRastPort = CybergfxCopyFromRastPort,
+
+                                       /* Text rendering */
+                                       .DrawText = CybergfxDrawText,
+
+                                       /* Polygon fill */
+                                       .FillPolygon = CybergfxFillPolygon,
 };
 
 /*****************************************************************************/

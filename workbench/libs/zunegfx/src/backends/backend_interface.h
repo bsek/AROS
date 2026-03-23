@@ -173,6 +173,15 @@ typedef struct ZuneBackendOps {
   BOOL (*CopyRegionFromDrawingBoard)(struct RenderContext *rctx, 
                                      WORD x, WORD y, UWORD width, UWORD height);
 
+  /* Text rendering */
+  void (*DrawText)(struct RenderContext *rctx, WORD x, WORD y,
+                   CONST_STRPTR string, UWORD count,
+                   struct InternalColor *fg_color, struct InternalColor *bg_color);
+
+  /* Polygon fill */
+  void (*FillPolygon)(struct RenderContext *rctx, struct ZunePoint *points,
+                      UWORD count, struct ZuneBrush *brush, BOOL antialias);
+
   /* Future extension slots */
   APTR reserved[0];
 
@@ -247,6 +256,13 @@ void ZuneFallback_DrawTexture(struct RenderContext *rctx,
                               WORD dest_y, UWORD dest_width, UWORD dest_height,
                               WORD src_x, WORD src_y, UWORD src_width,
                               UWORD src_height, struct InternalColor *tint);
+void ZuneFallback_DrawText(struct RenderContext *rctx, WORD x, WORD y,
+                           CONST_STRPTR string, UWORD count,
+                           struct InternalColor *fg_color,
+                           struct InternalColor *bg_color);
+void ZuneFallback_FillPolygon(struct RenderContext *rctx,
+                              struct ZunePoint *points, UWORD count,
+                              struct ZuneBrush *brush, BOOL antialias);
 
 /* RenderContext-backend binding */
 ZuneBackend *ZuneGetRenderContextBackend(struct RenderContext *rctx);

@@ -27,7 +27,7 @@ AROS_LH1(struct RenderContext *, ZuneCreateRenderContextA,
          AROS_LHA(struct TagItem *, tags, A0),
 
          /*  LOCATION */
-         struct Library *, ZuneGfxBase, 120, zunegfx)
+         struct Library *, ZuneGfxBase, 106, zunegfx)
 
 /*  FUNCTION
     Creates a new RenderContext from a TagItem list.

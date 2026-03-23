@@ -24,7 +24,7 @@
 
 AROS_LH1(struct ZuneTexture *, ZuneCreateTextureA,
          AROS_LHA(struct TagItem *, tags, A0),
-         struct Library *, ZuneGfxBase, 122, zunegfx)
+         struct Library *, ZuneGfxBase, 108, zunegfx)
 {
     AROS_LIBFUNC_INIT
 

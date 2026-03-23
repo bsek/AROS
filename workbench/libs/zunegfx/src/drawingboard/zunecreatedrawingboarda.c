@@ -24,7 +24,7 @@ AROS_LH1(struct DrawingBoard *, ZuneCreateDrawingBoardA,
          AROS_LHA(struct TagItem *, tags, A0),
 
          /*  LOCATION */
-         struct Library *, ZuneGfxBase, 121, zunegfx)
+         struct Library *, ZuneGfxBase, 107, zunegfx)
 
 /*  FUNCTION
     Creates a new DrawingBoard from a TagItem list.
