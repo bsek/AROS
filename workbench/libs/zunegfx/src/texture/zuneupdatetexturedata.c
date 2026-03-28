@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZuneUpdateTextureData
+    ZuneGfx Library - ZuneUpdateTextureData
 */
 
 #include "../backends/backend_interface.h"
@@ -29,15 +29,15 @@ AROS_LH4(BOOL, ZuneUpdateTextureData,
 
     ENTER_FUNCTION("ZuneUpdateTextureData");
 
-    D(bug("ZuneRenderer: ZuneUpdateTextureData(rctx=%p, texture=%p, data=%p, rect=%p)\n", rctx, texture, data, rect));
+    D(bug("ZuneGfx: ZuneUpdateTextureData(rctx=%p, texture=%p, data=%p, rect=%p)\n", rctx, texture, data, rect));
 
     if (!texture || !data || !rect) {
-        D(bug("ZuneRenderer: Invalid parameters\n"));
+        D(bug("ZuneGfx: Invalid parameters\n"));
         return FALSE;
     }
 
     if (rect->x + rect->width > texture->width || rect->y + rect->height > texture->height) {
-        D(bug("ZuneRenderer: Update region out of bounds\n"));
+        D(bug("ZuneGfx: Update region out of bounds\n"));
         return FALSE;
     }
 
@@ -50,12 +50,12 @@ AROS_LH4(BOOL, ZuneUpdateTextureData,
     }
 
     if (!texture->pixel_data) {
-        D(bug("ZuneRenderer: No pixel_data for CPU update path\n"));
+        D(bug("ZuneGfx: No pixel_data for CPU update path\n"));
         return FALSE;
     }
 
     if (texture->pixels_locked) {
-        D(bug("ZuneRenderer: Texture pixels are locked\n"));
+        D(bug("ZuneGfx: Texture pixels are locked\n"));
         return FALSE;
     }
 
@@ -69,7 +69,7 @@ AROS_LH4(BOOL, ZuneUpdateTextureData,
         dst_ptr += texture->pitch;
     }
 
-    D(bug("ZuneRenderer: Texture data updated successfully (CPU fallback)\n"));
+    D(bug("ZuneGfx: Texture data updated successfully (CPU fallback)\n"));
 
     EXIT_FUNCTION("ZuneUpdateTextureData");
     return TRUE;

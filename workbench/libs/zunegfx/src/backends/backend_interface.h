@@ -2,9 +2,9 @@
 #define ZUNERENDERER_BACKEND_INTERFACE_H
 
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - New Unified Backend Interface
+    ZuneGfx Library - New Unified Backend Interface
 
     This header defines the new unified backend interface that works directly
     with ZuneTarget structures. This eliminates the need for dispatch layers
@@ -168,9 +168,9 @@ typedef struct ZuneBackendOps {
                            WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
                            UWORD width, UWORD height);
   BOOL (*CopyFromDrawingBoard)(struct RenderContext *rctx); /* Sync entire backend buffer to bitmap */
-  
+
   /* Region-based sync (more efficient than full sync) */
-  BOOL (*CopyRegionFromDrawingBoard)(struct RenderContext *rctx, 
+  BOOL (*CopyRegionFromDrawingBoard)(struct RenderContext *rctx,
                                      WORD x, WORD y, UWORD width, UWORD height);
 
   /* Text rendering */

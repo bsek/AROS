@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - Simplified AROS Initialization
+    ZuneGfx Library - Simplified AROS Initialization
 
     This module provides the AROS library initialization and cleanup using
     the standard AROS conf file system. The initialization follows AROS
@@ -43,42 +43,42 @@ struct Library *GLBase = NULL;
 /* Library Initialization Functions */
 /*****************************************************************************/
 
-static int ZuneRenderer_Init(struct IntZuneGfxBase *base)
+static int ZuneGfx_Init(struct IntZuneGfxBase *base)
 {
-    D(bug("ZuneRenderer: Library Init\n"));
+    D(bug("ZuneGfx: Library Init\n"));
 
     /* Initialize the library base */
-    if (!InitializeZuneRenderer(base)) {
-        D(bug("ZuneRenderer: Library initialization failed\n"));
+    if (!InitializeZuneGfx(base)) {
+        D(bug("ZuneGfx: Library initialization failed\n"));
         return FALSE;
     }
 
-    D(bug("ZuneRenderer: Library initialized successfully\n"));
+    D(bug("ZuneGfx: Library initialized successfully\n"));
     return TRUE;
 }
 
-static int ZuneRenderer_Expunge(struct IntZuneGfxBase *base)
+static int ZuneGfx_Expunge(struct IntZuneGfxBase *base)
 {
-    D(bug("ZuneRenderer: Library Expunge\n"));
+    D(bug("ZuneGfx: Library Expunge\n"));
 
     /* Clean up library resources */
-    CleanupZuneRenderer(base);
+    CleanupZuneGfx(base);
 
-    D(bug("ZuneRenderer: Library cleanup completed\n"));
+    D(bug("ZuneGfx: Library cleanup completed\n"));
     return TRUE;
 }
 
-static int ZuneRenderer_Open(struct IntZuneGfxBase *base)
+static int ZuneGfx_Open(struct IntZuneGfxBase *base)
 {
-    D(bug("ZuneRenderer: Library Open (OpenCnt: %ld)\n", base->libnode.lib_OpenCnt));
+    D(bug("ZuneGfx: Library Open (OpenCnt: %ld)\n", base->libnode.lib_OpenCnt));
 
     /* Nothing special needed for open in this library */
     return TRUE;
 }
 
-static int ZuneRenderer_Close(struct IntZuneGfxBase *base)
+static int ZuneGfx_Close(struct IntZuneGfxBase *base)
 {
-    D(bug("ZuneRenderer: Library Close (OpenCnt: %ld)\n", base->libnode.lib_OpenCnt));
+    D(bug("ZuneGfx: Library Close (OpenCnt: %ld)\n", base->libnode.lib_OpenCnt));
 
     /* Nothing special needed for close in this library */
     return TRUE;
@@ -89,10 +89,10 @@ static int ZuneRenderer_Close(struct IntZuneGfxBase *base)
 /*****************************************************************************/
 
 /* Tell AROS when to call our initialization functions */
-ADD2INITLIB(ZuneRenderer_Init, 0)
-ADD2EXPUNGELIB(ZuneRenderer_Expunge, 0)
-ADD2OPENLIB(ZuneRenderer_Open, 0)
-ADD2CLOSELIB(ZuneRenderer_Close, 0)
+ADD2INITLIB(ZuneGfx_Init, 0)
+ADD2EXPUNGELIB(ZuneGfx_Expunge, 0)
+ADD2OPENLIB(ZuneGfx_Open, 0)
+ADD2CLOSELIB(ZuneGfx_Close, 0)
 
 /*****************************************************************************/
 /* Version Information */

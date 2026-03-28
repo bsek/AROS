@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - Antialiasing Internal Header
+    ZuneGfx Library - Antialiasing Internal Header
 */
 
 #ifndef ZUNEGFX_ANTIALIASING_INTERN_H

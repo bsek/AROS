@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - OpenGL Backend Sync & Blit Functions
+    ZuneGfx Library - OpenGL Backend Sync & Blit Functions
 
     Functions for synchronizing between OpenGL framebuffers and RastPorts,
     and for blitting FBO contents to screen.
@@ -33,7 +33,7 @@ void OpenGLCopyFromRastPort(struct RenderContext *rctx, struct RastPort *src_rp,
     }
 
     D(bug("[ZuneGfx:OpenGL] CopyFromRastPort: ENTER, switching to target\n"));
-    
+
     /* OpenGL_SwitchToTarget -> OpenGL_SwitchToDrawingBoard now handles context switching */
     if (!OpenGL_SwitchToTarget(rctx)) {
         D(bug("[ZuneGfx:OpenGL] CopyFromRastPort: SwitchToTarget FAILED\n"));
@@ -61,26 +61,8 @@ void OpenGLCopyFromRastPort(struct RenderContext *rctx, struct RastPort *src_rp,
         D(bug("[ZuneGfx:OpenGL] CopyFromRastPort: ReadRastPortToBuffer FAILED\n"));
         return;
     }
-    
-    /* Debug: sample some pixels from the RastPort data */
-    D(bug("[ZuneGfx:OpenGL] CopyFromRastPort: RastPort pixel[0] RGBA = %02x %02x %02x %02x\n",
-          pixelbuffer[0], pixelbuffer[1], pixelbuffer[2], pixelbuffer[3]));
-    /* Sample a pixel that should be in the yellow rect area (around y=150, x=50) */
-    {
-        ULONG offset = (150 * width + 50) * 4;
-        if (offset + 3 < (ULONG)width * height * 4) {
-            D(bug("[ZuneGfx:OpenGL] CopyFromRastPort: RastPort pixel at (50,150) RGBA = %02x %02x %02x %02x\n",
-                  pixelbuffer[offset], pixelbuffer[offset+1], pixelbuffer[offset+2], pixelbuffer[offset+3]));
-        }
-    }
 
-    /*
-     * Upload pixel buffer directly to texture WITHOUT flipping.
-     * 
-     * The projection matrix uses glOrtho(0, width, height, 0, -1, 1) which
-     * already flips Y to match screen coordinates. If we also flip the
-     * pixel data, we get double-flipping which puts content at wrong Y.
-     */
+    /* Upload pixel buffer to texture (no Y-flip needed, ortho projection handles it) */
     texture = OpenGL_UploadTextureFromBuffer(pixelbuffer, width, height);
     FreeVec(pixelbuffer);
 
@@ -98,31 +80,17 @@ void OpenGLCopyFromRastPort(struct RenderContext *rctx, struct RastPort *src_rp,
     if (glUseProgram_ptr) {
         glUseProgram_ptr(0);
     }
-    
-    D(bug("[ZuneGfx:OpenGL] CopyFromRastPort: GL state: TEXTURE_2D=%d, bound tex=%u\n",
-          glIsEnabled(GL_TEXTURE_2D), texture));
 
-    /*
-     * Ensure correct viewport and projection for the target.
-     * This is critical when drawing the full-size texture to the FBO,
-     * as the projection matrix must match the FBO dimensions.
-     */
+    /* Set up viewport and projection to match FBO dimensions */
     if (rctx->target_board) {
         struct DrawingBoard *board = rctx->target_board;
         OpenGLFBOData *fbo = (OpenGLFBOData *)board->backend_data;
-        
-        D(bug("[ZuneGfx:OpenGL] CopyFromRastPort: board=%dx%d, texture=%dx%d, dst=%d,%d\n",
-              board->width, board->height, width, height, dst_x, dst_y));
-        
-        /*
-         * Explicitly re-bind the FBO before drawing.
-         * glAMakeCurrent may have reset the framebuffer binding.
-         */
+
+        /* Re-bind FBO (glAMakeCurrent may have reset the binding) */
         if (fbo && fbo->valid && glBindFramebuffer_ptr) {
-            D(bug("[ZuneGfx:OpenGL] CopyFromRastPort: Re-binding FBO %u before draw\n", fbo->fbo_id));
             glBindFramebuffer_ptr(GL_FRAMEBUFFER, fbo->fbo_id);
         }
-        
+
         glViewport(0, 0, board->width, board->height);
         glMatrixMode(GL_PROJECTION);
         glLoadIdentity();
@@ -132,30 +100,10 @@ void OpenGLCopyFromRastPort(struct RenderContext *rctx, struct RastPort *src_rp,
     }
 
     glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-    D(bug("[ZuneGfx:OpenGL] CopyFromRastPort: Drawing textured quad at %d,%d size %dx%d\n",
-          dst_x, dst_y, width, height));
     OpenGL_DrawTexturedQuad(dst_x, dst_y, width, height, FALSE);
-    
-    /* Ensure the draw is flushed to the FBO */
+
     glFlush();
     glFinish();
-    
-    /* Debug: verify FBO content immediately after draw */
-    {
-        GLint current_fbo = 0;
-        UBYTE test_pixel[4] = {0, 0, 0, 0};
-        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &current_fbo);
-        D(bug("[ZuneGfx:OpenGL] CopyFromRastPort: After draw, current FBO binding = %d\n", current_fbo));
-        
-        /* Read back a pixel that should be yellow (150, 50 in screen coords) */
-        /* Note: OpenGL Y is flipped, so we need to flip the Y coordinate */
-        if (rctx->target_board) {
-            WORD read_y = rctx->target_board->height - 150 - 1;
-            glReadPixels(50, read_y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, test_pixel);
-            D(bug("[ZuneGfx:OpenGL] CopyFromRastPort: FBO readback at (50,%d) RGBA = %02x %02x %02x %02x\n",
-                  read_y, test_pixel[0], test_pixel[1], test_pixel[2], test_pixel[3]));
-        }
-    }
 
     glEnable(GL_BLEND);
     glDisable(GL_TEXTURE_2D);
@@ -257,7 +205,7 @@ void OpenGL_BlitFBOToRastPort(struct DrawingBoard *board, struct RastPort *dst_r
      */
     glFlush();
     glFinish();
-    
+
     if (g_opengl_priv && g_opengl_priv->gl_context) {
         GLAContext current_ctx = glAGetCurrentContext();
         D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: current ctx=%p, global ctx=%p\n",
@@ -314,17 +262,7 @@ void OpenGL_BlitFBOToRastPort(struct DrawingBoard *board, struct RastPort *dst_r
                     dst_rp, dst_x, dst_y,
                     width, height, RECTFMT_RGBA);
 
-    /* Verify the write by reading back a sample pixel */
-    if (CyberGfxBase && dst_rp->BitMap) {
-        UBYTE verify[4];
-        ReadPixelArray(verify, 0, 0, 4, dst_rp, dst_x, dst_y, 1, 1, RECTFMT_RGBA);
-        D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: verify readback RGBA = %02x %02x %02x %02x\n",
-              verify[0], verify[1], verify[2], verify[3]));
-    }
-
     FreeVec(pixelbuffer);
-    
-    D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: done\n"));
 }
 
 /*****************************************************************************/
@@ -521,16 +459,12 @@ void OpenGL_SyncFromRastPort(struct RenderContext *rctx)
     glDeleteTextures(1, &texture);
 }
 
-/*
- * OpenGL_SyncIfNeeded - Check if we need to sync from RastPort and do it if necessary.
- */
 void OpenGL_SyncIfNeeded(struct RenderContext *rctx)
 {
     if (!g_opengl_priv || !g_opengl_priv->needs_sync) {
         return;
     }
 
-//    OpenGL_SyncFromRastPort(rctx);
     g_opengl_priv->needs_sync = FALSE;
 }
 

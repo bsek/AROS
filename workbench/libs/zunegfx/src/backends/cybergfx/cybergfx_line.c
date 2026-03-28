@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - CyberGraphics Line Drawing Implementation
+    ZuneGfx Library - CyberGraphics Line Drawing Implementation
 
     This file implements line drawing functions for the CyberGraphics backend,
     including Bresenham line algorithm and optimized drawing paths for both
@@ -38,7 +38,7 @@ static void CybergfxDrawLineAA(struct RenderContext *rctx, WORD x1, WORD y1, WOR
  *****************************************************************************/
 static void draw_line_bresenham(struct RenderContext *rctx, UWORD start_x, UWORD start_y, UWORD end_x, UWORD end_y, struct InternalColor *color,
                                 BOOL use_direct_pixels, UWORD line_width) {
-    D(bug("[ZuneRenderer] DrawLineBresenham: start(%d,%d), end(%d,%d), width=%d, direct=%d\n", start_x, start_y, end_x, end_y, line_width,
+    D(bug("[ZuneGfx] DrawLineBresenham: start(%d,%d), end(%d,%d), width=%d, direct=%d\n", start_x, start_y, end_x, end_y, line_width,
           use_direct_pixels));
 
     struct RastPort *rastport;
@@ -176,7 +176,7 @@ static void draw_straight_line_rastport(struct RenderContext *rctx, struct RastP
     EXIT_FUNCTION("CybergfxDrawStraightLineFillPixelArray");
 }
 
-static void draw_straigth_line(struct RenderContext *rctx, UWORD start_x, UWORD start_y, UWORD end_x, UWORD end_y, UWORD line_width,
+static void draw_straight_line(struct RenderContext *rctx, UWORD start_x, UWORD start_y, UWORD end_x, UWORD end_y, UWORD line_width,
                                struct InternalColor *color) {
     ENTER_FUNCTION("draw_straight_line");
 
@@ -260,7 +260,7 @@ static void draw_straigth_line(struct RenderContext *rctx, UWORD start_x, UWORD 
 /*****************************************************************************
  * CybergfxDrawLine
  *
- * Line drawing implementation handling straigth, diagonal lines with optional
+ * Line drawing implementation handling straight, diagonal lines with optional
  * thickness and anti-aliasing
  *****************************************************************************/
 void CybergfxDrawLine(struct RenderContext *rctx, WORD start_x, WORD start_y, WORD end_x, WORD end_y, UWORD line_width, struct InternalColor *color,
@@ -289,7 +289,7 @@ void CybergfxDrawLine(struct RenderContext *rctx, WORD start_x, WORD start_y, WO
     /* Check if we have a straight line (horizontal or vertical) */
     /* For straight lines, we can use more optimized drawing functions */
     if (start_x == end_x || start_y == end_y) {
-        draw_straigth_line(rctx, start_x, start_y, end_x, end_y, line_width, color);
+        draw_straight_line(rctx, start_x, start_y, end_x, end_y, line_width, color);
         EXIT_FUNCTION("CybergfxDrawLine");
         return;
     }

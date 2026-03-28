@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZuneUnlockTexturePixels
+    ZuneGfx Library - ZuneUnlockTexturePixels
 */
 
 #include "../backends/backend_interface.h"
@@ -23,19 +23,19 @@ AROS_LH2(void, ZuneUnlockTexturePixels,
 
     ENTER_FUNCTION("ZuneUnlockTexturePixels");
 
-    D(bug("ZuneRenderer: ZuneUnlockTexturePixels(rctx=%p, texture=%p)\n", rctx, texture));
+    D(bug("ZuneGfx: ZuneUnlockTexturePixels(rctx=%p, texture=%p)\n", rctx, texture));
 
     ZuneBackend *backend = GetTextureBackend(rctx, texture);
     if (backend && backend->ops && backend->ops->UnlockTexturePixels) {
         backend->ops->UnlockTexturePixels(texture);
-        D(bug("ZuneRenderer: Texture pixels unlocked (backend)\n"));
+        D(bug("ZuneGfx: Texture pixels unlocked (backend)\n"));
         EXIT_FUNCTION("ZuneUnlockTexturePixels");
         return;
     }
 
     UnlockTexturePixelsInternal(texture);
 
-    D(bug("ZuneRenderer: Texture pixels unlocked\n"));
+    D(bug("ZuneGfx: Texture pixels unlocked\n"));
 
     EXIT_FUNCTION("ZuneUnlockTexturePixels");
 

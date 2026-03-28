@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZuneCreateRoundedRectRegion
+    ZuneGfx Library - ZuneCreateRoundedRectRegion
 */
 
 #include <aros/libcall.h>
@@ -49,7 +49,7 @@ NOTES
     Corner radius is clamped to half the smaller dimension.
 
 SEE ALSO
-    ZuneCreateCircleRegion(), ZuneCreateEllipseRegion(), DisposeRegion()
+    ZuneCreateCircleRegion(), DisposeRegion()
 
 *****************************************************************************/
 {
@@ -63,7 +63,7 @@ SEE ALSO
   ENTER_FUNCTION("ZuneCreateRoundedRectRegion");
 
   if (!rect_input || rect_input->width == 0 || rect_input->height == 0) {
-    D(bug("ZuneRenderer: Invalid rectangle for rounded rect region (%p)\n", rect_input));
+    D(bug("ZuneGfx: Invalid rectangle for rounded rect region (%p)\n", rect_input));
     EXIT_FUNCTION("ZuneCreateRoundedRectRegion");
     return NULL;
   }
@@ -75,7 +75,7 @@ SEE ALSO
 
   region = NewRegion();
   if (!region) {
-    D(bug("ZuneRenderer: Failed to create rounded rectangle region\n"));
+    D(bug("ZuneGfx: Failed to create rounded rectangle region\n"));
     EXIT_FUNCTION("ZuneCreateRoundedRectRegion");
     return NULL;
   }
@@ -170,7 +170,7 @@ SEE ALSO
     }
   }
 
-  D(bug("ZuneRenderer: Created rounded rect region (%d,%d %dx%d) radius=%d\n",
+  D(bug("ZuneGfx: Created rounded rect region (%d,%d %dx%d) radius=%d\n",
         x, y, w, h, effective_radius));
 
   EXIT_FUNCTION("ZuneCreateRoundedRectRegion");

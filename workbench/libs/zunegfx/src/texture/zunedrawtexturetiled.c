@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZuneDrawTextureTiled
+    ZuneGfx Library - ZuneDrawTextureTiled
 */
 
 #include "../backends/backend_interface.h"
@@ -26,15 +26,15 @@ AROS_LH3(void, ZuneDrawTextureTiled,
 
     ENTER_FUNCTION("ZuneDrawTextureTiled");
 
-    D(bug("ZuneRenderer: ZuneDrawTextureTiled(rctx=%p, texture=%p, dest_rect=%p)\n", rctx, texture, dest_rect));
+    D(bug("ZuneGfx: ZuneDrawTextureTiled(rctx=%p, texture=%p, dest_rect=%p)\n", rctx, texture, dest_rect));
 
     if (!ValidateRenderContext(rctx) || !texture || !dest_rect) {
-        D(bug("ZuneRenderer: Invalid parameters\n"));
+        D(bug("ZuneGfx: Invalid parameters\n"));
         return;
     }
 
     if (!ValidateTexture(texture)) {
-        D(bug("ZuneRenderer: Invalid texture\n"));
+        D(bug("ZuneGfx: Invalid texture\n"));
         return;
     }
 
@@ -42,7 +42,7 @@ AROS_LH3(void, ZuneDrawTextureTiled,
     UWORD texture_height = texture->height;
 
     if (texture_width == 0 || texture_height == 0) {
-        D(bug("ZuneRenderer: Texture has zero dimensions\n"));
+        D(bug("ZuneGfx: Texture has zero dimensions\n"));
         return;
     }
 
@@ -53,16 +53,16 @@ AROS_LH3(void, ZuneDrawTextureTiled,
 
     /*
      * FAST PATH: Try optimized tiled rendering for ARGB32 textures.
-     * 
+     *
      * CybergfxDrawTextureTiledFast uses row-by-row WritePixelArray calls
      * which is significantly faster than drawing individual tiles.
      * This matches the performance characteristics of the legacy
      * dt_put_on_rastport_tiled() function.
      */
-    if (CybergfxDrawTextureTiledFast(rctx, texture, dest_x, dest_y, 
+    if (CybergfxDrawTextureTiledFast(rctx, texture, dest_x, dest_y,
                                      dest_width, dest_height)) {
         /* Fast path succeeded */
-        D(bug("ZuneRenderer: Used fast tiled rendering path\n"));
+        D(bug("ZuneGfx: Used fast tiled rendering path\n"));
         EXIT_FUNCTION("ZuneDrawTextureTiled");
         return;
     }
@@ -71,13 +71,13 @@ AROS_LH3(void, ZuneDrawTextureTiled,
      * SLOW PATH: Fall back to drawing individual tiles.
      * Used when fast path is unavailable (non-ARGB32, DrawingBoard target, etc.)
      */
-    D(bug("ZuneRenderer: Using slow tiled rendering path\n"));
+    D(bug("ZuneGfx: Using slow tiled rendering path\n"));
 
     /* Calculate how many complete tiles we need */
     UWORD tiles_x = (dest_width + texture_width - 1) / texture_width;
     UWORD tiles_y = (dest_height + texture_height - 1) / texture_height;
 
-    D(bug("ZuneRenderer: Tiling %dx%d texture across %dx%d area (%d x %d tiles)\n", texture_width, texture_height, dest_width, dest_height, tiles_x,
+    D(bug("ZuneGfx: Tiling %dx%d texture across %dx%d area (%d x %d tiles)\n", texture_width, texture_height, dest_width, dest_height, tiles_x,
           tiles_y));
 
     /* Draw tiles row by row */

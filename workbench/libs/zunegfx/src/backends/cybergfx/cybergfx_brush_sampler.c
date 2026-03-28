@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - Brush Sampling Implementation
+    ZuneGfx Library - Brush Sampling Implementation
 */
 
 #include "cybergfx_brush_sampler.h"
@@ -81,6 +81,55 @@ void PrepareBrushForRendering(struct RenderContext *rctx, struct ZuneBrush *brus
         brush->internal.linear_cache.rasterized_pixels = pixels;
         brush->internal.linear_cache.rasterized_width = rect_w;
         brush->internal.linear_cache.rasterized_height = rect_h;
+      }
+    }
+    break;
+  }
+
+  case ZUNE_BRUSH_TYPE_RADIAL_GRADIENT: {
+    float center_x = rect_x + brush->data.radial.center.x;
+    float center_y = rect_y + brush->data.radial.center.y;
+    float radius = (float)brush->data.radial.radius;
+
+    brush->internal.radial_cache.center_x = center_x;
+    brush->internal.radial_cache.center_y = center_y;
+    brush->internal.radial_cache.inv_radius = (radius > 0.001f) ? (1.0f / radius) : 0.0f;
+
+    /* Pre-rasterize if dimensions are reasonable (max 512KB) */
+    ULONG pixel_count = (ULONG)rect_w * rect_h;
+    if (pixel_count > 0 && pixel_count <= 131072 &&
+        brush->data.radial.stops && brush->data.radial.stop_count > 0 &&
+        radius > 0.001f) {
+
+      if (brush->internal.radial_cache.rasterized_pixels) {
+        FreeVec(brush->internal.radial_cache.rasterized_pixels);
+        brush->internal.radial_cache.rasterized_pixels = NULL;
+      }
+
+      ULONG *pixels = AllocVec(pixel_count * sizeof(ULONG), MEMF_PUBLIC);
+      if (pixels) {
+        ULONG *dst = pixels;
+        float inv_r = brush->internal.radial_cache.inv_radius;
+
+        for (UWORD y = 0; y < rect_h; y++) {
+          float dy = (rect_y + y) - center_y;
+          float dy2 = dy * dy;
+          for (UWORD x = 0; x < rect_w; x++) {
+            float dx = (rect_x + x) - center_x;
+            float dist = sqrtf(dx * dx + dy2);
+            float t = dist * inv_r;
+
+            UBYTE r, g, b, a;
+            InterpolateGradientStops(brush->data.radial.stops,
+                                     brush->data.radial.stop_count, t,
+                                     &r, &g, &b, &a);
+            *dst++ = ZUNE_COLOR_ARGB32(a, r, g, b);
+          }
+        }
+
+        brush->internal.radial_cache.rasterized_pixels = pixels;
+        brush->internal.radial_cache.rasterized_width = rect_w;
+        brush->internal.radial_cache.rasterized_height = rect_h;
       }
     }
     break;
@@ -362,6 +411,46 @@ void SampleBrush(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
     break;
   }
 
+  case ZUNE_BRUSH_TYPE_RADIAL_GRADIENT: {
+    if (!brush->internal.valid) {
+      *r = *g = *b = *a = 0;
+      break;
+    }
+
+    /* Use pre-rasterized cache if available */
+    if (brush->internal.radial_cache.rasterized_pixels &&
+        brush->internal.radial_cache.rasterized_width > 0 &&
+        brush->internal.radial_cache.rasterized_height > 0) {
+      WORD rel_x = px - rect_x;
+      WORD rel_y = py - rect_y;
+
+      if (rel_x < 0) rel_x = 0;
+      if (rel_y < 0) rel_y = 0;
+      if (rel_x >= brush->internal.radial_cache.rasterized_width)
+        rel_x = brush->internal.radial_cache.rasterized_width - 1;
+      if (rel_y >= brush->internal.radial_cache.rasterized_height)
+        rel_y = brush->internal.radial_cache.rasterized_height - 1;
+
+      ULONG pixel = brush->internal.radial_cache.rasterized_pixels[
+          rel_y * brush->internal.radial_cache.rasterized_width + rel_x];
+      *a = ZUNE_GET_ALPHA(pixel);
+      *r = ZUNE_GET_RED(pixel);
+      *g = ZUNE_GET_GREEN(pixel);
+      *b = ZUNE_GET_BLUE(pixel);
+      break;
+    }
+
+    /* Fallback: compute per-pixel */
+    float dx = px - brush->internal.radial_cache.center_x;
+    float dy = py - brush->internal.radial_cache.center_y;
+    float dist = sqrtf(dx * dx + dy * dy);
+    float t = dist * brush->internal.radial_cache.inv_radius;
+
+    InterpolateGradientStops(brush->data.radial.stops,
+                             brush->data.radial.stop_count, t, r, g, b, a);
+    break;
+  }
+
   case ZUNE_BRUSH_TYPE_PATTERN: {
     if (!brush->internal.valid) {
       *r = *g = *b = *a = 0;
@@ -483,6 +572,49 @@ void SampleBrushBatch4(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
     break;
   }
 
+  case ZUNE_BRUSH_TYPE_RADIAL_GRADIENT: {
+    if (!brush->internal.valid) {
+      for (WORD i = 0; i < 4; i++) {
+        r[i] = g[i] = b[i] = a[i] = 0;
+      }
+      break;
+    }
+
+    /* Use pre-rasterized cache if available */
+    if (brush->internal.radial_cache.rasterized_pixels &&
+        brush->internal.radial_cache.rasterized_width > 0 &&
+        brush->internal.radial_cache.rasterized_height > 0) {
+      WORD rel_y = py - rect_y;
+      if (rel_y < 0) rel_y = 0;
+      if (rel_y >= brush->internal.radial_cache.rasterized_height)
+        rel_y = brush->internal.radial_cache.rasterized_height - 1;
+
+      ULONG *row = brush->internal.radial_cache.rasterized_pixels +
+                   rel_y * brush->internal.radial_cache.rasterized_width;
+      UWORD cache_w = brush->internal.radial_cache.rasterized_width;
+
+      for (WORD i = 0; i < 4; i++) {
+        WORD rel_x = px[i] - rect_x;
+        if (rel_x < 0) rel_x = 0;
+        if (rel_x >= cache_w) rel_x = cache_w - 1;
+
+        ULONG pixel = row[rel_x];
+        a[i] = ZUNE_GET_ALPHA(pixel);
+        r[i] = ZUNE_GET_RED(pixel);
+        g[i] = ZUNE_GET_GREEN(pixel);
+        b[i] = ZUNE_GET_BLUE(pixel);
+      }
+      break;
+    }
+
+    /* Fallback to scalar */
+    for (WORD i = 0; i < 4; i++) {
+      SampleBrush(brush, rect_x, rect_y, rect_w, rect_h, px[i], py, &r[i],
+                  &g[i], &b[i], &a[i]);
+    }
+    break;
+  }
+
   default:
     /* Fall back to scalar sampling */
     for (WORD i = 0; i < 4; i++) {
@@ -502,12 +634,19 @@ void CleanupBrushInternalState(struct ZuneBrush *brush) {
 
   /* internal.color is now inline, no need to free */
 
-  /* Free pre-rasterized gradient cache */
+  /* Free pre-rasterized gradient caches */
   if (brush->internal.linear_cache.rasterized_pixels) {
     FreeVec(brush->internal.linear_cache.rasterized_pixels);
     brush->internal.linear_cache.rasterized_pixels = NULL;
     brush->internal.linear_cache.rasterized_width = 0;
     brush->internal.linear_cache.rasterized_height = 0;
+  }
+
+  if (brush->internal.radial_cache.rasterized_pixels) {
+    FreeVec(brush->internal.radial_cache.rasterized_pixels);
+    brush->internal.radial_cache.rasterized_pixels = NULL;
+    brush->internal.radial_cache.rasterized_width = 0;
+    brush->internal.radial_cache.rasterized_height = 0;
   }
 
   /* Mark internal cache as invalid */
@@ -594,6 +733,49 @@ void SampleBrushBatch8(struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
       InterpolateGradientStops(brush->data.linear.stops,
                                brush->data.linear.stop_count, t, &r[i], &g[i],
                                &b[i], &a[i]);
+    }
+    break;
+  }
+
+  case ZUNE_BRUSH_TYPE_RADIAL_GRADIENT: {
+    if (!brush->internal.valid) {
+      for (WORD i = 0; i < 8; i++) {
+        r[i] = g[i] = b[i] = a[i] = 0;
+      }
+      break;
+    }
+
+    /* Use pre-rasterized cache if available */
+    if (brush->internal.radial_cache.rasterized_pixels &&
+        brush->internal.radial_cache.rasterized_width > 0 &&
+        brush->internal.radial_cache.rasterized_height > 0) {
+      WORD rel_y = py - rect_y;
+      if (rel_y < 0) rel_y = 0;
+      if (rel_y >= brush->internal.radial_cache.rasterized_height)
+        rel_y = brush->internal.radial_cache.rasterized_height - 1;
+
+      ULONG *row = brush->internal.radial_cache.rasterized_pixels +
+                   rel_y * brush->internal.radial_cache.rasterized_width;
+      UWORD cache_w = brush->internal.radial_cache.rasterized_width;
+
+      for (WORD i = 0; i < 8; i++) {
+        WORD rel_x = px[i] - rect_x;
+        if (rel_x < 0) rel_x = 0;
+        if (rel_x >= cache_w) rel_x = cache_w - 1;
+
+        ULONG pixel = row[rel_x];
+        a[i] = ZUNE_GET_ALPHA(pixel);
+        r[i] = ZUNE_GET_RED(pixel);
+        g[i] = ZUNE_GET_GREEN(pixel);
+        b[i] = ZUNE_GET_BLUE(pixel);
+      }
+      break;
+    }
+
+    /* Fallback to scalar */
+    for (WORD i = 0; i < 8; i++) {
+      SampleBrush(brush, rect_x, rect_y, rect_w, rect_h, px[i], py, &r[i],
+                  &g[i], &b[i], &a[i]);
     }
     break;
   }

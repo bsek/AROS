@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZuneCreateTextureFromFile
+    ZuneGfx Library - ZuneCreateTextureFromFile
 */
 
 #include "../backends/backend_interface.h"
@@ -37,7 +37,7 @@ AROS_LH4(struct ZuneTexture *, ZuneCreateTextureFromFile,
     ENTER_FUNCTION("ZuneCreateTextureFromFile");
 
     if (!filename) {
-        D(bug("ZuneRenderer: ZuneCreateTextureFromFile - NULL filename\n"));
+        D(bug("ZuneGfx: ZuneCreateTextureFromFile - NULL filename\n"));
         return NULL;
     }
 
@@ -58,7 +58,7 @@ AROS_LH4(struct ZuneTexture *, ZuneCreateTextureFromFile,
     myproc->pr_WindowPtr = oldwindowptr;
 
     if (!dt_obj) {
-        D(bug("ZuneRenderer: ZuneCreateTextureFromFile - Failed to load '%s'\n", filename));
+        D(bug("ZuneGfx: ZuneCreateTextureFromFile - Failed to load '%s'\n", filename));
         return NULL;
     }
 
@@ -79,10 +79,10 @@ AROS_LH4(struct ZuneTexture *, ZuneCreateTextureFromFile,
         }
         AddTextureToList(base, texture);
 
-        D(bug("ZuneRenderer: ZuneCreateTextureFromFile - Success: %dx%d texture from '%s'\n",
+        D(bug("ZuneGfx: ZuneCreateTextureFromFile - Success: %dx%d texture from '%s'\n",
               texture->width, texture->height, filename));
     } else {
-        D(bug("ZuneRenderer: ZuneCreateTextureFromFile - Failed to create texture from '%s'\n",
+        D(bug("ZuneGfx: ZuneCreateTextureFromFile - Failed to create texture from '%s'\n",
               filename));
     }
 

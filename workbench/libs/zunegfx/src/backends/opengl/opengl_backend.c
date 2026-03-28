@@ -1,9 +1,9 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - OpenGL Backend Core
+    ZuneGfx Library - OpenGL Backend Core
 
-    This file implements the core OpenGL rendering backend for ZuneRenderer:
+    This file implements the core OpenGL rendering backend for ZuneGfx:
     backend lifecycle, availability checks, context switching, pixel access,
     batching, blitting, and DrawingBoard management.
 
@@ -203,19 +203,24 @@ static void OpenGLCleanupBackend(ZuneBackendContext *ctx)
     /* Destroy the master context if it exists */
     if (priv->master_context) {
         glADestroyContext((GLAContext)priv->master_context);
+        /* If global context is the same as master (promoted), clear it too */
+        if (priv->gl_context == priv->master_context) {
+            priv->gl_context = NULL;
+            priv->context_created = FALSE;
+        }
         priv->master_context = NULL;
         priv->master_context_created = FALSE;
         priv->shared_contexts_supported = FALSE;
     }
 
-    /* Destroy the global GL context if it exists (fallback mode) */
+    /* Destroy the global GL context if it exists and is separate from master */
     if (priv->gl_context) {
         glADestroyContext((GLAContext)priv->gl_context);
         priv->gl_context = NULL;
         priv->context_created = FALSE;
     }
 
-    /* GL library is closed centrally in CleanupZuneRenderer() */
+    /* GL library is closed centrally in CleanupZuneGfx() */
     priv->GLBase = NULL;
     priv->gl_available = FALSE;
 
@@ -234,7 +239,7 @@ static void OpenGLCleanupBackend(ZuneBackendContext *ctx)
 
 static BOOL OpenGLIsAvailable(void)
 {
-    /* 
+    /*
      * Always re-check if GLBase became available.
      * This handles the case where GL library is opened after
      * initial backend registration.
@@ -244,7 +249,7 @@ static BOOL OpenGLIsAvailable(void)
         g_opengl_available_checked = TRUE;
         return TRUE;
     }
-    
+
     /* Return cached FALSE result if already checked and still not available */
     if (g_opengl_available_checked) {
         return g_opengl_available_cached;
@@ -516,7 +521,7 @@ BOOL OpenGL_SwitchToDrawingBoard(struct RenderContext *rctx)
     }
 
     board = rctx->target_board;
-    
+
     /*
      * CRITICAL: Ensure the global context is current before any GL operations.
      * Another application/compositor may have made a different context current.

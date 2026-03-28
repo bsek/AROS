@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - SIMD Abstraction Layer
+    ZuneGfx Library - SIMD Abstraction Layer
 
     This header provides a unified interface for SIMD operations across
     different architectures (SSE2, NEON) used in anti-aliased rendering.

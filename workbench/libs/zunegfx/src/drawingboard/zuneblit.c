@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZuneBlit
+    ZuneGfx Library - ZuneBlit
 */
 
 #include <aros/libcall.h>
@@ -15,7 +15,7 @@
 #include "../../include/zunegfx.h"
 #include "drawingboard_intern.h"
 
-#define DEBUG 1
+#define DEBUG 0
 #include <aros/debug.h>
 
 /*****************************************************************************
@@ -73,11 +73,11 @@ SEE ALSO
 
   ENTER_FUNCTION("ZuneBlit");
 
-  D(bug("ZuneRenderer: ZuneBlit(src_rctx=%p, dst_rctx=%p, src=%d,%d dst=%d,%d %dx%d)\n",
+  D(bug("ZuneGfx: ZuneBlit(src_rctx=%p, dst_rctx=%p, src=%d,%d dst=%d,%d %dx%d)\n",
         src_rctx, dst_rctx, src_x, src_y, dst_x, dst_y, width, height));
 
   if (!src_rctx || !dst_rctx) {
-    D(bug("ZuneRenderer: Invalid RenderContext parameters\n"));
+    D(bug("ZuneGfx: Invalid RenderContext parameters\n"));
     EXIT_FUNCTION("ZuneBlit");
     return;
   }

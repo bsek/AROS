@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZuneCreateDrawingBoardA
+    ZuneGfx Library - ZuneCreateDrawingBoardA
 */
 
 #include <aros/libcall.h>
@@ -12,7 +12,7 @@
 #include "../../include/zunegfx.h"
 #include "drawingboard_intern.h"
 
-#define DEBUG 1
+#define DEBUG 0
 #include <aros/debug.h>
 
 /*****************************************************************************
@@ -55,7 +55,7 @@ SEE ALSO
   ENTER_FUNCTION("ZuneCreateDrawingBoardA");
 
   if (!tags) {
-    D(bug("ZuneRenderer: ZuneCreateDrawingBoardA - NULL tags\n"));
+    D(bug("ZuneGfx: ZuneCreateDrawingBoardA - NULL tags\n"));
     EXIT_FUNCTION("ZuneCreateDrawingBoardA");
     return NULL;
   }
@@ -65,11 +65,11 @@ SEE ALSO
   height = (UWORD)LibGetTagData(ZUNE_DrawingBoard_Height, 0, tags);
   flags  = (ULONG)LibGetTagData(ZUNE_DrawingBoard_Flags, 0, tags);
 
-  D(bug("ZuneRenderer: ZuneCreateDrawingBoardA(rctx=%p, %dx%d, flags=0x%08x)\n",
+  D(bug("ZuneGfx: ZuneCreateDrawingBoardA(rctx=%p, %dx%d, flags=0x%08x)\n",
         rctx, width, height, flags));
 
   if (!rctx || !rctx->valid || width == 0 || height == 0) {
-    D(bug("ZuneRenderer: ZuneCreateDrawingBoardA - invalid parameters\n"));
+    D(bug("ZuneGfx: ZuneCreateDrawingBoardA - invalid parameters\n"));
     EXIT_FUNCTION("ZuneCreateDrawingBoardA");
     return NULL;
   }

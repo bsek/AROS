@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - DrawingBoard Internal Functions
+    ZuneGfx Library - DrawingBoard Internal Functions
 */
 
 #include <aros/libcall.h>
@@ -21,7 +21,7 @@
 #include "../../include/zunegfx.h"
 #include "drawingboard_intern.h"
 
-#define DEBUG 1
+#define DEBUG 0
 #include <aros/debug.h>
 
 /*****************************************************************************/
@@ -56,7 +56,7 @@ BOOL AllocateDrawingBoardBitmap(struct DrawingBoard *board,
 
   ENTER_FUNCTION("AllocateDrawingBoardBitmap");
 
-  D(bug("ZuneRenderer: Allocating bitmap %dx%dx%d, flags=0x%08x, friend=%p\n",
+  D(bug("ZuneGfx: Allocating bitmap %dx%dx%d, flags=0x%08x, friend=%p\n",
         board->width, board->height, board->depth, board->flags, friend_bitmap));
 
   /* Detect CyberGraphics availability */
@@ -64,27 +64,27 @@ BOOL AllocateDrawingBoardBitmap(struct DrawingBoard *board,
 
   if (backend_type == BACKEND_CYBERGFX) {
     /* CyberGraphics path */
-    D(bug("ZuneRenderer: Using CyberGraphics backend\n"));
+    D(bug("ZuneGfx: Using CyberGraphics backend\n"));
 
     /* Try hardware surface first if requested */
     if (board->flags & ZUNE_DRAWINGBOARD_HARDWARE) {
-      D(bug("ZuneRenderer: Attempting hardware surface allocation\n"));
+      D(bug("ZuneGfx: Attempting hardware surface allocation\n"));
       board->bitmap = AllocBitMap(board->width, board->height, board->depth,
                                   BMF_DISPLAYABLE | BMF_CLEAR, friend_bitmap);
       if (board->bitmap) {
         /* Check if it's really a CyberGraphics bitmap */
         if (GetCyberMapAttr(board->bitmap, CYBRMATTR_ISCYBERGFX)) {
           board->hardware_surface = TRUE;
-          D(bug("ZuneRenderer: Hardware surface allocated successfully\n"));
+          D(bug("ZuneGfx: Hardware surface allocated successfully\n"));
         } else {
           /* Not a CyberGraphics bitmap, free and try software */
-          D(bug("ZuneRenderer: Allocated bitmap is not CyberGraphics "
+          D(bug("ZuneGfx: Allocated bitmap is not CyberGraphics "
                 "compatible\n"));
           FreeBitMap(board->bitmap);
           board->bitmap = NULL;
         }
       } else {
-        D(bug("ZuneRenderer: Hardware surface allocation failed\n"));
+        D(bug("ZuneGfx: Hardware surface allocation failed\n"));
       }
     }
 
@@ -92,9 +92,9 @@ BOOL AllocateDrawingBoardBitmap(struct DrawingBoard *board,
     if (!board->bitmap) {
       if ((board->flags & ZUNE_DRAWINGBOARD_LINEARMEM) || (board->flags & ZUNE_DRAWINGBOARD_ALPHA)) {
         /* LINEARMEM or ALPHA flag: Force ARGB32 format for direct pixel access
-         * or alpha channel support. This gives us linear memory that can be 
+         * or alpha channel support. This gives us linear memory that can be
          * locked, but loses colormap inheritance from friend_bitmap. */
-        D(bug("ZuneRenderer: Allocating ARGB32 surface (LINEARMEM or ALPHA flag)\n"));
+        D(bug("ZuneGfx: Allocating ARGB32 surface (LINEARMEM or ALPHA flag)\n"));
         board->bitmap = AllocBitMap(board->width, board->height, 32,
                                     BMF_CLEAR | BMF_SPECIALFMT | SHIFT_PIXFMT(PIXFMT_ARGB32),
                                     NULL);
@@ -103,7 +103,7 @@ BOOL AllocateDrawingBoardBitmap(struct DrawingBoard *board,
         /* Default: Use friend_bitmap to inherit colormap for legacy pen drawing.
          * The bitmap may not support linear memory access (can't be locked),
          * but AA rendering will fall back to RasterPort path which still works. */
-        D(bug("ZuneRenderer: Allocating software surface with friend_bitmap\n"));
+        D(bug("ZuneGfx: Allocating software surface with friend_bitmap\n"));
         board->bitmap = AllocBitMap(board->width, board->height, board->depth,
                                     BMF_CLEAR, friend_bitmap);
       }
@@ -113,7 +113,7 @@ BOOL AllocateDrawingBoardBitmap(struct DrawingBoard *board,
     /* Get CyberGraphics attributes */
     if (board->bitmap) {
       board->pixel_format = GetCyberMapAttr(board->bitmap, CYBRMATTR_PIXFMT);
-      D(bug("ZuneRenderer: Pixel format: %u\n", board->pixel_format));
+      D(bug("ZuneGfx: Pixel format: %u\n", board->pixel_format));
     }
   } else if (backend_type == BACKEND_OPENGL) {
     /*
@@ -122,18 +122,18 @@ BOOL AllocateDrawingBoardBitmap(struct DrawingBoard *board,
      * pixel format (typically 24-bit RGB without alpha), which causes
      * WritePixelArray to discard the alpha channel when syncing FBO to bitmap.
      */
-    D(bug("ZuneRenderer: Creating ARGB32 bitmap for OpenGL backend\n"));
+    D(bug("ZuneGfx: Creating ARGB32 bitmap for OpenGL backend\n"));
     board->bitmap = AllocBitMap(board->width, board->height, 32,
                                 BMF_CLEAR | BMF_SPECIALFMT | SHIFT_PIXFMT(PIXFMT_ARGB32),
                                 NULL);
     board->hardware_surface = FALSE;
     if (board->bitmap) {
       board->pixel_format = PIXFMT_ARGB32;
-      D(bug("ZuneRenderer: ARGB32 bitmap allocated for OpenGL\n"));
+      D(bug("ZuneGfx: ARGB32 bitmap allocated for OpenGL\n"));
     }
   } else {
     /* Standard graphics.library path */
-    D(bug("ZuneRenderer: Creating graphics.library bitmap\n"));
+    D(bug("ZuneGfx: Creating graphics.library bitmap\n"));
     board->bitmap =
         AllocBitMap(board->width, board->height, board->depth, BMF_CLEAR, friend_bitmap);
     board->hardware_surface = FALSE;
@@ -141,7 +141,7 @@ BOOL AllocateDrawingBoardBitmap(struct DrawingBoard *board,
   }
 
   if (!board->bitmap) {
-    D(bug("ZuneRenderer: Bitmap allocation failed\n"));
+    D(bug("ZuneGfx: Bitmap allocation failed\n"));
     EXIT_FUNCTION("AllocateDrawingBoardBitmap");
     return FALSE;
   }
@@ -151,21 +151,21 @@ BOOL AllocateDrawingBoardBitmap(struct DrawingBoard *board,
     board->rastport =
         AllocVec(sizeof(struct RastPort), MEMF_CLEAR | MEMF_PUBLIC);
     if (!board->rastport) {
-      D(bug("ZuneRenderer: RastPort allocation failed\n"));
+      D(bug("ZuneGfx: RastPort allocation failed\n"));
       FreeBitMap(board->bitmap);
       board->bitmap = NULL;
       EXIT_FUNCTION("AllocateDrawingBoardBitmap");
       return FALSE;
     }
-    D(bug("ZuneRenderer: RastPort allocated for DrawingBoard\n"));
+    D(bug("ZuneGfx: RastPort allocated for DrawingBoard\n"));
   }
 
   /* Initialize the RastPort and associate it with the bitmap */
   InitRastPort(board->rastport);
   board->rastport->BitMap = board->bitmap;
-  D(bug("ZuneRenderer: RastPort initialized with BitMap %p\n", board->bitmap));
+  D(bug("ZuneGfx: RastPort initialized with BitMap %p\n", board->bitmap));
 
-  D(bug("ZuneRenderer: Bitmap allocated successfully (%s surface)\n",
+  D(bug("ZuneGfx: Bitmap allocated successfully (%s surface)\n",
         board->hardware_surface ? "hardware" : "software"));
 
   EXIT_FUNCTION("AllocateDrawingBoardBitmap");
@@ -258,12 +258,12 @@ void CleanupDrawingBoard(struct RenderContext *rctx, struct DrawingBoard *board)
 
 APTR LockDrawingBoardPixelsInternal(struct RenderContext *rctx, ULONG *pitch) {
   if (!ValidateDrawingBoard(rctx->target_board)) {
-    D(bug("ZuneRenderer: Invalid DrawingBoard\n"));
+    D(bug("ZuneGfx: Invalid DrawingBoard\n"));
     return NULL;
   }
 
   if (rctx->target_board->pixels_locked) {
-    D(bug("ZuneRenderer: DrawingBoard already locked\n"));
+    D(bug("ZuneGfx: DrawingBoard already locked\n"));
     return NULL;
   }
 
@@ -277,15 +277,15 @@ APTR LockDrawingBoardPixelsInternal(struct RenderContext *rctx, ULONG *pitch) {
 
 void UnlockDrawingBoardPixelsInternal(struct RenderContext *rctx) {
   if (!rctx) {
-    D(bug("ZuneRenderer: ZuneUnlockDrawingBoardPixels called with NULL RenderContext\n"));
+    D(bug("ZuneGfx: ZuneUnlockDrawingBoardPixels called with NULL RenderContext\n"));
     return;
   }
   if (!ValidateDrawingBoard(rctx->target_board)) {
-    D(bug("ZuneRenderer: Invalid DrawingBoard\n"));
+    D(bug("ZuneGfx: Invalid DrawingBoard\n"));
     return;
   }
   if (!rctx->target_board->pixels_locked) {
-    D(bug("ZuneRenderer: DrawingBoard already UNlocked\n"));
+    D(bug("ZuneGfx: DrawingBoard already UNlocked\n"));
     return;
   }
 
@@ -336,18 +336,18 @@ struct DrawingBoard *CreateDrawingBoardForRenderContextInternal(
 
   ENTER_FUNCTION("CreateDrawingBoardForRenderContextInternal");
 
-  D(bug("ZuneRenderer: CreateDrawingBoardForRenderContextInternal(rctx=%p, %dx%d, flags=0x%08x)\n",
+  D(bug("ZuneGfx: CreateDrawingBoardForRenderContextInternal(rctx=%p, %dx%d, flags=0x%08x)\n",
         rctx, width, height, flags));
 
   /* Validate parameters */
   if (!rctx || !rctx->valid) {
-    D(bug("ZuneRenderer: Invalid RenderContext\n"));
+    D(bug("ZuneGfx: Invalid RenderContext\n"));
     EXIT_FUNCTION("CreateDrawingBoardForRenderContextInternal");
     return NULL;
   }
 
   if (width == 0 || height == 0) {
-    D(bug("ZuneRenderer: Invalid dimensions\n"));
+    D(bug("ZuneGfx: Invalid dimensions\n"));
     EXIT_FUNCTION("CreateDrawingBoardForRenderContextInternal");
     return NULL;
   }
@@ -367,14 +367,14 @@ struct DrawingBoard *CreateDrawingBoardForRenderContextInternal(
    * Also force 32-bit if ZUNE_DRAWINGBOARD_ALPHA flag is set, for compositing.
    */
   if ((rctx->backend_type == BACKEND_OPENGL || (flags & ZUNE_DRAWINGBOARD_ALPHA)) && depth < 32) {
-    D(bug("ZuneRenderer: Forcing 32-bit depth for alpha support (was %d)\n", depth));
+    D(bug("ZuneGfx: Forcing 32-bit depth for alpha support (was %d)\n", depth));
     depth = 32;
   }
 
   /* Allocate DrawingBoard structure */
   board = AllocVec(sizeof(struct DrawingBoard), MEMF_CLEAR | MEMF_PUBLIC);
   if (!board) {
-    D(bug("ZuneRenderer: Failed to allocate DrawingBoard\n"));
+    D(bug("ZuneGfx: Failed to allocate DrawingBoard\n"));
     EXIT_FUNCTION("CreateDrawingBoardForRenderContextInternal");
     return NULL;
   }
@@ -406,7 +406,7 @@ struct DrawingBoard *CreateDrawingBoardForRenderContextInternal(
   }
 
   if (!AllocateDrawingBoardBitmap(board, rctx->backend_type, friend_bitmap)) {
-    D(bug("ZuneRenderer: Failed to allocate DrawingBoard bitmap\n"));
+    D(bug("ZuneGfx: Failed to allocate DrawingBoard bitmap\n"));
     FreeVec(board);
     EXIT_FUNCTION("CreateDrawingBoardForRenderContextInternal");
     return NULL;
@@ -415,10 +415,10 @@ struct DrawingBoard *CreateDrawingBoardForRenderContextInternal(
   /* Store colormap from RenderContext for legacy pen-based drawing. */
   if (rctx->colormap) {
     board->colormap = rctx->colormap;
-    D(bug("ZuneRenderer: DrawingBoard colormap set from RenderContext: %p\n", board->colormap));
+    D(bug("ZuneGfx: DrawingBoard colormap set from RenderContext: %p\n", board->colormap));
   }
 
-  D(bug("ZuneRenderer: DrawingBoard bitmap allocated: %p\n", board->bitmap));
+  D(bug("ZuneGfx: DrawingBoard bitmap allocated: %p\n", board->bitmap));
 
   /*
    * For OpenGL backend: FBO will be created lazily when the DrawingBoard
@@ -430,7 +430,7 @@ struct DrawingBoard *CreateDrawingBoardForRenderContextInternal(
   /* Add to tracking list */
   AddDrawingBoardToList(base, board);
 
-  D(bug("ZuneRenderer: DrawingBoard created for RenderContext, bitmap=%p\n",
+  D(bug("ZuneGfx: DrawingBoard created for RenderContext, bitmap=%p\n",
         board->bitmap));
 
   EXIT_FUNCTION("CreateDrawingBoardForRenderContextInternal");
@@ -537,7 +537,7 @@ void BlitDrawingBoardInternal(struct DrawingBoard *src,
                               WORD dst_x, WORD dst_y, UWORD width,
                               UWORD height) {
 
-  D(bug("ZuneRenderer: Blitting between DrawingBoards (%d,%d)->(%d,%d) %dx%d\n",
+  D(bug("ZuneGfx: Blitting between DrawingBoards (%d,%d)->(%d,%d) %dx%d\n",
         src_x, src_y, dst_x, dst_y, width, height));
 
   /*

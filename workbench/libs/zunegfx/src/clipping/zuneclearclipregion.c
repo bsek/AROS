@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZuneClearClipRegion
+    ZuneGfx Library - ZuneClearClipRegion
 */
 
 #include <aros/libcall.h>
@@ -62,7 +62,7 @@ SEE ALSO
     rctx->clip_region = NULL;
   }
 
-  D(bug("ZuneRenderer: Clipping disabled\n"));
+  D(bug("ZuneGfx: Clipping disabled\n"));
 
   EXIT_FUNCTION("ZuneClearClipRegion");
 

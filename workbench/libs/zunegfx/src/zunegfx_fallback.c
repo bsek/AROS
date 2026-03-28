@@ -1,5 +1,5 @@
 /*
-    Zune Renderer Library - Software Fallbacks
+    ZuneGfx Library - Software Fallbacks
 
     Provides basic graphics.library based implementations that are used when
     no backend (or no specific backend function) is available. These routines

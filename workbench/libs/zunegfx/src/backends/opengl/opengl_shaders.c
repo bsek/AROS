@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - OpenGL Backend Shader Functions
+    ZuneGfx Library - OpenGL Backend Shader Functions
 
     This file contains all shader-related code extracted from opengl_backend.c:
     - GLSL shader source strings
@@ -278,7 +278,7 @@ GLuint OpenGL_CompileShader(GLenum type, const GLchar *source)
     GLint compiled;
     TEXT log[512];
 
-    D(bug("[ZuneGfx:OpenGL] CompileShader: type=%s\n", 
+    D(bug("[ZuneGfx:OpenGL] CompileShader: type=%s\n",
           type == GL_VERTEX_SHADER ? "VERTEX" : "FRAGMENT"));
 
     if (!glCreateShader_ptr || !glShaderSource_ptr || !glCompileShader_ptr) {

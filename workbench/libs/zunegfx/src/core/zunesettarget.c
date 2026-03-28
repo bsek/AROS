@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZuneSetTarget
+    ZuneGfx Library - ZuneSetTarget
 */
 
 #include <aros/libcall.h>
@@ -47,18 +47,18 @@ RESULT
   ENTER_FUNCTION("ZuneSetTarget");
 
   if (!rctx || !rctx->valid) {
-    D(bug("ZuneRenderer: ZuneSetTarget - invalid RenderContext\n"));
+    D(bug("ZuneGfx: ZuneSetTarget - invalid RenderContext\n"));
     EXIT_FUNCTION("ZuneSetTarget");
     return FALSE;
   }
 
   if (board && !board->valid) {
-    D(bug("ZuneRenderer: ZuneSetTarget - invalid DrawingBoard\n"));
+    D(bug("ZuneGfx: ZuneSetTarget - invalid DrawingBoard\n"));
     EXIT_FUNCTION("ZuneSetTarget");
     return FALSE;
   }
 
-  D(bug("ZuneRenderer: ZuneSetTarget(rctx=%p, board=%p)\n", rctx, board));
+  D(bug("ZuneGfx: ZuneSetTarget(rctx=%p, board=%p)\n", rctx, board));
 
   /* Update target */
   rctx->target_board = board;
@@ -69,7 +69,7 @@ RESULT
     if (board->bitmap) {
       rctx->hidd_bitmap_obj = HIDD_BM_OBJ(board->bitmap);
     }
-    D(bug("ZuneRenderer: Target set to DrawingBoard %p (%dx%d)\n",
+    D(bug("ZuneGfx: Target set to DrawingBoard %p (%dx%d)\n",
           board, board->width, board->height));
   } else {
     /* Switching to window */
@@ -78,9 +78,9 @@ RESULT
       if (rctx->window->RPort && rctx->window->RPort->BitMap) {
         rctx->hidd_bitmap_obj = HIDD_BM_OBJ(rctx->window->RPort->BitMap);
       }
-      D(bug("ZuneRenderer: Target set to window %p RastPort\n", rctx->window));
+      D(bug("ZuneGfx: Target set to window %p RastPort\n", rctx->window));
     } else {
-      D(bug("ZuneRenderer: Warning - no window, keeping current target_rastport\n"));
+      D(bug("ZuneGfx: Warning - no window, keeping current target_rastport\n"));
     }
   }
 

@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - OpenGL Backend Global Variable Definitions
+    ZuneGfx Library - OpenGL Backend Global Variable Definitions
 
     All global state variables used across multiple OpenGL backend files.
     Declared as extern in opengl_intern.h.

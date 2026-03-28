@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - OpenGL Backend Drawing Primitives
+    ZuneGfx Library - OpenGL Backend Drawing Primitives
 
     Drawing operations: pixel, line, rectangle, circle, clear.
     Also includes RenderContext and color management.

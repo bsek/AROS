@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZuneCombineRegions
+    ZuneGfx Library - ZuneCombineRegions
 */
 
 #include <aros/libcall.h>
@@ -74,7 +74,7 @@ SEE ALSO
     return !OrRegionRegion(region, rctx->clip_region);
   }
 
-  D(bug("ZuneRenderer: Combined region with RenderContext clipping\n"));
+  D(bug("ZuneGfx: Combined region with RenderContext clipping\n"));
 
   return TRUE;
 

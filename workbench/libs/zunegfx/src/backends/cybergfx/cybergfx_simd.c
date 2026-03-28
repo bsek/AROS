@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - SIMD Implementation
+    ZuneGfx Library - SIMD Implementation
 
     This file implements SIMD-accelerated operations for anti-aliased rendering.
 */
@@ -683,7 +683,7 @@ static void cybergfx_blend_aa_pixels_batch4_neon(
   /* Process each pixel (scalar for now) */
   for (WORD i = 0; i < 4; i++) {
     UBYTE bg_a, bg_r, bg_g, bg_b;
-    extract_pixel_value(bg_pixels[i], &bg_a, &bg_r, &bg_g, &bg_b);
+    unpack_argb32_logical(bg_pixels[i], &bg_a, &bg_r, &bg_g, &bg_b);
 
     float r = (float)bg_r;
     float g = (float)bg_g;
@@ -714,7 +714,7 @@ static void cybergfx_blend_aa_pixels_batch4_neon(
     }
 
     if (pixel_changed) {
-      result_pixels[i] = make_pixel_value(bg_a, (UBYTE)r, (UBYTE)g, (UBYTE)b);
+      result_pixels[i] = pack_argb32_logical(bg_a, (UBYTE)r, (UBYTE)g, (UBYTE)b);
       *changed_mask |= (1 << i);
     } else {
       result_pixels[i] = bg_pixels[i];
@@ -739,7 +739,7 @@ static void cybergfx_blend_aa_pixels_batch4_sse2(
   /* Process each pixel (scalar for now - full SIMD unpack/pack is complex) */
   for (WORD i = 0; i < 4; i++) {
     UBYTE bg_a, bg_r, bg_g, bg_b;
-    extract_pixel_value(bg_pixels[i], &bg_a, &bg_r, &bg_g, &bg_b);
+    unpack_argb32_logical(bg_pixels[i], &bg_a, &bg_r, &bg_g, &bg_b);
 
     float r = (float)bg_r;
     float g = (float)bg_g;
@@ -770,7 +770,7 @@ static void cybergfx_blend_aa_pixels_batch4_sse2(
     }
 
     if (pixel_changed) {
-      result_pixels[i] = make_pixel_value(bg_a, (UBYTE)r, (UBYTE)g, (UBYTE)b);
+      result_pixels[i] = pack_argb32_logical(bg_a, (UBYTE)r, (UBYTE)g, (UBYTE)b);
       *changed_mask |= (1 << i);
     } else {
       result_pixels[i] = bg_pixels[i];
@@ -789,7 +789,7 @@ static void cybergfx_blend_aa_pixels_batch4_scalar(
 
   for (WORD i = 0; i < 4; i++) {
     UBYTE bg_a, bg_r, bg_g, bg_b;
-    extract_pixel_value(bg_pixels[i], &bg_a, &bg_r, &bg_g, &bg_b);
+    unpack_argb32_logical(bg_pixels[i], &bg_a, &bg_r, &bg_g, &bg_b);
 
     float r = (float)bg_r;
     float g = (float)bg_g;
@@ -820,7 +820,7 @@ static void cybergfx_blend_aa_pixels_batch4_scalar(
     }
 
     if (pixel_changed) {
-      result_pixels[i] = make_pixel_value(bg_a, (UBYTE)r, (UBYTE)g, (UBYTE)b);
+      result_pixels[i] = pack_argb32_logical(bg_a, (UBYTE)r, (UBYTE)g, (UBYTE)b);
       *changed_mask |= (1 << i);
     } else {
       result_pixels[i] = bg_pixels[i];
@@ -1367,43 +1367,43 @@ static void cybergfx_blend_argb32_batch4_scalar(ULONG dst[4], const ULONG src[4]
   for (WORD i = 0; i < 4; i++) {
     ULONG s = src[i];
     UBYTE sa = (s >> 24) & 0xFF;
-    
+
     /* Fast path: fully transparent source */
     if (sa == 0)
       continue;
-    
+
     /* Fast path: fully opaque source */
     if (sa == 255) {
       dst[i] = s;
       continue;
     }
-    
+
     /* Extract source components */
     UBYTE sr = (s >> 16) & 0xFF;
     UBYTE sg = (s >> 8) & 0xFF;
     UBYTE sb = s & 0xFF;
-    
+
     /* Extract destination components */
     ULONG d = dst[i];
     UBYTE dr = (d >> 16) & 0xFF;
     UBYTE dg = (d >> 8) & 0xFF;
     UBYTE db = d & 0xFF;
-    
+
     /* Fixed-point blending: alpha in 1-256 range */
     ULONG alpha = sa + 1;
     ULONG inv_alpha = 257 - alpha;
-    
+
     UBYTE or = (UBYTE)((alpha * sr + inv_alpha * dr) >> 8);
     UBYTE og = (UBYTE)((alpha * sg + inv_alpha * dg) >> 8);
     UBYTE ob = (UBYTE)((alpha * sb + inv_alpha * db) >> 8);
-    
+
     dst[i] = (0xFF << 24) | (or << 16) | (og << 8) | ob;
   }
 }
 
 #if defined(__SSE2__)
 /* SSE2 implementation - blend 4 ARGB32 pixels in parallel
- * 
+ *
  * Uses 16-bit fixed-point arithmetic for blending.
  * Formula: out = src * alpha + dst * (256 - alpha) >> 8
  */
@@ -1412,49 +1412,49 @@ static void cybergfx_blend_argb32_batch4_sse2(ULONG dst[4], const ULONG src[4]) 
   const __m128i alpha_mask = _mm_set1_epi32(0xFF000000);
   const __m128i const_256 = _mm_set1_epi16(256);
   const __m128i const_ff = _mm_set1_epi32(0xFF);
-  
+
   /* Load source and destination pixels */
   __m128i vsrc = _mm_loadu_si128((const __m128i *)src);
   __m128i vdst = _mm_loadu_si128((const __m128i *)dst);
-  
+
   /* Extract alpha channel from source: shift right 24, mask to get alpha in low byte of each 32-bit word */
   __m128i valpha32 = _mm_srli_epi32(vsrc, 24);
   valpha32 = _mm_and_si128(valpha32, const_ff);
-  
+
   /* Check for fully transparent (alpha == 0) or fully opaque (alpha == 255) */
   __m128i alpha_zero = _mm_cmpeq_epi32(valpha32, zero);
   __m128i alpha_full = _mm_cmpeq_epi32(valpha32, const_ff);
-  
+
   /* If all alphas are 0, return unchanged dst */
   if (_mm_movemask_epi8(alpha_zero) == 0xFFFF) {
     return;
   }
-  
+
   /* If all alphas are 255, return src */
   if (_mm_movemask_epi8(alpha_full) == 0xFFFF) {
     _mm_storeu_si128((__m128i *)dst, vsrc);
     return;
   }
-  
+
   /* Unpack pixels to 16-bit for blending */
   __m128i src_lo = _mm_unpacklo_epi8(vsrc, zero);  /* pixels 0,1 as 16-bit ARGB */
   __m128i src_hi = _mm_unpackhi_epi8(vsrc, zero);  /* pixels 2,3 as 16-bit ARGB */
   __m128i dst_lo = _mm_unpacklo_epi8(vdst, zero);
   __m128i dst_hi = _mm_unpackhi_epi8(vdst, zero);
-  
+
   /* Create alpha vectors for each pixel pair (broadcast alpha to all channels) */
   /* For pixels 0,1: extract alpha and broadcast */
   __m128i alpha_lo = _mm_shufflelo_epi16(src_lo, _MM_SHUFFLE(3, 3, 3, 3));
   alpha_lo = _mm_shufflehi_epi16(alpha_lo, _MM_SHUFFLE(3, 3, 3, 3));
-  
+
   /* For pixels 2,3 */
   __m128i alpha_hi = _mm_shufflelo_epi16(src_hi, _MM_SHUFFLE(3, 3, 3, 3));
   alpha_hi = _mm_shufflehi_epi16(alpha_hi, _MM_SHUFFLE(3, 3, 3, 3));
-  
+
   /* Calculate inverse alpha (256 - alpha) */
   __m128i inv_alpha_lo = _mm_sub_epi16(const_256, alpha_lo);
   __m128i inv_alpha_hi = _mm_sub_epi16(const_256, alpha_hi);
-  
+
   /* Blend: result = (src * alpha + dst * inv_alpha) >> 8 */
   __m128i blend_lo = _mm_add_epi16(
     _mm_mullo_epi16(src_lo, alpha_lo),
@@ -1464,22 +1464,22 @@ static void cybergfx_blend_argb32_batch4_sse2(ULONG dst[4], const ULONG src[4]) 
     _mm_mullo_epi16(src_hi, alpha_hi),
     _mm_mullo_epi16(dst_hi, inv_alpha_hi)
   );
-  
+
   /* Shift right by 8 and pack back to 8-bit */
   blend_lo = _mm_srli_epi16(blend_lo, 8);
   blend_hi = _mm_srli_epi16(blend_hi, 8);
   __m128i result = _mm_packus_epi16(blend_lo, blend_hi);
-  
+
   /* Set alpha channel to 255 */
   result = _mm_or_si128(result, alpha_mask);
-  
+
   /* Handle per-pixel transparency: blend result with original based on alpha */
   /* Use alpha_zero mask to select between original dst and blended result */
   result = _mm_or_si128(
     _mm_and_si128(alpha_zero, vdst),
     _mm_andnot_si128(alpha_zero, result)
   );
-  
+
   _mm_storeu_si128((__m128i *)dst, result);
 }
 #endif
@@ -1491,44 +1491,44 @@ static void CYBERGFX_TARGET_AVX2 cybergfx_blend_argb32_batch8_avx2(ULONG dst[8],
   const __m256i alpha_mask = _mm256_set1_epi32(0xFF000000);
   const __m256i const_256 = _mm256_set1_epi16(256);
   const __m256i const_ff = _mm256_set1_epi32(0xFF);
-  
+
   /* Load source and destination pixels */
   __m256i vsrc = _mm256_loadu_si256((const __m256i *)src);
   __m256i vdst = _mm256_loadu_si256((const __m256i *)dst);
-  
+
   /* Extract alpha channel */
   __m256i valpha32 = _mm256_srli_epi32(vsrc, 24);
   valpha32 = _mm256_and_si256(valpha32, const_ff);
-  
+
   /* Check for fully transparent or fully opaque */
   __m256i alpha_zero = _mm256_cmpeq_epi32(valpha32, zero);
   __m256i alpha_full = _mm256_cmpeq_epi32(valpha32, const_ff);
-  
+
   if (_mm256_movemask_epi8(alpha_zero) == (int)0xFFFFFFFF) {
     return;
   }
-  
+
   if (_mm256_movemask_epi8(alpha_full) == (int)0xFFFFFFFF) {
     _mm256_storeu_si256((__m256i *)dst, vsrc);
     return;
   }
-  
+
   /* Unpack to 16-bit */
   __m256i src_lo = _mm256_unpacklo_epi8(vsrc, zero);
   __m256i src_hi = _mm256_unpackhi_epi8(vsrc, zero);
   __m256i dst_lo = _mm256_unpacklo_epi8(vdst, zero);
   __m256i dst_hi = _mm256_unpackhi_epi8(vdst, zero);
-  
+
   /* Broadcast alpha */
   __m256i alpha_lo = _mm256_shufflelo_epi16(src_lo, _MM_SHUFFLE(3, 3, 3, 3));
   alpha_lo = _mm256_shufflehi_epi16(alpha_lo, _MM_SHUFFLE(3, 3, 3, 3));
   __m256i alpha_hi = _mm256_shufflelo_epi16(src_hi, _MM_SHUFFLE(3, 3, 3, 3));
   alpha_hi = _mm256_shufflehi_epi16(alpha_hi, _MM_SHUFFLE(3, 3, 3, 3));
-  
+
   /* Inverse alpha */
   __m256i inv_alpha_lo = _mm256_sub_epi16(const_256, alpha_lo);
   __m256i inv_alpha_hi = _mm256_sub_epi16(const_256, alpha_hi);
-  
+
   /* Blend */
   __m256i blend_lo = _mm256_add_epi16(
     _mm256_mullo_epi16(src_lo, alpha_lo),
@@ -1538,18 +1538,18 @@ static void CYBERGFX_TARGET_AVX2 cybergfx_blend_argb32_batch8_avx2(ULONG dst[8],
     _mm256_mullo_epi16(src_hi, alpha_hi),
     _mm256_mullo_epi16(dst_hi, inv_alpha_hi)
   );
-  
+
   blend_lo = _mm256_srli_epi16(blend_lo, 8);
   blend_hi = _mm256_srli_epi16(blend_hi, 8);
   __m256i result = _mm256_packus_epi16(blend_lo, blend_hi);
-  
+
   result = _mm256_or_si256(result, alpha_mask);
-  
+
   result = _mm256_or_si256(
     _mm256_and_si256(alpha_zero, vdst),
     _mm256_andnot_si256(alpha_zero, result)
   );
-  
+
   _mm256_storeu_si256((__m256i *)dst, result);
 }
 #endif
@@ -1560,18 +1560,18 @@ static void cybergfx_blend_argb32_batch4_neon(ULONG dst[4], const ULONG src[4]) 
   /* Load source and destination */
   uint8x16_t vsrc = vld1q_u8((const uint8_t *)src);
   uint8x16_t vdst = vld1q_u8((const uint8_t *)dst);
-  
+
   /* Extract alpha bytes (every 4th byte starting at offset 3 for ARGB) */
   /* ARGB layout: [A0 R0 G0 B0 A1 R1 G1 B1 A2 R2 G2 B2 A3 R3 G3 B3] */
   uint8x16_t alpha_shuffle = {3, 3, 3, 3, 7, 7, 7, 7, 11, 11, 11, 11, 15, 15, 15, 15};
   uint8x16_t valpha = vqtbl1q_u8(vsrc, alpha_shuffle);
-  
+
   /* Compute inverse alpha (255 - alpha) */
   uint8x16_t vinv_alpha = vsubq_u8(vdupq_n_u8(255), valpha);
-  
+
   /* Blend using: result = (src * alpha + dst * inv_alpha + 128) >> 8
    * We use the NEON vmull for 8x16->16 multiplication */
-  
+
   /* Split into low and high halves for 16-bit math */
   uint8x8_t src_lo = vget_low_u8(vsrc);
   uint8x8_t src_hi = vget_high_u8(vsrc);
@@ -1581,24 +1581,24 @@ static void cybergfx_blend_argb32_batch4_neon(ULONG dst[4], const ULONG src[4]) 
   uint8x8_t alpha_hi = vget_high_u8(valpha);
   uint8x8_t inv_alpha_lo = vget_low_u8(vinv_alpha);
   uint8x8_t inv_alpha_hi = vget_high_u8(vinv_alpha);
-  
+
   /* Multiply and add */
   uint16x8_t blend_lo = vmlal_u8(vmull_u8(src_lo, alpha_lo), dst_lo, inv_alpha_lo);
   uint16x8_t blend_hi = vmlal_u8(vmull_u8(src_hi, alpha_hi), dst_hi, inv_alpha_hi);
-  
+
   /* Add 128 for rounding and shift right by 8 */
   blend_lo = vaddq_u16(blend_lo, vdupq_n_u16(128));
   blend_hi = vaddq_u16(blend_hi, vdupq_n_u16(128));
-  
+
   /* Narrow back to 8-bit */
   uint8x8_t result_lo = vshrn_n_u16(blend_lo, 8);
   uint8x8_t result_hi = vshrn_n_u16(blend_hi, 8);
   uint8x16_t result = vcombine_u8(result_lo, result_hi);
-  
+
   /* Set alpha to 255 */
   uint8x16_t alpha_mask = {255, 0, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0};
   result = vorrq_u8(result, alpha_mask);
-  
+
   vst1q_u8((uint8_t *)dst, result);
 }
 #endif
@@ -1606,10 +1606,10 @@ static void cybergfx_blend_argb32_batch4_neon(ULONG dst[4], const ULONG src[4]) 
 /* Dispatcher for batch4 blending */
 void cybergfx_blend_argb32_batch4(ULONG dst[4], const ULONG src[4]) {
   static void (*impl)(ULONG[4], const ULONG[4]) = NULL;
-  
+
   if (!impl) {
     cybergfx_simd_level level = cybergfx_get_simd_level();
-    
+
 #if defined(__SSE2__)
     if (level >= CYBERGFX_SIMD_SSE2) {
       impl = cybergfx_blend_argb32_batch4_sse2;
@@ -1624,17 +1624,17 @@ void cybergfx_blend_argb32_batch4(ULONG dst[4], const ULONG src[4]) {
       impl = cybergfx_blend_argb32_batch4_scalar;
     }
   }
-  
+
   impl(dst, src);
 }
 
 /* Dispatcher for batch8 blending */
 void cybergfx_blend_argb32_batch8(ULONG dst[8], const ULONG src[8]) {
   static void (*impl)(ULONG[8], const ULONG[8]) = NULL;
-  
+
   if (!impl) {
     cybergfx_simd_level level = cybergfx_get_simd_level();
-    
+
 #if CYBERGFX_CAN_BUILD_AVX2
     if (level == CYBERGFX_SIMD_AVX2) {
       impl = cybergfx_blend_argb32_batch8_avx2;
@@ -1644,7 +1644,7 @@ void cybergfx_blend_argb32_batch8(ULONG dst[8], const ULONG src[8]) {
       impl = NULL; /* Use fallback */
     }
   }
-  
+
   if (impl) {
     impl(dst, src);
   } else {
@@ -1658,9 +1658,9 @@ void cybergfx_blend_argb32_batch8(ULONG dst[8], const ULONG src[8]) {
 void cybergfx_blend_argb32_row(ULONG *dst, const ULONG *src, LONG count) {
   if (count <= 0)
     return;
-  
+
   LONG i = 0;
-  
+
   /* Process 8 pixels at a time when possible */
 #if CYBERGFX_CAN_BUILD_AVX2
   cybergfx_simd_level level = cybergfx_get_simd_level();
@@ -1670,41 +1670,41 @@ void cybergfx_blend_argb32_row(ULONG *dst, const ULONG *src, LONG count) {
     }
   }
 #endif
-  
+
   /* Process 4 pixels at a time */
   for (; i + 3 < count; i += 4) {
     cybergfx_blend_argb32_batch4(dst + i, src + i);
   }
-  
+
   /* Handle remaining pixels */
   for (; i < count; i++) {
     ULONG s = src[i];
     UBYTE sa = (s >> 24) & 0xFF;
-    
+
     if (sa == 0)
       continue;
-    
+
     if (sa == 255) {
       dst[i] = s;
       continue;
     }
-    
+
     UBYTE sr = (s >> 16) & 0xFF;
     UBYTE sg = (s >> 8) & 0xFF;
     UBYTE sb = s & 0xFF;
-    
+
     ULONG d = dst[i];
     UBYTE dr = (d >> 16) & 0xFF;
     UBYTE dg = (d >> 8) & 0xFF;
     UBYTE db = d & 0xFF;
-    
+
     ULONG alpha = sa + 1;
     ULONG inv_alpha = 257 - alpha;
-    
+
     UBYTE or = (UBYTE)((alpha * sr + inv_alpha * dr) >> 8);
     UBYTE og = (UBYTE)((alpha * sg + inv_alpha * dg) >> 8);
     UBYTE ob = (UBYTE)((alpha * sb + inv_alpha * db) >> 8);
-    
+
     dst[i] = (0xFF << 24) | (or << 16) | (og << 8) | ob;
   }
 }

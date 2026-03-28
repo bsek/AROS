@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - CyberGraphics Backend Implementation
+    ZuneGfx Library - CyberGraphics Backend Implementation
 
     This file implements the CyberGraphics backend using the new unified
     backend interface. It provides hardware-accelerated rendering with
@@ -313,7 +313,7 @@ static void CybergfxCleanupBackend(ZuneBackendContext *ctx) {
 
     CybergfxPrivateData *priv = (CybergfxPrivateData *)ctx->private_data;
     if (priv) {
-        /* CyberGfxBase is closed centrally in CleanupZuneRenderer() */
+        /* CyberGfxBase is closed centrally in CleanupZuneGfx() */
         priv->CyberGfxBase = NULL;
         FreeVec(priv);
     }
@@ -530,12 +530,12 @@ APTR CybergfxLockPixels(struct DrawingBoard *board, ULONG *pitch_out) {
             if (pitch_out)
                 *pitch_out = board->pitch;
 
-            D(bug("ZuneRenderer: Pixels locked - address: %p, pitch: %u\n", board->pixels, board->pitch));
+            D(bug("ZuneGfx: Pixels locked - address: %p, pitch: %u\n", board->pixels, board->pitch));
 
             EXIT_FUNCTION("CybergfxLockPixels");
             return board->pixels;
         } else {
-            D(bug("ZuneRenderer: Pixel lock failed\n"));
+            D(bug("ZuneGfx: Pixel lock failed\n"));
             EXIT_FUNCTION("CybergfxLockPixels");
             return NULL;
         }

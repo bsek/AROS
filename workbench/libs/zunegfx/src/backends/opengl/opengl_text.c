@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - OpenGL Backend Text Rendering
+    ZuneGfx Library - OpenGL Backend Text Rendering
 
     Implements text drawing via a glyph texture atlas approach:
     - On ZuneSetFont: Build a GL texture atlas containing all glyphs

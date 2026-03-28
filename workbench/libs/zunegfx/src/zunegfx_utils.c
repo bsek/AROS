@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - Fast Pixel Operations Implementation
+    ZuneGfx Library - Fast Pixel Operations Implementation
 
     This module provides fast pixel manipulation functions for locked
    DrawingBoards. These operations work directly with pixel buffers to provide

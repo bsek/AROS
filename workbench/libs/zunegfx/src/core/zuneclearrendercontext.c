@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZuneClearRenderContext
+    ZuneGfx Library - ZuneClearRenderContext
 */
 
 #include <aros/libcall.h>
@@ -41,10 +41,10 @@ RESULT
 
   ENTER_FUNCTION("ZuneClearRenderContext");
 
-  D(bug("ZuneRenderer: ZuneClearRenderContext(rctx=%p, color=0x%08x)\n", rctx, color));
+  D(bug("ZuneGfx: ZuneClearRenderContext(rctx=%p, color=0x%08x)\n", rctx, color));
 
   if (!ValidateRenderContext(rctx)) {
-    D(bug("ZuneRenderer: Invalid RenderContext\n"));
+    D(bug("ZuneGfx: Invalid RenderContext\n"));
     return;
   }
 

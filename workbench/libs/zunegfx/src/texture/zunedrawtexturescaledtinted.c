@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZuneDrawTextureScaledTinted
+    ZuneGfx Library - ZuneDrawTextureScaledTinted
 */
 
 #include "../backends/backend_interface.h"
@@ -27,12 +27,12 @@ AROS_LH4(void, ZuneDrawTextureScaledTinted,
 
     ENTER_FUNCTION("ZuneDrawTextureScaledTinted");
 
-    D(bug("ZuneRenderer: ZuneDrawTextureScaledTinted(rctx=%p, texture=%p, "
+    D(bug("ZuneGfx: ZuneDrawTextureScaledTinted(rctx=%p, texture=%p, "
           "dest_rect=%p, tint=0x%08x)\n",
           rctx, texture, dest_rect, tint_color));
 
     if (!ValidateRenderContext(rctx) || !texture || !dest_rect) {
-        D(bug("ZuneRenderer: Invalid parameters\n"));
+        D(bug("ZuneGfx: Invalid parameters\n"));
         return;
     }
 

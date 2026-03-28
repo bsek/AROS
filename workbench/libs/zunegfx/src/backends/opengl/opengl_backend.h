@@ -1,9 +1,9 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - OpenGL Backend Header
+    ZuneGfx Library - OpenGL Backend Header
 
-    This header defines the OpenGL rendering backend for ZuneRenderer.
+    This header defines the OpenGL rendering backend for ZuneGfx.
     The backend uses AROS's gl.library (mesa3dgl or hostgl) to provide
     hardware-accelerated 2D rendering using OpenGL.
 */

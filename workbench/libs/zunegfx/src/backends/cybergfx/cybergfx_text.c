@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - CyberGraphics Backend Text Rendering
+    ZuneGfx Library - CyberGraphics Backend Text Rendering
 
     Implements text drawing via the standard AROS graphics.library Text()
     function. This supports both bitmap fonts and TrueType/antialiased fonts

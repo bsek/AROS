@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZuneCreateTextureFromData
+    ZuneGfx Library - ZuneCreateTextureFromData
 */
 
 #include "../backends/backend_interface.h"
@@ -29,7 +29,7 @@ AROS_LH8(struct ZuneTexture *, ZuneCreateTextureFromData,
 
     ENTER_FUNCTION("ZuneCreateTextureFromData");
 
-    D(bug("ZuneRenderer: ZuneCreateTextureFromData(rctx=%p, data=%p, width=%d, height=%d, "
+    D(bug("ZuneGfx: ZuneCreateTextureFromData(rctx=%p, data=%p, width=%d, height=%d, "
           "depth=%d, format=0x%08x, pitch=%d, flags=0x%08x)\n",
           rctx, data, width, height, depth, format, pitch, flags));
 

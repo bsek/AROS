@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - Brush Sampling for Anti-Aliased Rendering
+    ZuneGfx Library - Brush Sampling for Anti-Aliased Rendering
 
     This module provides optimized brush sampling functions for use in
     anti-aliased rendering. Supports solid colors, textures, and linear

@@ -1,15 +1,13 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZunePresent
+    ZuneGfx Library - ZunePresent
 */
 
 #include <aros/libcall.h>
-#include <cybergraphx/cybergraphics.h>
 #include <exec/types.h>
 #include <graphics/gfx.h>
 #include <graphics/rastport.h>
-#include <proto/cybergraphics.h>
 #include <proto/graphics.h>
 
 #include "../backends/backend_interface.h"
@@ -17,7 +15,7 @@
 #include "../../include/zunegfx.h"
 #include "drawingboard_intern.h"
 
-#define DEBUG 1
+#define DEBUG 0
 #include <aros/debug.h>
 
 /*****************************************************************************
@@ -65,23 +63,23 @@ SEE ALSO
 
   ENTER_FUNCTION("ZunePresent");
 
-  D(bug("ZuneRenderer: ZunePresent(rctx=%p, src=%d,%d dst=%d,%d %dx%d)\n",
+  D(bug("ZuneGfx: ZunePresent(rctx=%p, src=%d,%d dst=%d,%d %dx%d)\n",
         rctx, src_x, src_y, dst_x, dst_y, width, height));
 
   if (!rctx) {
-    D(bug("ZuneRenderer: Invalid RenderContext for ZunePresent\n"));
+    D(bug("ZuneGfx: Invalid RenderContext for ZunePresent\n"));
     EXIT_FUNCTION("ZunePresent");
     return;
   }
 
   if (!rctx->window || !rctx->window->RPort || !rctx->window->RPort->BitMap) {
-    D(bug("ZuneRenderer: RenderContext has no valid window\n"));
+    D(bug("ZuneGfx: RenderContext has no valid window\n"));
     EXIT_FUNCTION("ZunePresent");
     return;
   }
 
   if (!rctx->target_board || !rctx->target_board->bitmap || !rctx->target_board->valid) {
-    D(bug("ZuneRenderer: RenderContext has no valid DrawingBoard\n"));
+    D(bug("ZuneGfx: RenderContext has no valid DrawingBoard\n"));
     EXIT_FUNCTION("ZunePresent");
     return;
   }
@@ -94,66 +92,32 @@ SEE ALSO
   /* Sync FBO region to bitmap before presenting */
   {
     ZuneBackend *backend = ZuneGetRenderContextBackend(rctx);
-    D(bug("ZuneRenderer: ZunePresent - backend=%p\n", backend));
+    D(bug("ZuneGfx: ZunePresent - backend=%p\n", backend));
     if (backend && backend->ops) {
-      D(bug("ZuneRenderer: ZunePresent - backend->ops=%p, name=%s\n", 
+      D(bug("ZuneGfx: ZunePresent - backend->ops=%p, name=%s\n",
             backend->ops, backend->ops->name ? (const char *)backend->ops->name : "NULL"));
       if (backend->ops->FlushBatch) {
-        D(bug("ZuneRenderer: ZunePresent - calling ZuneFlushBatch\n"));
+        D(bug("ZuneGfx: ZunePresent - calling ZuneFlushBatch\n"));
         backend->ops->FlushBatch(rctx);
       }
       if (backend->ops->CopyRegionFromDrawingBoard) {
-        D(bug("ZuneRenderer: ZunePresent - calling CopyRegionFromDrawingBoard\n"));
+        D(bug("ZuneGfx: ZunePresent - calling CopyRegionFromDrawingBoard\n"));
         backend->ops->CopyRegionFromDrawingBoard(rctx, src_x, src_y, width, height);
       } else if (backend->ops->CopyFromDrawingBoard) {
-        D(bug("ZuneRenderer: ZunePresent - calling CopyFromDrawingBoard\n"));
+        D(bug("ZuneGfx: ZunePresent - calling CopyFromDrawingBoard\n"));
         backend->ops->CopyFromDrawingBoard(rctx);
       } else {
-        D(bug("ZuneRenderer: ZunePresent - no sync function available!\n"));
+        D(bug("ZuneGfx: ZunePresent - no sync function available!\n"));
       }
     } else {
-      D(bug("ZuneRenderer: ZunePresent - no backend available!\n"));
+      D(bug("ZuneGfx: ZunePresent - no backend available!\n"));
     }
   }
 
   /* Blit from DrawingBoard bitmap to window's RastPort */
-  {
-    struct BitMap *src_bm = rctx->target_board->bitmap;
-    struct BitMap *dst_bm = rctx->window->RPort->BitMap;
-    ULONG src_depth = GetBitMapAttr(src_bm, BMA_DEPTH);
-    ULONG dst_depth = GetBitMapAttr(dst_bm, BMA_DEPTH);
-    D(bug("ZuneRenderer: ZunePresent - BltBitMapRastPort src_bm=%p (depth=%ld) dst_rctx=%p dst_bm=%p (depth=%ld)\n",
-          src_bm, src_depth, rctx->window->RPort, dst_bm, dst_depth));
-    
-    /* Verify source bitmap has content before blitting */
-    if (CyberGfxBase && rctx->target_board->rastport) {
-        UBYTE verify_src[4];
-        ReadPixelArray(verify_src, 0, 0, 4, rctx->target_board->rastport, 
-                       src_x, src_y, 1, 1, RECTFMT_RGBA);
-        D(bug("ZuneRenderer: ZunePresent - src bitmap sample at %d,%d: RGBA = %02x %02x %02x %02x\n",
-              src_x, src_y, verify_src[0], verify_src[1], verify_src[2], verify_src[3]));
-        
-        /* Also check if rastport->BitMap == board->bitmap */
-        D(bug("ZuneRenderer: ZunePresent - board->rastport->BitMap=%p, board->bitmap=%p, match=%s\n",
-              rctx->target_board->rastport->BitMap, rctx->target_board->bitmap,
-              (rctx->target_board->rastport->BitMap == rctx->target_board->bitmap) ? "YES" : "NO"));
-    }
-  }
-
   BltBitMapRastPort(rctx->target_board->bitmap, src_x, src_y,
                     rctx->window->RPort, dst_x, dst_y,
                     width, height, 0xC0);
-  
-  /* Verify destination after blitting */
-  if (CyberGfxBase) {
-      UBYTE verify_dst[4];
-      ReadPixelArray(verify_dst, 0, 0, 4, rctx->window->RPort,
-                     dst_x, dst_y, 1, 1, RECTFMT_RGBA);
-      D(bug("ZuneRenderer: ZunePresent - dst window sample at %d,%d: RGBA = %02x %02x %02x %02x\n",
-            dst_x, dst_y, verify_dst[0], verify_dst[1], verify_dst[2], verify_dst[3]));
-  }
-  
-  D(bug("ZuneRenderer: ZunePresent - BltBitMapRastPort completed\n"));
 
   EXIT_FUNCTION("ZunePresent");
 

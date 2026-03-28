@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZuneCreateRenderContextA
+    ZuneGfx Library - ZuneCreateRenderContextA
 */
 
 #include <aros/libcall.h>
@@ -53,7 +53,7 @@ RESULT
   ENTER_FUNCTION("ZuneCreateRenderContextA");
 
   if (!tags) {
-    D(bug("ZuneRenderer: ZuneCreateRenderContextA - NULL tags\n"));
+    D(bug("ZuneGfx: ZuneCreateRenderContextA - NULL tags\n"));
     EXIT_FUNCTION("ZuneCreateRenderContextA");
     return NULL;
   }
@@ -62,7 +62,7 @@ RESULT
   colormap     = (struct ColorMap *)LibGetTagData(ZUNE_RenderContext_ColorMap, 0, tags);
   backend_type = (UWORD)LibGetTagData(ZUNE_RenderContext_Backend, BACKEND_BEST_AVAILABLE, tags);
 
-  D(bug("ZuneRenderer: ZuneCreateRenderContextA(window=%p, colormap=%p, backend=%d)\n",
+  D(bug("ZuneGfx: ZuneCreateRenderContextA(window=%p, colormap=%p, backend=%d)\n",
         window, colormap, backend_type));
 
   return CreateRenderContextForWindowInternal(base, window, colormap, backend_type);

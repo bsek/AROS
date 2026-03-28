@@ -2,9 +2,9 @@
 #define CYBERGFX_BACKEND_H
 
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - CyberGraphics Backend Header
+    ZuneGfx Library - CyberGraphics Backend Header
 
     This header defines only the essential structures and exports needed
     for the CyberGraphics rendering backend. All operations are handled

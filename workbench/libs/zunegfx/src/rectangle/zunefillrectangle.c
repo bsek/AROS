@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZuneFillRectangle
+    ZuneGfx Library - ZuneFillRectangle
 */
 
 #include <aros/libcall.h>
