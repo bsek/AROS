@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - Internal Definitions
+    ZuneGfx Library - Internal Definitions
 
     Clean internal interface for the unified target system and backend
     architecture. This header defines the structures and functions used
@@ -219,8 +219,8 @@ APTR LockDrawingBoardPixelsInternal(struct RenderContext *rctx, ULONG *pitch);
 void UnlockDrawingBoardPixelsInternal(struct RenderContext *rctx);
 
 /* State */
-void CleanupZuneRenderer(struct IntZuneGfxBase *base);
-BOOL InitializeZuneRenderer(struct IntZuneGfxBase *base);
+void CleanupZuneGfx(struct IntZuneGfxBase *base);
+BOOL InitializeZuneGfx(struct IntZuneGfxBase *base);
 
 /* Utilities */
 ULONG BlendColorsInternal(ULONG color1, ULONG color2, ULONG alpha);

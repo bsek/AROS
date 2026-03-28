@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZuneCreateTextureA
+    ZuneGfx Library - ZuneCreateTextureA
 */
 
 #include "../backends/backend_interface.h"
@@ -43,7 +43,7 @@ AROS_LH1(struct ZuneTexture *, ZuneCreateTextureA,
     ENTER_FUNCTION("ZuneCreateTextureA");
 
     if (!tags) {
-        D(bug("ZuneRenderer: ZuneCreateTextureA - NULL tags\n"));
+        D(bug("ZuneGfx: ZuneCreateTextureA - NULL tags\n"));
         EXIT_FUNCTION("ZuneCreateTextureA");
         return NULL;
     }
@@ -64,7 +64,7 @@ AROS_LH1(struct ZuneTexture *, ZuneCreateTextureA,
     pitch      = (ULONG)LibGetTagData(ZUNE_Texture_Pitch, 0, tags);
     screen     = (struct Screen *)LibGetTagData(ZUNE_Texture_Screen, 0, tags);
 
-    D(bug("ZuneRenderer: ZuneCreateTextureA(rctx=%p, %dx%d, depth=%d, fmt=0x%x, flags=0x%x)\n",
+    D(bug("ZuneGfx: ZuneCreateTextureA(rctx=%p, %dx%d, depth=%d, fmt=0x%x, flags=0x%x)\n",
           rctx, width, height, depth, format, flags));
 
     /* Determine source type and create texture */
@@ -74,7 +74,7 @@ AROS_LH1(struct ZuneTexture *, ZuneCreateTextureA,
         struct Process *myproc;
         APTR oldwindowptr;
 
-        D(bug("ZuneRenderer: ZuneCreateTextureA - loading from file '%s'\n", filename));
+        D(bug("ZuneGfx: ZuneCreateTextureA - loading from file '%s'\n", filename));
 
         myproc = (struct Process *)FindTask(NULL);
         oldwindowptr = myproc->pr_WindowPtr;
@@ -90,7 +90,7 @@ AROS_LH1(struct ZuneTexture *, ZuneCreateTextureA,
         myproc->pr_WindowPtr = oldwindowptr;
 
         if (!dt_obj) {
-            D(bug("ZuneRenderer: ZuneCreateTextureA - Failed to load '%s'\n", filename));
+            D(bug("ZuneGfx: ZuneCreateTextureA - Failed to load '%s'\n", filename));
             EXIT_FUNCTION("ZuneCreateTextureA");
             return NULL;
         }
@@ -100,21 +100,21 @@ AROS_LH1(struct ZuneTexture *, ZuneCreateTextureA,
 
     } else if (dt_object) {
         /* Extract from DataTypes object */
-        D(bug("ZuneRenderer: ZuneCreateTextureA - from datatype object %p\n", dt_object));
+        D(bug("ZuneGfx: ZuneCreateTextureA - from datatype object %p\n", dt_object));
         texture = CreateTextureFromDatatypeInternal(dt_object, flags);
 
     } else if (from_board && rctx) {
         /* Capture from current DrawingBoard */
-        D(bug("ZuneRenderer: ZuneCreateTextureA - from DrawingBoard\n"));
+        D(bug("ZuneGfx: ZuneCreateTextureA - from DrawingBoard\n"));
         texture = CreateTextureFromDrawingBoardInternal(base, rctx, flags);
         EXIT_FUNCTION("ZuneCreateTextureA");
         return texture;
 
     } else if (data) {
         /* Copy from pixel data */
-        D(bug("ZuneRenderer: ZuneCreateTextureA - from pixel data %p\n", data));
+        D(bug("ZuneGfx: ZuneCreateTextureA - from pixel data %p\n", data));
         if (width == 0 || height == 0 || pitch == 0) {
-            D(bug("ZuneRenderer: ZuneCreateTextureA - invalid data params\n"));
+            D(bug("ZuneGfx: ZuneCreateTextureA - invalid data params\n"));
             EXIT_FUNCTION("ZuneCreateTextureA");
             return NULL;
         }
@@ -122,9 +122,9 @@ AROS_LH1(struct ZuneTexture *, ZuneCreateTextureA,
 
     } else {
         /* Create empty texture */
-        D(bug("ZuneRenderer: ZuneCreateTextureA - creating empty texture\n"));
+        D(bug("ZuneGfx: ZuneCreateTextureA - creating empty texture\n"));
         if (width == 0 || height == 0) {
-            D(bug("ZuneRenderer: ZuneCreateTextureA - invalid dimensions\n"));
+            D(bug("ZuneGfx: ZuneCreateTextureA - invalid dimensions\n"));
             EXIT_FUNCTION("ZuneCreateTextureA");
             return NULL;
         }
@@ -146,7 +146,7 @@ AROS_LH1(struct ZuneTexture *, ZuneCreateTextureA,
         AddTextureToList(base, texture);
     }
 
-    D(bug("ZuneRenderer: ZuneCreateTextureA - result=%p\n", texture));
+    D(bug("ZuneGfx: ZuneCreateTextureA - result=%p\n", texture));
     EXIT_FUNCTION("ZuneCreateTextureA");
     return texture;
 

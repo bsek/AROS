@@ -41,15 +41,15 @@ SEE ALSO
 
   ENTER_FUNCTION("ZuneFlushBatch");
 
-  D(bug("ZuneRenderer: ZuneFlushBatch(rctx=%p)\n", rctx));
+  D(bug("ZuneGfx: ZuneFlushBatch(rctx=%p)\n", rctx));
 
   if (!ValidateRenderContext(rctx)) {
-    D(bug("ZuneRenderer: Invalid RenderContext\n"));
+    D(bug("ZuneGfx: Invalid RenderContext\n"));
     return;
   }
 
   if (!rctx->batch_state) {
-    D(bug("ZuneRenderer: No batch state available\n"));
+    D(bug("ZuneGfx: No batch state available\n"));
     return;
   }
 
@@ -62,7 +62,7 @@ SEE ALSO
     backend->ops->FlushBatch(rctx);
   }
 
-  D(bug("ZuneRenderer: Manual batch flush completed\n"));
+  D(bug("ZuneGfx: Manual batch flush completed\n"));
 
   EXIT_FUNCTION("ZuneFlushBatch");
 

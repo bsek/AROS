@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - Texture Internal Functions
+    ZuneGfx Library - Texture Internal Functions
 */
 
 #include "../backends/backend_interface.h"
@@ -75,7 +75,7 @@ ULONG ConvertCyberGfxFormatToZuneFormat(ULONG cybergfx_format) {
     case 2: /* RGB16 */
         return ZUNE_TEXTURE_FORMAT_RGB16;
     default:
-        D(bug("ZuneRenderer: Unknown CyberGraphics format 0x%08x, defaulting to "
+        D(bug("ZuneGfx: Unknown CyberGraphics format 0x%08x, defaulting to "
               "ARGB32\n",
               cybergfx_format));
         return ZUNE_TEXTURE_FORMAT_ARGB32;
@@ -95,7 +95,7 @@ ULONG GetTextureFormatBPP(ULONG format) {
     case ZUNE_TEXTURE_FORMAT_A8:
         return 8;
     default:
-        D(bug("ZuneRenderer: Unknown texture format 0x%08x\n", format));
+        D(bug("ZuneGfx: Unknown texture format 0x%08x\n", format));
         return 0;
     }
 }
@@ -124,12 +124,12 @@ void RemoveTextureFromList(struct IntZuneGfxBase *base, struct ZuneTexture *text
 
 BOOL AllocateTextureData(struct ZuneTexture *texture) {
     if (!texture) {
-        D(bug("ZuneRenderer: AllocateTextureData - Invalid texture pointer\n"));
+        D(bug("ZuneGfx: AllocateTextureData - Invalid texture pointer\n"));
         return FALSE;
     }
 
     if (texture->pixel_data) {
-        D(bug("ZuneRenderer: AllocateTextureData - Texture data already "
+        D(bug("ZuneGfx: AllocateTextureData - Texture data already "
               "allocated\n"));
         return TRUE; /* Already allocated */
     }
@@ -144,7 +144,7 @@ BOOL AllocateTextureData(struct ZuneTexture *texture) {
     }
 
     if (texture->data_size == 0) {
-        D(bug("ZuneRenderer: AllocateTextureData - Invalid texture size "
+        D(bug("ZuneGfx: AllocateTextureData - Invalid texture size "
               "calculation\n"));
         return FALSE;
     }
@@ -152,11 +152,11 @@ BOOL AllocateTextureData(struct ZuneTexture *texture) {
     /* Allocate pixel data */
     texture->pixel_data = AllocVec(texture->data_size, MEMF_PUBLIC | MEMF_CLEAR);
     if (!texture->pixel_data) {
-        D(bug("ZuneRenderer: AllocateTextureData - Failed to allocate %u bytes\n", texture->data_size));
+        D(bug("ZuneGfx: AllocateTextureData - Failed to allocate %u bytes\n", texture->data_size));
         return FALSE;
     }
 
-    D(bug("ZuneRenderer: AllocateTextureData - Allocated %u bytes for %dx%d "
+    D(bug("ZuneGfx: AllocateTextureData - Allocated %u bytes for %dx%d "
           "texture\n",
           texture->data_size, texture->width, texture->height));
 
@@ -169,7 +169,7 @@ void FreeTextureData(struct ZuneTexture *texture) {
     }
 
     if (texture->pixel_data) {
-        D(bug("ZuneRenderer: FreeTextureData - Freeing %u bytes\n", texture->data_size));
+        D(bug("ZuneGfx: FreeTextureData - Freeing %u bytes\n", texture->data_size));
         FreeVec(texture->pixel_data);
         texture->pixel_data = NULL;
         texture->data_size = 0;
@@ -179,7 +179,7 @@ void FreeTextureData(struct ZuneTexture *texture) {
 ULONG CalculateTexturePitch(UWORD width, ULONG format) {
     ULONG bytes_per_pixel = GetTextureFormatBPP(format) / 8;
     if (bytes_per_pixel == 0) {
-        D(bug("ZuneRenderer: CalculateTexturePitch - Invalid format 0x%08x\n", format));
+        D(bug("ZuneGfx: CalculateTexturePitch - Invalid format 0x%08x\n", format));
         return 0;
     }
 
@@ -264,7 +264,7 @@ struct ZuneTexture *CreateTextureFromDatatypeInternal(APTR dt_handle, ULONG flag
     UBYTE mask = 0;
 
     if (!dt_obj) {
-        D(bug("ZuneRenderer: ZuneCreateTextureFromDatatype - missing datatype object (handle=%p)\n", dt_handle));
+        D(bug("ZuneGfx: ZuneCreateTextureFromDatatype - missing datatype object (handle=%p)\n", dt_handle));
         return NULL;
     }
 
@@ -273,22 +273,22 @@ struct ZuneTexture *CreateTextureFromDatatypeInternal(APTR dt_handle, ULONG flag
         tex_w = bmhd->bmh_Width;
         tex_h = bmhd->bmh_Height;
         mask = bmhd->bmh_Masking;
-        D(bug("ZuneRenderer: ZuneCreateTextureFromDatatype - from bmhd: %dx%d, mask=%d\n", tex_w, tex_h, mask));
+        D(bug("ZuneGfx: ZuneCreateTextureFromDatatype - from bmhd: %dx%d, mask=%d\n", tex_w, tex_h, mask));
     } else if (bm) {
         tex_w = GetBitMapAttr(bm, BMA_WIDTH);
         tex_h = GetBitMapAttr(bm, BMA_HEIGHT);
-        D(bug("ZuneRenderer: ZuneCreateTextureFromDatatype - from bitmap: %dx%d\n", tex_w, tex_h));
+        D(bug("ZuneGfx: ZuneCreateTextureFromDatatype - from bitmap: %dx%d\n", tex_w, tex_h));
     }
 
     if (tex_w <= 0 || tex_h <= 0) {
-        D(bug("ZuneRenderer: ZuneCreateTextureFromDatatype - invalid dimensions %dx%d\n", tex_w, tex_h));
+        D(bug("ZuneGfx: ZuneCreateTextureFromDatatype - invalid dimensions %dx%d\n", tex_w, tex_h));
         return NULL;
     }
 
     ULONG buf_size = (ULONG)tex_w * (ULONG)tex_h * 4;
     ULONG *pixels = AllocVec(buf_size, MEMF_ANY);
     if (!pixels) {
-        D(bug("ZuneRenderer: ZuneCreateTextureFromDatatype - failed to alloc %lu bytes\n", (ULONG)buf_size));
+        D(bug("ZuneGfx: ZuneCreateTextureFromDatatype - failed to alloc %lu bytes\n", (ULONG)buf_size));
         return NULL;
     }
 
@@ -305,7 +305,7 @@ struct ZuneTexture *CreateTextureFromDatatypeInternal(APTR dt_handle, ULONG flag
 
     DoMethodA(dt_obj, (Msg)&pa);
 
-    D(bug("ZuneRenderer: ZuneCreateTextureFromDatatype - after PDTM_READPIXELARRAY:\n"));
+    D(bug("ZuneGfx: ZuneCreateTextureFromDatatype - after PDTM_READPIXELARRAY:\n"));
     D(bug("  First 4 pixels: %08lx %08lx %08lx %08lx\n",
           (ULONG)pixels[0], (ULONG)pixels[1],
           (ULONG)pixels[2], (ULONG)pixels[3]));
@@ -336,7 +336,7 @@ struct ZuneTexture *CreateTextureFromDatatypeInternal(APTR dt_handle, ULONG flag
     struct ZuneTexture *tex = CreateTextureFromDataInternal(pixels, (UWORD)tex_w, (UWORD)tex_h, 32, ZUNE_TEXTURE_FORMAT_ARGB32, tex_w * 4, flags);
 
     if (!tex) {
-        D(bug("ZuneRenderer: ZuneCreateTextureFromDatatype - CreateTextureFromDataInternal failed\n"));
+        D(bug("ZuneGfx: ZuneCreateTextureFromDatatype - CreateTextureFromDataInternal failed\n"));
     }
 
     FreeVec(pixels);
@@ -349,13 +349,13 @@ struct ZuneTexture *CreateTextureFromDataInternal(APTR data, UWORD width, UWORD 
     UBYTE *src_ptr, *dst_ptr;
 
     if (!data || width == 0 || height == 0 || pitch == 0) {
-        D(bug("ZuneRenderer: CreateTextureFromDataInternal - Invalid parameters\n"));
+        D(bug("ZuneGfx: CreateTextureFromDataInternal - Invalid parameters\n"));
         return NULL;
     }
 
     texture = AllocateTexture();
     if (!texture) {
-        D(bug("ZuneRenderer: CreateTextureFromDataInternal - Failed to allocate "
+        D(bug("ZuneGfx: CreateTextureFromDataInternal - Failed to allocate "
               "texture structure\n"));
         return NULL;
     }
@@ -363,7 +363,7 @@ struct ZuneTexture *CreateTextureFromDataInternal(APTR data, UWORD width, UWORD 
     InitializeTexture(texture, width, height, depth, format, flags);
 
     if (!AllocateTextureData(texture)) {
-        D(bug("ZuneRenderer: CreateTextureFromDataInternal - Failed to allocate "
+        D(bug("ZuneGfx: CreateTextureFromDataInternal - Failed to allocate "
               "texture data\n"));
         FreeVec(texture);
         return NULL;
@@ -385,7 +385,7 @@ struct ZuneTexture *CreateTextureFromDataInternal(APTR data, UWORD width, UWORD 
      * Detect opaque textures for rendering optimization.
      * If all pixels have alpha == 0xFF, we can skip alpha blending entirely
      * in the rendering path, which is significantly faster.
-     * 
+     *
      * Only check ARGB32 format textures that have the ALPHA flag set,
      * as those are the ones where this optimization matters.
      */
@@ -415,14 +415,14 @@ struct ZuneTexture *CreateTextureFromDataInternal(APTR data, UWORD width, UWORD 
 
         if (is_opaque) {
             texture->flags |= ZUNE_TEXTURE_OPAQUE;
-            D(bug("ZuneRenderer: CreateTextureFromDataInternal - Texture is fully opaque\n"));
+            D(bug("ZuneGfx: CreateTextureFromDataInternal - Texture is fully opaque\n"));
         }
     } else if (!(flags & ZUNE_TEXTURE_ALPHA)) {
         /* No alpha channel means fully opaque by definition */
         texture->flags |= ZUNE_TEXTURE_OPAQUE;
     }
 
-    D(bug("ZuneRenderer: CreateTextureFromDataInternal - Texture created "
+    D(bug("ZuneGfx: CreateTextureFromDataInternal - Texture created "
           "successfully (%p), opaque=%d\n",
           texture, (texture->flags & ZUNE_TEXTURE_OPAQUE) ? 1 : 0));
 
@@ -434,12 +434,12 @@ struct ZuneTexture *CreateTextureFromDrawingBoardInternal(
 {
     struct DrawingBoard *board = rctx->target_board;
 
-    D(bug("ZuneRenderer: CreateTextureFromDrawingBoardInternal(board=%p, flags=0x%08x)\n", board, flags));
+    D(bug("ZuneGfx: CreateTextureFromDrawingBoardInternal(board=%p, flags=0x%08x)\n", board, flags));
 
     ULONG pitch;
     APTR pixels = LockDrawingBoardPixelsInternal(rctx, &pitch);
     if (!pixels) {
-        D(bug("ZuneRenderer: Failed to lock DrawingBoard pixels\n"));
+        D(bug("ZuneGfx: Failed to lock DrawingBoard pixels\n"));
         return NULL;
     }
 
@@ -460,7 +460,7 @@ struct ZuneTexture *CreateTextureFromDrawingBoardInternal(
 
     UnlockDrawingBoardPixelsInternal(rctx);
 
-    D(bug("ZuneRenderer: Texture created from DrawingBoard %s (%p)\n", texture ? "successfully" : "failed", texture));
+    D(bug("ZuneGfx: Texture created from DrawingBoard %s (%p)\n", texture ? "successfully" : "failed", texture));
 
     return texture;
 }
@@ -473,12 +473,12 @@ struct ZuneTexture *CreateTextureFromDrawingBoardInternal(
 
 void UnlockTexturePixelsInternal(struct ZuneTexture *texture) {
     if (!texture) {
-        D(bug("ZuneRenderer: Invalid texture\n"));
+        D(bug("ZuneGfx: Invalid texture\n"));
         return;
     }
 
     if (!texture->pixels_locked) {
-        D(bug("ZuneRenderer: Texture pixels not locked\n"));
+        D(bug("ZuneGfx: Texture pixels not locked\n"));
         return;
     }
 

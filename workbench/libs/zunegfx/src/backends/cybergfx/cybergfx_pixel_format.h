@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - Pixel Format Conversion Utilities
+    ZuneGfx Library - Pixel Format Conversion Utilities
 
     This header provides inline functions for packing and unpacking
     pixels to/from ARGB32 format. All internal pixel operations use
@@ -115,28 +115,28 @@ static inline void unpack_argb32_logical(ULONG pixel, UBYTE *a, UBYTE *r, UBYTE 
 static inline ULONG blend_argb32(ULONG dst_pixel, ULONG src_pixel) {
     UBYTE src_a, src_r, src_g, src_b;
     UBYTE dst_a, dst_r, dst_g, dst_b;
-    
+
     unpack_argb32(src_pixel, &src_a, &src_r, &src_g, &src_b);
-    
+
     /* Fast path: fully transparent source - return destination unchanged */
     if (src_a == 0)
         return dst_pixel;
-    
+
     /* Fast path: fully opaque source - return source */
     if (src_a == 255)
         return src_pixel;
-    
+
     unpack_argb32(dst_pixel, &dst_a, &dst_r, &dst_g, &dst_b);
-    
+
     /* Fixed-point blending: scale alpha to 0-256 for efficient integer math */
     UWORD alpha = src_a + 1;  /* 1-256 range avoids divide by 255 */
     UWORD inv_alpha = 257 - alpha;  /* Complementary for 256 total */
-    
+
     UBYTE out_r = (UBYTE)((alpha * src_r + inv_alpha * dst_r) >> 8);
     UBYTE out_g = (UBYTE)((alpha * src_g + inv_alpha * dst_g) >> 8);
     UBYTE out_b = (UBYTE)((alpha * src_b + inv_alpha * dst_b) >> 8);
     UBYTE out_a = 255;  /* Result is fully opaque after blending */
-    
+
     return pack_argb32(out_a, out_r, out_g, out_b);
 }
 
@@ -157,23 +157,49 @@ static inline ULONG blend_argb32_alpha(ULONG dst_pixel, UBYTE src_a, UBYTE src_r
     /* Fast path: fully transparent source - return destination unchanged */
     if (src_a == 0)
         return dst_pixel;
-    
+
     /* Fast path: fully opaque source - return source */
     if (src_a == 255)
         return pack_argb32(255, src_r, src_g, src_b);
-    
+
     UBYTE dst_a, dst_r, dst_g, dst_b;
     unpack_argb32(dst_pixel, &dst_a, &dst_r, &dst_g, &dst_b);
-    
+
     /* Fixed-point blending: scale alpha to 0-256 for efficient integer math */
     UWORD alpha = src_a + 1;
     UWORD inv_alpha = 257 - alpha;
-    
+
     UBYTE out_r = (UBYTE)((alpha * src_r + inv_alpha * dst_r) >> 8);
     UBYTE out_g = (UBYTE)((alpha * src_g + inv_alpha * dst_g) >> 8);
     UBYTE out_b = (UBYTE)((alpha * src_b + inv_alpha * dst_b) >> 8);
-    
+
     return pack_argb32(255, out_r, out_g, out_b);
+}
+
+/**
+ * argb32_logical_to_native / argb32_native_to_logical
+ *
+ * Convert between logical ARGB32 (as used by CyberGraphX ReadPixelArray/
+ * WritePixelArray with CYBERGFX_PIXELFORMAT_ARGB32) and native ARGB32
+ * (as used by pack_argb32/unpack_argb32 for direct pixel buffer access).
+ *
+ * On big-endian systems these are identity operations.
+ * On little-endian systems they perform a byte swap.
+ */
+static inline ULONG argb32_logical_to_native(ULONG pixel) {
+#if AROS_BIG_ENDIAN
+    return pixel;
+#else
+    return __builtin_bswap32(pixel);
+#endif
+}
+
+static inline ULONG argb32_native_to_logical(ULONG pixel) {
+#if AROS_BIG_ENDIAN
+    return pixel;
+#else
+    return __builtin_bswap32(pixel);
+#endif
 }
 
 #endif /* CYBERGFX_PIXEL_FORMAT_H */

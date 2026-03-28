@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZuneClearDrawingBoard
+    ZuneGfx Library - ZuneClearDrawingBoard
 */
 
 #include <aros/libcall.h>
@@ -12,7 +12,7 @@
 #include "../../include/zunegfx.h"
 #include "drawingboard_intern.h"
 
-#define DEBUG 1
+#define DEBUG 0
 #include <aros/debug.h>
 
 /*****************************************************************************
@@ -50,11 +50,11 @@ SEE ALSO
 
   ENTER_FUNCTION("ZuneClearDrawingBoard");
 
-  D(bug("ZuneRenderer: ZuneClearDrawingBoard(board=%p, color=0x%08x)\n",
+  D(bug("ZuneGfx: ZuneClearDrawingBoard(board=%p, color=0x%08x)\n",
         rctx->target_board, color));
 
   if (!ValidateDrawingBoard(rctx->target_board)) {
-    D(bug("ZuneRenderer: Invalid DrawingBoard\n"));
+    D(bug("ZuneGfx: Invalid DrawingBoard\n"));
     return;
   }
 
@@ -67,7 +67,7 @@ SEE ALSO
       ZuneColorToInternal(rctx, color, rctx->pixel_format);
   ZUNE_BACKEND_CALL(rctx, ClearRenderContext, &internal_color);
 
-  D(bug("ZuneRenderer: DrawingBoard cleared\n"));
+  D(bug("ZuneGfx: DrawingBoard cleared\n"));
 
   EXIT_FUNCTION("ZuneClearDrawingBoard");
 

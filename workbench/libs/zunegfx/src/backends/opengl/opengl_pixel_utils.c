@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - OpenGL Backend Pixel Utility Functions
+    ZuneGfx Library - OpenGL Backend Pixel Utility Functions
 
     Helper functions for pixel buffer manipulation, texture upload/download,
     and brush-to-texture conversion.

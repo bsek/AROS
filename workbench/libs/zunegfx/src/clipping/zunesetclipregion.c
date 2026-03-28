@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZuneSetClipRegion
+    ZuneGfx Library - ZuneSetClipRegion
 */
 
 #include <aros/libcall.h>
@@ -54,13 +54,13 @@ SEE ALSO
   ENTER_FUNCTION("ZuneSetClipRegion");
 
   if (!ValidateRenderContext(rctx)) {
-    D(bug("ZuneRenderer: Invalid RenderContext\n"));
+    D(bug("ZuneGfx: Invalid RenderContext\n"));
     EXIT_FUNCTION("ZuneSetClipRegion");
     return;
   }
 
   if (!region) {
-    D(bug("ZuneRenderer: Invalid region\n"));
+    D(bug("ZuneGfx: Invalid region\n"));
     EXIT_FUNCTION("ZuneSetClipRegion");
     return;
   }
@@ -74,7 +74,7 @@ SEE ALSO
   /* Create new region and copy input */
   rctx->clip_region = NewRegion();
   if (!rctx->clip_region) {
-    D(bug("ZuneRenderer: Failed to allocate new region\n"));
+    D(bug("ZuneGfx: Failed to allocate new region\n"));
     rctx->clipping_enabled = FALSE;
     EXIT_FUNCTION("ZuneSetClipRegion");
     return;
@@ -82,9 +82,9 @@ SEE ALSO
 
   if (OrRegionRegion(region, rctx->clip_region)) {
     rctx->clipping_enabled = TRUE;
-    D(bug("ZuneRenderer: Clipping region installed successfully\n"));
+    D(bug("ZuneGfx: Clipping region installed successfully\n"));
   } else {
-    D(bug("ZuneRenderer: Failed to copy region\n"));
+    D(bug("ZuneGfx: Failed to copy region\n"));
     DisposeRegion(rctx->clip_region);
     rctx->clip_region = NULL;
     rctx->clipping_enabled = FALSE;

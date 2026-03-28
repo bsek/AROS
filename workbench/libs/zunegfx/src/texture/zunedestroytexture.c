@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZuneDestroyTexture
+    ZuneGfx Library - ZuneDestroyTexture
 */
 
 #include "../backends/backend_interface.h"
@@ -27,17 +27,17 @@ AROS_LH2(void, ZuneDestroyTexture,
 
     ENTER_FUNCTION("ZuneDestroyTexture");
 
-    D(bug("ZuneRenderer: ZuneDestroyTexture(rctx=%p, texture=%p)\n", rctx, texture));
+    D(bug("ZuneGfx: ZuneDestroyTexture(rctx=%p, texture=%p)\n", rctx, texture));
 
     if (!texture) {
-        D(bug("ZuneRenderer: NULL texture, nothing to destroy\n"));
+        D(bug("ZuneGfx: NULL texture, nothing to destroy\n"));
         return;
     }
 
     /* Decrement reference count */
     texture->ref_count--;
     if (texture->ref_count > 0) {
-        D(bug("ZuneRenderer: Texture still has %d references\n", texture->ref_count));
+        D(bug("ZuneGfx: Texture still has %d references\n", texture->ref_count));
         return;
     }
 
@@ -63,7 +63,7 @@ AROS_LH2(void, ZuneDestroyTexture,
     /* Free the structure */
     FreeVec(texture);
 
-    D(bug("ZuneRenderer: Texture destroyed\n"));
+    D(bug("ZuneGfx: Texture destroyed\n"));
 
     EXIT_FUNCTION("ZuneDestroyTexture");
 

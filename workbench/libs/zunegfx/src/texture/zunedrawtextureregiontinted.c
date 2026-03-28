@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZuneDrawTextureRegionTinted
+    ZuneGfx Library - ZuneDrawTextureRegionTinted
 */
 
 #include "../backends/backend_interface.h"
@@ -26,22 +26,22 @@ AROS_LH5(void, ZuneDrawTextureRegionTinted,
 
     ENTER_FUNCTION("ZuneDrawTextureRegionTinted");
 
-    D(bug("ZuneRenderer: ZuneDrawTextureRegionTinted(rctx=%p, texture=%p, "
+    D(bug("ZuneGfx: ZuneDrawTextureRegionTinted(rctx=%p, texture=%p, "
           "src_rect=%p, dest_rect=%p, tint=0x%08x)\n",
           rctx, texture, src_rect, dest_rect, tint_color));
 
     if (!ValidateRenderContext(rctx) || !texture || !src_rect || !dest_rect) {
-        D(bug("ZuneRenderer: Invalid parameters\n"));
+        D(bug("ZuneGfx: Invalid parameters\n"));
         return;
     }
 
     if (src_rect->x + src_rect->width > texture->width || src_rect->y + src_rect->height > texture->height) {
-        D(bug("ZuneRenderer: Source region out of bounds\n"));
+        D(bug("ZuneGfx: Source region out of bounds\n"));
         return;
     }
 
     if (dest_rect->width == 0 || dest_rect->height == 0) {
-        D(bug("ZuneRenderer: Invalid destination dimensions\n"));
+        D(bug("ZuneGfx: Invalid destination dimensions\n"));
         return;
     }
 

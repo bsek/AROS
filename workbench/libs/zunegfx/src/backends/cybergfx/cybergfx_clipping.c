@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - CyberGraphics Backend Clipping Implementation
+    ZuneGfx Library - CyberGraphics Backend Clipping Implementation
 
     This file keeps the CyberGraphics backend within valid render targets.
     Drawing to RastPorts relies on AROS clipping, while DrawingBoards

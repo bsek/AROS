@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZuneDestroyRenderContext
+    ZuneGfx Library - ZuneDestroyRenderContext
 */
 
 #include <aros/libcall.h>
@@ -43,10 +43,10 @@ RESULT
 
   ENTER_FUNCTION("ZuneDestroyRenderContext");
 
-  D(bug("ZuneRenderer: ZuneDestroyRenderContext(rctx=%p)\n", rctx));
+  D(bug("ZuneGfx: ZuneDestroyRenderContext(rctx=%p)\n", rctx));
 
   if (!rctx) {
-    D(bug("ZuneRenderer: NULL RenderContext, nothing to destroy\n"));
+    D(bug("ZuneGfx: NULL RenderContext, nothing to destroy\n"));
     return;
   }
 
@@ -54,7 +54,7 @@ RESULT
   if (rctx->batch_state && rctx->batching_enabled) {
     struct BatchState *batch = (struct BatchState *)rctx->batch_state;
     if (batch->immediate.count > 0 || batch->deferred.count > 0) {
-      D(bug("ZuneRenderer: Flushing pending batch operations\n"));
+      D(bug("ZuneGfx: Flushing pending batch operations\n"));
     }
   }
 
@@ -67,7 +67,7 @@ RESULT
   /* Free the structure */
   FreeVec(rctx);
 
-  D(bug("ZuneRenderer: RenderContext destroyed\n"));
+  D(bug("ZuneGfx: RenderContext destroyed\n"));
 
   EXIT_FUNCTION("ZuneDestroyRenderContext");
 

@@ -1,9 +1,9 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - Backend Management Implementation (New Interface)
+    ZuneGfx Library - Backend Management Implementation (New Interface)
 
-    This file implements the unified backend management system for ZuneRenderer
+    This file implements the unified backend management system for ZuneGfx
     using the new ZuneBackendOps interface. It handles backend registration,
     detection, selection, and provides the interface between the public API
     and the specific backend implementations.
@@ -208,12 +208,12 @@ ZuneBackend *ZuneFindBackendByType(ZuneBackendType type) {
 
   ForeachNode(&ZuneBackendList, backend) {
     D(bug("ZuneFindBackendByType: Checking backend %s (type %d, available=%d)\n",
-          backend->ops ? backend->ops->name : "NULL", 
+          backend->ops ? backend->ops->name : "NULL",
           backend->ops ? backend->ops->type : -1,
           backend->available));
-          
+
     if (backend->ops && backend->ops->type == type) {
-      /* 
+      /*
        * Re-check availability - the backend might have become available
        * after initial registration (e.g., GL library opened later).
        */
@@ -227,7 +227,7 @@ ZuneBackend *ZuneFindBackendByType(ZuneBackendType type) {
           backend->context->initialized = TRUE;
         }
       }
-      
+
       if (backend->available) {
         D(bug("ZuneFindBackendByType: Found available backend %s\n", backend->ops->name));
         ReleaseSemaphore(&ZuneBackendSemaphore);

@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZuneReload
+    ZuneGfx Library - ZuneReload
 */
 
 #include <aros/libcall.h>
@@ -12,7 +12,7 @@
 #include "../../include/zunegfx.h"
 #include "drawingboard_intern.h"
 
-#define DEBUG 1
+#define DEBUG 0
 #include <aros/debug.h>
 
 /*****************************************************************************
@@ -44,7 +44,7 @@ RESULT
 
 NOTES
     Call this function after direct CyberGfx/graphics.library operations
-    on the DrawingBoard's bitmap and before ZuneRenderer drawing.
+    on the DrawingBoard's bitmap and before ZuneGfx drawing.
 
     This is the inverse of ZuneSync().
 
@@ -65,17 +65,17 @@ SEE ALSO
   struct DrawingBoard *board;
 
   ENTER_FUNCTION("ZuneReload");
-  D(bug("ZuneRenderer: ZuneReload(rctx=%p)\n", rctx));
+  D(bug("ZuneGfx: ZuneReload(rctx=%p)\n", rctx));
 
   if (!rctx || !rctx->target_board || !rctx->target_board->valid) {
-    D(bug("ZuneRenderer: ZuneReload - Invalid RenderContext or DrawingBoard\n"));
+    D(bug("ZuneGfx: ZuneReload - Invalid RenderContext or DrawingBoard\n"));
     EXIT_FUNCTION("ZuneReload");
     return FALSE;
   }
 
   board = rctx->target_board;
   if (!board->rastport) {
-    D(bug("ZuneRenderer: ZuneReload - DrawingBoard has no rastport\n"));
+    D(bug("ZuneGfx: ZuneReload - DrawingBoard has no rastport\n"));
     EXIT_FUNCTION("ZuneReload");
     return FALSE;
   }

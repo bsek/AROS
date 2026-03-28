@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZuneDestroyDrawingBoard
+    ZuneGfx Library - ZuneDestroyDrawingBoard
 */
 
 #include <aros/libcall.h>
@@ -12,7 +12,7 @@
 #include "../../include/zunegfx.h"
 #include "drawingboard_intern.h"
 
-#define DEBUG 1
+#define DEBUG 0
 #include <aros/debug.h>
 
 /*****************************************************************************
@@ -53,10 +53,10 @@ SEE ALSO
 
   ENTER_FUNCTION("ZuneDestroyDrawingBoard");
 
-  D(bug("ZuneRenderer: ZuneDestroyDrawingBoard(rctx=%p, board=%p)\n", rctx, board));
+  D(bug("ZuneGfx: ZuneDestroyDrawingBoard(rctx=%p, board=%p)\n", rctx, board));
 
   if (!board) {
-    D(bug("ZuneRenderer: NULL DrawingBoard, nothing to destroy\n"));
+    D(bug("ZuneGfx: NULL DrawingBoard, nothing to destroy\n"));
     return;
   }
 
@@ -72,7 +72,7 @@ SEE ALSO
   /* Free structure */
   FreeVec(board);
 
-  D(bug("ZuneRenderer: DrawingBoard destroyed\n"));
+  D(bug("ZuneGfx: DrawingBoard destroyed\n"));
 
   EXIT_FUNCTION("ZuneDestroyDrawingBoard");
 

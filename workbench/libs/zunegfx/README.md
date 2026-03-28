@@ -330,7 +330,7 @@ Enable with `#define DEBUG 1` for detailed operation logging.
 
 ## License
 
-Copyright (C) 2025, The AROS Development Team. All rights reserved.
+Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
 This library is part of the AROS Research Operating System and is distributed under the same licensing terms as AROS.
 

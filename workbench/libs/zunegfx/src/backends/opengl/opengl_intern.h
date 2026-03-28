@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - OpenGL Backend Internal Header
+    ZuneGfx Library - OpenGL Backend Internal Header
 
     Shared declarations for all OpenGL backend source files.
     This header provides access to GL extension function pointers,
@@ -32,7 +32,7 @@
 #include <GL/gla.h>
 #include <GL/glext.h>
 
-#define DEBUG 1
+#define DEBUG 0
 #include <aros/debug.h>
 
 #include "../backend_interface.h"

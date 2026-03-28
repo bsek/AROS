@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZuneLockTexturePixels
+    ZuneGfx Library - ZuneLockTexturePixels
 */
 
 #include "../backends/backend_interface.h"
@@ -24,10 +24,10 @@ AROS_LH3(APTR, ZuneLockTexturePixels,
 
     ENTER_FUNCTION("ZuneLockTexturePixels");
 
-    D(bug("ZuneRenderer: ZuneLockTexturePixels(rctx=%p, texture=%p, pitch=%p)\n", rctx, texture, pitch));
+    D(bug("ZuneGfx: ZuneLockTexturePixels(rctx=%p, texture=%p, pitch=%p)\n", rctx, texture, pitch));
 
     if (!texture) {
-        D(bug("ZuneRenderer: Invalid texture\n"));
+        D(bug("ZuneGfx: Invalid texture\n"));
         return NULL;
     }
 
@@ -39,12 +39,12 @@ AROS_LH3(APTR, ZuneLockTexturePixels,
     }
 
     if (texture->pixels_locked) {
-        D(bug("ZuneRenderer: Texture pixels already locked\n"));
+        D(bug("ZuneGfx: Texture pixels already locked\n"));
         return NULL;
     }
 
     if (!texture->pixel_data) {
-        D(bug("ZuneRenderer: No pixel data available to lock\n"));
+        D(bug("ZuneGfx: No pixel data available to lock\n"));
         return NULL;
     }
 
@@ -54,7 +54,7 @@ AROS_LH3(APTR, ZuneLockTexturePixels,
         *pitch = texture->pitch;
     }
 
-    D(bug("ZuneRenderer: Texture pixels locked (pitch=%d)\n", texture->pitch));
+    D(bug("ZuneGfx: Texture pixels locked (pitch=%d)\n", texture->pitch));
 
     EXIT_FUNCTION("ZuneLockTexturePixels");
     return texture->pixel_data;

@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZuneUnlockDrawingBoardPixels
+    ZuneGfx Library - ZuneUnlockDrawingBoardPixels
 */
 
 #include <aros/libcall.h>
@@ -11,7 +11,7 @@
 #include "../../include/zunegfx.h"
 #include "drawingboard_intern.h"
 
-#define DEBUG 1
+#define DEBUG 0
 #include <aros/debug.h>
 
 /*****************************************************************************

@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - Core Internal Functions
+    ZuneGfx Library - Core Internal Functions
 
     This module provides internal core functionality including library
     initialization, RenderContext management, and backend detection.
@@ -42,20 +42,20 @@ BOOL DetectLibraries(void) {
   /* Try to open CyberGraphics library */
   CyberGfxBase = OpenLibrary("cybergraphics.library", 0);
   if (CyberGfxBase) {
-    D(bug("ZuneRenderer: CyberGraphics library v%ld.%ld available\n",
+    D(bug("ZuneGfx: CyberGraphics library v%ld.%ld available\n",
           CyberGfxBase->lib_Version, CyberGfxBase->lib_Revision));
   } else {
-    D(bug("ZuneRenderer: CyberGraphics library not available, using "
+    D(bug("ZuneGfx: CyberGraphics library not available, using "
           "graphics.library\n"));
   }
 
   /* Try to open GL library (mesa3dgl or hostgl) */
   GLBase = OpenLibrary("gl.library", 20);
   if (GLBase) {
-    D(bug("ZuneRenderer: GL library v%ld.%ld available\n",
+    D(bug("ZuneGfx: GL library v%ld.%ld available\n",
           GLBase->lib_Version, GLBase->lib_Revision));
   } else {
-    D(bug("ZuneRenderer: GL library not available, OpenGL backend disabled\n"));
+    D(bug("ZuneGfx: GL library not available, OpenGL backend disabled\n"));
   }
 
   EXIT_FUNCTION("DetectLibraries");
@@ -66,8 +66,8 @@ BOOL DetectLibraries(void) {
 /* Library Initialization */
 /*****************************************************************************/
 
-BOOL InitializeZuneRenderer(struct IntZuneGfxBase *base) {
-  ENTER_FUNCTION("InitializeZuneRenderer");
+BOOL InitializeZuneGfx(struct IntZuneGfxBase *base) {
+  ENTER_FUNCTION("InitializeZuneGfx");
 
   if (!base)
     return FALSE;
@@ -80,13 +80,13 @@ BOOL InitializeZuneRenderer(struct IntZuneGfxBase *base) {
 
   /* Detect libraries first */
   if (!DetectLibraries()) {
-    D(bug("ZuneRenderer: Library detection failed\n"));
+    D(bug("ZuneGfx: Library detection failed\n"));
     return FALSE;
   }
 
   /* Initialize backend system */
   if (!ZuneInitBackends()) {
-    D(bug("ZuneRenderer: Backend system initialization failed\n"));
+    D(bug("ZuneGfx: Backend system initialization failed\n"));
     return FALSE;
   }
 
@@ -107,36 +107,36 @@ BOOL InitializeZuneRenderer(struct IntZuneGfxBase *base) {
   if (ZuneIsBackendAvailable(BACKEND_OPENGL)) {
     extern BOOL OpenGL_PreInitializeShaders(void);
     BOOL shader_result;
-    D(bug("ZuneRenderer: Pre-initializing OpenGL shaders...\n"));
+    D(bug("ZuneGfx: Pre-initializing OpenGL shaders...\n"));
     shader_result = OpenGL_PreInitializeShaders();
-    D(bug("ZuneRenderer: PreInitializeShaders returned %d\n", shader_result));
+    D(bug("ZuneGfx: PreInitializeShaders returned %d\n", shader_result));
     if (shader_result) {
-      D(bug("ZuneRenderer: OpenGL shaders pre-initialized successfully\n"));
+      D(bug("ZuneGfx: OpenGL shaders pre-initialized successfully\n"));
     } else {
-      D(bug("ZuneRenderer: OpenGL shader pre-initialization failed (will retry on first window)\n"));
+      D(bug("ZuneGfx: OpenGL shader pre-initialization failed (will retry on first window)\n"));
     }
   }
 
-  D(bug("ZuneRenderer: Library initialized successfully\n"));
+  D(bug("ZuneGfx: Library initialized successfully\n"));
 
   /* Display backend information */
   ZuneBackend *best_backend = ZuneFindBestBackend(NULL);
-  D(bug("ZuneRenderer: Best Backend: %s\n",
+  D(bug("ZuneGfx: Best Backend: %s\n",
         best_backend ? (const char *)ZuneGetBackendName(best_backend)
                      : "None"));
-  D(bug("ZuneRenderer: CyberGraphics: %s\n",
+  D(bug("ZuneGfx: CyberGraphics: %s\n",
         ZuneIsBackendAvailable(BACKEND_CYBERGFX) ? "Available"
                                                  : "Not Available"));
-  D(bug("ZuneRenderer: OpenGL: %s\n", ZuneIsBackendAvailable(BACKEND_OPENGL)
+  D(bug("ZuneGfx: OpenGL: %s\n", ZuneIsBackendAvailable(BACKEND_OPENGL)
                                           ? "Available"
                                           : "Not Available"));
 
-  EXIT_FUNCTION("InitializeZuneRenderer");
+  EXIT_FUNCTION("InitializeZuneGfx");
   return TRUE;
 }
 
-void CleanupZuneRenderer(struct IntZuneGfxBase *base) {
-  ENTER_FUNCTION("CleanupZuneRenderer");
+void CleanupZuneGfx(struct IntZuneGfxBase *base) {
+  ENTER_FUNCTION("CleanupZuneGfx");
 
   if (!base)
     return;
@@ -164,8 +164,8 @@ void CleanupZuneRenderer(struct IntZuneGfxBase *base) {
   /* Note: graphics.library (GfxBase) is opened by system startup and
      should not be closed by us */
 
-  D(bug("ZuneRenderer: Library cleanup completed\n"));
-  EXIT_FUNCTION("CleanupZuneRenderer");
+  D(bug("ZuneGfx: Library cleanup completed\n"));
+  EXIT_FUNCTION("CleanupZuneGfx");
 }
 
 /*****************************************************************************/
@@ -273,11 +273,11 @@ struct RenderContext *CreateRenderContextForWindowInternal(
 
   ENTER_FUNCTION("CreateRenderContextForWindowInternal");
 
-  D(bug("ZuneRenderer: ZuneCreateRenderContextForWindow(window=%p, colormap=%p)\n",
+  D(bug("ZuneGfx: ZuneCreateRenderContextForWindow(window=%p, colormap=%p)\n",
         window, colormap));
 
   if (!window || !colormap) {
-    D(bug("ZuneRenderer: Invalid parameters (window=%p, colormap=%p)\n",
+    D(bug("ZuneGfx: Invalid parameters (window=%p, colormap=%p)\n",
           window, colormap));
     EXIT_FUNCTION("CreateRenderContextForWindowInternal");
     return NULL;
@@ -286,7 +286,7 @@ struct RenderContext *CreateRenderContextForWindowInternal(
   /* Allocate RenderContext structure */
   rctx = AllocVec(sizeof(struct RenderContext), MEMF_CLEAR | MEMF_PUBLIC);
   if (!rctx) {
-    D(bug("ZuneRenderer: Failed to allocate RenderContext\n"));
+    D(bug("ZuneGfx: Failed to allocate RenderContext\n"));
     EXIT_FUNCTION("CreateRenderContextForWindowInternal");
     return NULL;
   }
@@ -316,13 +316,13 @@ struct RenderContext *CreateRenderContextForWindowInternal(
 
   if (backend_type != BACKEND_BEST_AVAILABLE) {
     backend = ZuneFindBackendByType(backend_type);
-    D(bug("ZuneRenderer: Requested backend type %d, found: %p\n", backend_type, backend));
+    D(bug("ZuneGfx: Requested backend type %d, found: %p\n", backend_type, backend));
   } else {
     backend = ZuneFindBestBackend(rctx);
   }
 
   if (backend && ZuneBindRenderContextToBackend(rctx, backend)) {
-    D(bug("ZuneRenderer: RenderContext bound to %s backend (type %d)\n", backend->ops->name, backend->ops->type));
+    D(bug("ZuneGfx: RenderContext bound to %s backend (type %d)\n", backend->ops->name, backend->ops->type));
 
     /* Determine pixel format */
     if (backend->ops->GetPixelFormat && window->RPort->BitMap) {
@@ -331,7 +331,7 @@ struct RenderContext *CreateRenderContextForWindowInternal(
       rctx->pixel_format = PIXFMT_ARGB32;
     }
   } else {
-    D(bug("ZuneRenderer: No backend available, using software fallback\n"));
+    D(bug("ZuneGfx: No backend available, using software fallback\n"));
     rctx->backend_type = BACKEND_SOFTWARE;
     rctx->backend_context = NULL;
     rctx->backend_vtable = NULL;
@@ -341,7 +341,7 @@ struct RenderContext *CreateRenderContextForWindowInternal(
   /* Add to tracking list */
   AddRenderContextToList(base, rctx);
 
-  D(bug("ZuneRenderer: RenderContext created for window %p, backend=%d\n",
+  D(bug("ZuneGfx: RenderContext created for window %p, backend=%d\n",
         window, rctx->backend_type));
 
   EXIT_FUNCTION("CreateRenderContextForWindowInternal");
@@ -367,7 +367,7 @@ void DestroyRenderContextInternal(struct IntZuneGfxBase *base,
   /* Free structure */
   FreeVec(rctx);
 
-  D(bug("ZuneRenderer: RenderContext destroyed internally\n"));
+  D(bug("ZuneGfx: RenderContext destroyed internally\n"));
   EXIT_FUNCTION("DestroyRenderContextInternal");
 }
 
@@ -380,7 +380,7 @@ struct RenderContext *CreateRenderContextInternal(struct IntZuneGfxBase *base,
 
   if (!colormap || !rastport) {
     D(bug(
-        "ZuneRenderer: Invalid parameters for internal RenderContext creation\n"));
+        "ZuneGfx: Invalid parameters for internal RenderContext creation\n"));
     EXIT_FUNCTION("CreateRenderContextInternal");
     return NULL;
   }
@@ -388,7 +388,7 @@ struct RenderContext *CreateRenderContextInternal(struct IntZuneGfxBase *base,
   /* Allocate RenderContext structure */
   rctx = AllocVec(sizeof(struct RenderContext), MEMF_CLEAR | MEMF_PUBLIC);
   if (!rctx) {
-    D(bug("ZuneRenderer: Failed to allocate RenderContext internally\n"));
+    D(bug("ZuneGfx: Failed to allocate RenderContext internally\n"));
     EXIT_FUNCTION("CreateRenderContextInternal");
     return NULL;
   }
@@ -425,7 +425,7 @@ struct RenderContext *CreateRenderContextInternal(struct IntZuneGfxBase *base,
     }
   } else {
     /* No active backend - rely on software fallbacks */
-    D(bug("ZuneRenderer: No backend available, using software fallback\n"));
+    D(bug("ZuneGfx: No backend available, using software fallback\n"));
     rctx->backend_type = BACKEND_SOFTWARE;
     rctx->backend_context = NULL;
     rctx->backend_vtable = NULL;

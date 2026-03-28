@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - CyberGraphics Circle Drawing Implementation
+    ZuneGfx Library - CyberGraphics Circle Drawing Implementation
 
     This file implements circle drawing functions for the CyberGraphics backend,
     including Bresenham circle algorithm and optimized drawing paths for both
@@ -353,7 +353,7 @@ static void CybergfxDrawAACircleDrawingBoard(struct RenderContext *rctx, UWORD x
     WORD max_x = fminf(board->width - 1, cybergfx_fast_ftoi(x + radius + 2.0f));
     WORD max_y = fminf(board->height - 1, cybergfx_fast_ftoi(y + radius + 2.0f));
 
-    D(bug("CybergfxDrawAACircleDrawingBoard: bounding box (%d,%d) to (%d,%d)\n", min_x, min_y, max_x, max_y));
+    D(bug("CybergfxDrawAACircleRastPort: bounding box (%d,%d) to (%d,%d)\n", min_x, min_y, max_x, max_y));
 
     /* SIMD/scanline path */
     cybergfx_simd_level level = cybergfx_get_simd_level();
@@ -386,7 +386,9 @@ static void CybergfxDrawAACircleDrawingBoard(struct RenderContext *rctx, UWORD x
             cybergfx_circle_alphas_batch4(dist, border_width, fill_color != NULL, border_color != NULL, fill_a, border_a);
 
             ULONG bg_pixels[4];
-            memcpy(bg_pixels, row_buffer ? (row_buffer + px) : (pixels + row_base + px), sizeof(bg_pixels));
+            ULONG *src = row_buffer ? (row_buffer + px) : (pixels + row_base + px);
+            for (WORD i = 0; i < 4; i++)
+                bg_pixels[i] = argb32_native_to_logical(src[i]);
 
             ULONG result_pixels[4];
             ULONG changed_mask;
@@ -405,7 +407,7 @@ static void CybergfxDrawAACircleDrawingBoard(struct RenderContext *rctx, UWORD x
             if (changed_mask) {
                 for (WORD i = 0; i < 4; i++) {
                     if (changed_mask & (1u << i)) {
-                        ULONG final_color = result_pixels[i];
+                        ULONG final_color = argb32_logical_to_native(result_pixels[i]);
                         CybergfxWritePixelClamped(pixels, pitch_pixels, board->width, board->height,
                                                   min_x + px + i, py, final_color);
                         if (row_buffer) row_buffer[px + i] = final_color;
@@ -479,15 +481,15 @@ static void CybergfxDrawAACircleDrawingBoard(struct RenderContext *rctx, UWORD x
 
 static void CybergfxDrawAACircleRastPort(struct RenderContext *rctx, UWORD x, UWORD y, UWORD radius, struct ZuneBrush *fill_brush,
                                          struct InternalColor *border_color, UBYTE border_width) {
-    ENTER_FUNCTION("CybergfxDrawAACircleDrawingBoard");
+    ENTER_FUNCTION("CybergfxDrawAACircleRastPort");
 
     if (!rctx) {
-        EXIT_FUNCTION("CybergfxDrawAACircleDrawingBoard");
+        EXIT_FUNCTION("CybergfxDrawAACircleRastPort");
         return;
     }
 
     if (fill_brush == NULL && border_color == NULL) {
-        EXIT_FUNCTION("CybergfxDrawAACircleDrawingBoard");
+        EXIT_FUNCTION("CybergfxDrawAACircleRastPort");
         return;
     }
 
@@ -501,18 +503,18 @@ static void CybergfxDrawAACircleRastPort(struct RenderContext *rctx, UWORD x, UW
     WORD max_x = fminf(bitmap_width - 1, cybergfx_fast_ftoi(x + radius + 2.0f));
     WORD max_y = fminf(bitmap_height - 1, cybergfx_fast_ftoi(y + radius + 2.0f));
 
-    D(bug("CybergfxDrawAACircleDrawingBoard: bounding box (%d,%d) to (%d,%d)\n", min_x, min_y, max_x, max_y));
+    D(bug("CybergfxDrawAACircleRastPort: bounding box (%d,%d) to (%d,%d)\n", min_x, min_y, max_x, max_y));
 
     /* Use multi-scanline batching to reduce ReadPixelArray/WritePixelArray syscall overhead */
     #define SCANLINE_BATCH 32
     WORD width = max_x - min_x + 1;
     WORD total_height = max_y - min_y + 1;
-    
-    ULONG *batch_buffer = (width > 0 && total_height > 0) 
-                             ? malloc((ULONG)width * SCANLINE_BATCH * sizeof(ULONG)) 
+
+    ULONG *batch_buffer = (width > 0 && total_height > 0)
+                             ? malloc((ULONG)width * SCANLINE_BATCH * sizeof(ULONG))
                              : NULL;
     float rel_x_buf[8];
-    
+
     /* Track which rows in the batch are dirty */
     BOOL batch_dirty[SCANLINE_BATCH];
 
@@ -525,22 +527,22 @@ static void CybergfxDrawAACircleRastPort(struct RenderContext *rctx, UWORD x, UW
 
     /* Process rows in batches */
     for (WORD batch_start_y = min_y; batch_start_y <= max_y; batch_start_y += SCANLINE_BATCH) {
-        WORD batch_height = (batch_start_y + SCANLINE_BATCH <= max_y + 1) 
-                              ? SCANLINE_BATCH 
+        WORD batch_height = (batch_start_y + SCANLINE_BATCH <= max_y + 1)
+                              ? SCANLINE_BATCH
                               : (max_y - batch_start_y + 1);
-        
+
         /* Read entire batch from raster port */
         BOOL batch_ok = FALSE;
         if (batch_buffer) {
-            batch_ok = ReadPixelArray(batch_buffer, 0, 0, (ULONG)width * 4, rctx->target_rastport, 
+            batch_ok = ReadPixelArray(batch_buffer, 0, 0, (ULONG)width * 4, rctx->target_rastport,
                                       min_x, batch_start_y, width, batch_height, CYBERGFX_PIXELFORMAT_ARGB32);
         }
-        
+
         /* Reset dirty flags */
         for (WORD i = 0; i < batch_height; ++i) {
             batch_dirty[i] = FALSE;
         }
-        
+
         BOOL any_dirty = FALSE;
 
         for (WORD row_in_batch = 0; row_in_batch < batch_height; ++row_in_batch) {
@@ -692,8 +694,8 @@ static void CybergfxDrawAACircleRastPort(struct RenderContext *rctx, UWORD x, UW
                 } else if (!is_dirty && write_start >= 0) {
                     /* Write contiguous dirty region */
                     WORD write_height = i - write_start;
-                    WritePixelArray(batch_buffer + (write_start * width), 0, 0, (ULONG)width * 4, 
-                                    rctx->target_rastport, min_x, batch_start_y + write_start, width, write_height, 
+                    WritePixelArray(batch_buffer + (write_start * width), 0, 0, (ULONG)width * 4,
+                                    rctx->target_rastport, min_x, batch_start_y + write_start, width, write_height,
                                     CYBERGFX_PIXELFORMAT_ARGB32);
                     write_start = -1;
                 }
@@ -706,5 +708,5 @@ static void CybergfxDrawAACircleRastPort(struct RenderContext *rctx, UWORD x, UW
     }
     #undef SCANLINE_BATCH
 
-    EXIT_FUNCTION("CybergfxDrawAACircleDrawingBoard");
+    EXIT_FUNCTION("CybergfxDrawAACircleRastPort");
 }

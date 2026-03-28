@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - Core Internal Header
+    ZuneGfx Library - Core Internal Header
 */
 
 #ifndef ZUNEGFX_CORE_INTERN_H
@@ -17,8 +17,8 @@ struct ColorMap;
 
 /* Internal core functions */
 BOOL DetectLibraries(void);
-BOOL InitializeZuneRenderer(struct IntZuneGfxBase *base);
-void CleanupZuneRenderer(struct IntZuneGfxBase *base);
+BOOL InitializeZuneGfx(struct IntZuneGfxBase *base);
+void CleanupZuneGfx(struct IntZuneGfxBase *base);
 
 void InitializeRenderContext(struct RenderContext *rctx);
 void CleanupRenderContext(struct RenderContext *rctx);

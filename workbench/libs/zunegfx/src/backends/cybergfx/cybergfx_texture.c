@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - CyberGraphics Backend Texture Implementation
+    ZuneGfx Library - CyberGraphics Backend Texture Implementation
 
     This file implements texture operations for the CyberGraphics backend,
     providing hardware-accelerated texture rendering when possible.

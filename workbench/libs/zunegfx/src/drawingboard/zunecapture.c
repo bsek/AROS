@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZuneCapture
+    ZuneGfx Library - ZuneCapture
 */
 
 #include <aros/libcall.h>
@@ -13,7 +13,7 @@
 #include "../../include/zunegfx.h"
 #include "drawingboard_intern.h"
 
-#define DEBUG 1
+#define DEBUG 0
 #include <aros/debug.h>
 
 /*****************************************************************************
@@ -65,17 +65,17 @@ SEE ALSO
 
   ENTER_FUNCTION("ZuneCapture");
 
-  D(bug("ZuneRenderer: ZuneCapture(rctx=%p, src_rp=%p, src=%d,%d dst=%d,%d %dx%d)\n",
+  D(bug("ZuneGfx: ZuneCapture(rctx=%p, src_rp=%p, src=%d,%d dst=%d,%d %dx%d)\n",
         rctx, src_rp, src_x, src_y, dst_x, dst_y, width, height));
 
   if (!rctx || !src_rp) {
-    D(bug("ZuneRenderer: Invalid RenderContext or source RastPort for ZuneCapture\n"));
+    D(bug("ZuneGfx: Invalid RenderContext or source RastPort for ZuneCapture\n"));
     EXIT_FUNCTION("ZuneCapture");
     return;
   }
 
   if (!rctx->target_board || !rctx->target_board->valid) {
-    D(bug("ZuneRenderer: RenderContext has no valid DrawingBoard\n"));
+    D(bug("ZuneGfx: RenderContext has no valid DrawingBoard\n"));
     EXIT_FUNCTION("ZuneCapture");
     return;
   }
@@ -91,7 +91,7 @@ SEE ALSO
     backend->ops->CopyFromRastPort(rctx, src_rp, src_x, src_y,
                                    dst_x, dst_y, width, height);
   } else {
-    D(bug("ZuneRenderer: Backend does not support CopyFromRastPort\n"));
+    D(bug("ZuneGfx: Backend does not support CopyFromRastPort\n"));
   }
 
   EXIT_FUNCTION("ZuneCapture");

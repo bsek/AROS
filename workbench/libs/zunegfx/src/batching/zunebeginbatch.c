@@ -42,18 +42,18 @@ SEE ALSO
 
   ENTER_FUNCTION("ZuneBeginBatch");
 
-  D(bug("ZuneRenderer: ZuneBeginBatch(rctx=%p)\n", rctx));
+  D(bug("ZuneGfx: ZuneBeginBatch(rctx=%p)\n", rctx));
 
   if (!ValidateRenderContext(rctx)) {
-    D(bug("ZuneRenderer: Invalid RenderContext\n"));
+    D(bug("ZuneGfx: Invalid RenderContext\n"));
     return;
   }
 
   if (!rctx->batch_state) {
-    D(bug("ZuneRenderer: Creating batch state on-demand\n"));
+    D(bug("ZuneGfx: Creating batch state on-demand\n"));
     rctx->batch_state = CreateBatchState(rctx);
     if (!rctx->batch_state) {
-      D(bug("ZuneRenderer: Failed to create batch state\n"));
+      D(bug("ZuneGfx: Failed to create batch state\n"));
       return;
     }
   }
@@ -74,7 +74,7 @@ SEE ALSO
     backend->ops->BeginBatch(rctx);
   }
 
-  D(bug("ZuneRenderer: Batch session started\n"));
+  D(bug("ZuneGfx: Batch session started\n"));
 
   EXIT_FUNCTION("ZuneBeginBatch");
 

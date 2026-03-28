@@ -1,5 +1,13 @@
 #include "opengl_intern.h"
 
+/* GLCompositor semaphore structure -- must match glcompositor_intern.h */
+struct GLCompositorSemaphore
+{
+    struct SignalSemaphore   sem;
+    APTR                    master_context;
+};
+#define GLCOMPOSITOR_SEMAPHORE_NAME "GLCompositorMasterContext"
+
 /*
  * OpenGL_CreateMasterContext - Create the master GL context for resource sharing
  *
@@ -29,7 +37,81 @@ BOOL OpenGL_CreateMasterContext(struct Window *window)
         return TRUE;
     }
 
-    /* Set up tags for master context creation */
+    /*
+     * Check if GLCompositor has already published a master context.
+     * If so, share with it instead of creating a standalone context.
+     * This is critical on SoftPipe where only one pipe_screen exists.
+     */
+    {
+        struct GLCompositorSemaphore *comp_sem;
+        APTR compositor_ctx = NULL;
+
+        Forbid();
+        comp_sem = (struct GLCompositorSemaphore *)FindSemaphore(GLCOMPOSITOR_SEMAPHORE_NAME);
+        Permit();
+
+        if (comp_sem) {
+            ObtainSemaphoreShared(&comp_sem->sem);
+            compositor_ctx = comp_sem->master_context;
+            ReleaseSemaphore(&comp_sem->sem);
+        }
+
+        if (compositor_ctx) {
+            D(bug("[ZuneGfx:OpenGL] CreateMasterContext: Found compositor master context %p, sharing\n",
+                  compositor_ctx));
+
+            tags[tag_idx].ti_Tag = GLA_Window;
+            tags[tag_idx].ti_Data = (IPTR)window;
+            tag_idx++;
+            tags[tag_idx].ti_Tag = GLA_Left;
+            tags[tag_idx].ti_Data = window->BorderLeft;
+            tag_idx++;
+            tags[tag_idx].ti_Tag = GLA_Top;
+            tags[tag_idx].ti_Data = window->BorderTop;
+            tag_idx++;
+            tags[tag_idx].ti_Tag = GLA_Right;
+            tags[tag_idx].ti_Data = window->BorderRight;
+            tag_idx++;
+            tags[tag_idx].ti_Tag = GLA_Bottom;
+            tags[tag_idx].ti_Data = window->BorderBottom;
+            tag_idx++;
+            tags[tag_idx].ti_Tag = GLA_NoDepth;
+            tags[tag_idx].ti_Data = GL_TRUE;
+            tag_idx++;
+            tags[tag_idx].ti_Tag = GLA_NoStencil;
+            tags[tag_idx].ti_Data = GL_TRUE;
+            tag_idx++;
+            tags[tag_idx].ti_Tag = GLA_ShareContext;
+            tags[tag_idx].ti_Data = (IPTR)compositor_ctx;
+            tag_idx++;
+            tags[tag_idx].ti_Tag = TAG_DONE;
+            tags[tag_idx].ti_Data = 0;
+
+            master_ctx = glACreateContext(tags);
+            if (master_ctx) {
+                g_opengl_priv->master_context = (APTR)master_ctx;
+                g_opengl_priv->master_context_created = TRUE;
+                g_opengl_priv->shared_contexts_supported = TRUE;
+
+                glAMakeCurrent(master_ctx);
+
+                D(bug("[ZuneGfx:OpenGL] CreateMasterContext: Shared with compositor, master=%p\n", master_ctx));
+
+                OpenGL_LoadFBOFunctions();
+
+                if (!g_shaders_available) {
+                    if (OpenGL_InitShaders()) {
+                        g_opengl_priv->has_shaders = TRUE;
+                    }
+                }
+                return TRUE;
+            }
+            D(bug("[ZuneGfx:OpenGL] CreateMasterContext: Sharing with compositor failed, trying standalone\n"));
+            tag_idx = 0;
+        }
+    }
+
+    /* Set up tags for standalone master context creation */
     tags[tag_idx].ti_Tag = GLA_Window;
     tags[tag_idx].ti_Data = (IPTR)window;
     tag_idx++;
@@ -61,10 +143,10 @@ BOOL OpenGL_CreateMasterContext(struct Window *window)
     tags[tag_idx].ti_Tag = TAG_DONE;
     tags[tag_idx].ti_Data = 0;
 
-    /* Create master GL context */
+    /* Create standalone master GL context */
     master_ctx = glACreateContext(tags);
     if (!master_ctx) {
-        D(bug("[ZuneRenderer:OpenGL] OpenGL_CreateMasterContext: glACreateContext FAILED\n"));
+        D(bug("[ZuneGfx:OpenGL] CreateMasterContext: glACreateContext FAILED\n"));
         return FALSE;
     }
 
@@ -105,14 +187,6 @@ BOOL OpenGL_CreateMasterContext(struct Window *window)
 
     return TRUE;
 }
-
-/* GLCompositor semaphore structure -- must match glcompositor_intern.h */
-struct GLCompositorSemaphore
-{
-    struct SignalSemaphore   sem;
-    APTR                    master_context;
-};
-#define GLCOMPOSITOR_SEMAPHORE_NAME "GLCompositorMasterContext"
 
 /*
  * TryHeadlessContext - Create a headless GL context without a window
@@ -720,6 +794,28 @@ BOOL OpenGL_EnsureGlobalContext(struct Window *window)
             D(bug("[ZuneGfx:OpenGL] EnsureGlobalContext: Master context created, shared_contexts_supported=%d\n",
                   g_opengl_priv->shared_contexts_supported));
             use_shared_context = g_opengl_priv->shared_contexts_supported;
+
+            /*
+             * If sharing is NOT supported (e.g. SoftPipe), reuse the master
+             * context as the global context instead of creating a second one
+             * for the same window — SoftPipe cannot create two contexts
+             * targeting the same window.
+             */
+            if (!use_shared_context) {
+                D(bug("[ZuneGfx:OpenGL] EnsureGlobalContext: Promoting master context to global (no sharing support)\n"));
+                g_opengl_priv->gl_context = g_opengl_priv->master_context;
+                g_opengl_priv->context_created = TRUE;
+                g_opengl_priv->current_target_type = OPENGL_TARGET_WINDOW;
+                g_opengl_priv->current_window = window;
+                g_opengl_priv->current_board = NULL;
+                g_opengl_priv->current_width = window->Width - window->BorderLeft - window->BorderRight;
+                g_opengl_priv->current_height = window->Height - window->BorderTop - window->BorderBottom;
+                glAMakeCurrent((GLAContext)g_opengl_priv->gl_context);
+                OpenGL_SetupOrthoProjection(g_opengl_priv->current_width, g_opengl_priv->current_height);
+                D(bug("[ZuneGfx:OpenGL] EnsureGlobalContext: Global context = master %p\n",
+                      g_opengl_priv->gl_context));
+                return TRUE;
+            }
         } else {
             D(bug("[ZuneGfx:OpenGL] EnsureGlobalContext: Master context creation failed, continuing without sharing\n"));
         }

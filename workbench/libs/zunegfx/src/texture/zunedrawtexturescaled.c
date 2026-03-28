@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZuneDrawTextureScaled
+    ZuneGfx Library - ZuneDrawTextureScaled
 */
 
 #include "../backends/backend_interface.h"
@@ -24,10 +24,10 @@ AROS_LH3(void, ZuneDrawTextureScaled,
 
     ENTER_FUNCTION("ZuneDrawTextureScaled");
 
-    D(bug("ZuneRenderer: ZuneDrawTextureScaled(rctx=%p, texture=%p, dest_rect=%p)\n", rctx, texture, dest_rect));
+    D(bug("ZuneGfx: ZuneDrawTextureScaled(rctx=%p, texture=%p, dest_rect=%p)\n", rctx, texture, dest_rect));
 
     if (!ValidateRenderContext(rctx) || !texture || !dest_rect) {
-        D(bug("ZuneRenderer: Invalid parameters\n"));
+        D(bug("ZuneGfx: Invalid parameters\n"));
         return;
     }
 

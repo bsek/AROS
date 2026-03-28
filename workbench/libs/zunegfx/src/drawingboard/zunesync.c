@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZuneSync
+    ZuneGfx Library - ZuneSync
 */
 
 #include <aros/libcall.h>
@@ -12,7 +12,7 @@
 #include "../../include/zunegfx.h"
 #include "drawingboard_intern.h"
 
-#define DEBUG 1
+#define DEBUG 0
 #include <aros/debug.h>
 
 /*****************************************************************************
@@ -43,7 +43,7 @@ RESULT
     TRUE if sync was successful or not needed, FALSE on error.
 
 NOTES
-    Call this function after ZuneRenderer drawing and before direct
+    Call this function after ZuneGfx drawing and before direct
     CyberGfx/graphics.library operations on the same DrawingBoard.
 
     Example mixed-mode rendering:
@@ -60,10 +60,10 @@ SEE ALSO
   AROS_LIBFUNC_INIT
 
   ENTER_FUNCTION("ZuneSync");
-  D(bug("ZuneRenderer: ZuneSync(rctx=%p)\n", rctx));
+  D(bug("ZuneGfx: ZuneSync(rctx=%p)\n", rctx));
 
   if (!rctx || !rctx->target_board || !rctx->target_board->valid) {
-    D(bug("ZuneRenderer: ZuneSync - Invalid RenderContext or DrawingBoard\n"));
+    D(bug("ZuneGfx: ZuneSync - Invalid RenderContext or DrawingBoard\n"));
     EXIT_FUNCTION("ZuneSync");
     return FALSE;
   }

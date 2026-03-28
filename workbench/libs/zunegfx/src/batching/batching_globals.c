@@ -22,13 +22,13 @@ struct BatchState *CreateBatchState(struct RenderContext *rctx) {
   ENTER_FUNCTION("CreateBatchState");
 
   if (!rctx) {
-    D(bug("ZuneRenderer: Invalid RenderContext for batch state\n"));
+    D(bug("ZuneGfx: Invalid RenderContext for batch state\n"));
     return NULL;
   }
 
   batch = AllocVec(sizeof(struct BatchState), MEMF_CLEAR | MEMF_PUBLIC);
   if (!batch) {
-    D(bug("ZuneRenderer: Failed to allocate BatchState\n"));
+    D(bug("ZuneGfx: Failed to allocate BatchState\n"));
     return NULL;
   }
 
@@ -58,7 +58,7 @@ struct BatchState *CreateBatchState(struct RenderContext *rctx) {
   batch->active = FALSE;
   batch->render_port = rctx;
 
-  D(bug("ZuneRenderer: Enhanced BatchState created\n"));
+  D(bug("ZuneGfx: Enhanced BatchState created\n"));
   EXIT_FUNCTION("CreateBatchState");
   return batch;
 }
@@ -95,7 +95,7 @@ void DestroyBatchState(struct BatchState *batch) {
   batch->pixelBatch.needsFlush = FALSE;
   FreeVec(batch);
 
-  D(bug("ZuneRenderer: Enhanced batch state destroyed\n"));
+  D(bug("ZuneGfx: Enhanced batch state destroyed\n"));
   EXIT_FUNCTION("DestroyBatchState");
 }
 
@@ -124,7 +124,7 @@ BOOL AddCommandToBatch(struct BatchState *batch, BatchCommandType type, WORD x,
   batch->deferred.count++;
   batch->deferred.needsSort = TRUE;
 
-  D(bug("ZuneRenderer: Batched command type %d (%d/%d)\n",
+  D(bug("ZuneGfx: Batched command type %d (%d/%d)\n",
         (LONG)type, (LONG)batch->deferred.count, DEFERRED_BATCH_SIZE));
 
   return TRUE;
@@ -155,7 +155,7 @@ BOOL AddStyledCommandToBatch(struct BatchState *batch, BatchCommandType type,
   batch->deferred.count++;
   batch->deferred.needsSort = TRUE;
 
-  D(bug("ZuneRenderer: Batched styled command type %d bw=%d (%d/%d)\n",
+  D(bug("ZuneGfx: Batched styled command type %d bw=%d (%d/%d)\n",
         (LONG)type, (LONG)border_width,
         (LONG)batch->deferred.count, DEFERRED_BATCH_SIZE));
 
@@ -177,7 +177,7 @@ void ExecuteBatchCommands(struct BatchState *batch) {
 
   struct RenderContext *rctx = batch->render_port;
 
-  D(bug("ZuneRenderer: Executing %d batched commands\n",
+  D(bug("ZuneGfx: Executing %d batched commands\n",
         (LONG)batch->deferred.count));
 
   /* Optimize: merge adjacent same-color fill rects */
@@ -186,7 +186,7 @@ void ExecuteBatchCommands(struct BatchState *batch) {
   /* Execute commands via backend */
   ZuneBackend *backend = ZuneGetRenderContextBackend(rctx);
   if (!backend || !backend->ops) {
-    D(bug("ZuneRenderer: No backend for batch execution\n"));
+    D(bug("ZuneGfx: No backend for batch execution\n"));
     batch->deferred.count = 0;
     return;
   }
@@ -228,7 +228,7 @@ void ExecuteBatchCommands(struct BatchState *batch) {
     }
   }
 
-  D(bug("ZuneRenderer: Batch execution complete\n"));
+  D(bug("ZuneGfx: Batch execution complete\n"));
 
   /* Reset counters */
   batch->immediate.count = 0;
@@ -297,7 +297,7 @@ void OptimizeBatchCommands(struct BatchState *batch) {
 
       /* Merge rectangles */
       lastCmd->width += cmd->width;
-      D(bug("ZuneRenderer: Merged adjacent rectangles\n"));
+      D(bug("ZuneGfx: Merged adjacent rectangles\n"));
       continue;
     }
 
@@ -306,7 +306,7 @@ void OptimizeBatchCommands(struct BatchState *batch) {
   }
 
   if (writePos < batch->deferred.count) {
-    D(bug("ZuneRenderer: Optimized %d commands to %d\n", batch->deferred.count,
+    D(bug("ZuneGfx: Optimized %d commands to %d\n", batch->deferred.count,
           writePos));
     batch->deferred.count = writePos;
   }

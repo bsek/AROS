@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZuneCreateTexture
+    ZuneGfx Library - ZuneCreateTexture
 */
 
 #include "../backends/backend_interface.h"
@@ -28,18 +28,18 @@ AROS_LH6(struct ZuneTexture *, ZuneCreateTexture,
 
     ENTER_FUNCTION("ZuneCreateTexture");
 
-    D(bug("ZuneRenderer: ZuneCreateTexture(rctx=%p, width=%d, height=%d, depth=%d, "
+    D(bug("ZuneGfx: ZuneCreateTexture(rctx=%p, width=%d, height=%d, depth=%d, "
           "format=0x%08x, flags=0x%08x)\n",
           rctx, width, height, depth, format, flags));
 
     if (width == 0 || height == 0) {
-        D(bug("ZuneRenderer: Invalid texture dimensions\n"));
+        D(bug("ZuneGfx: Invalid texture dimensions\n"));
         return NULL;
     }
 
     texture = AllocateTexture();
     if (!texture) {
-        D(bug("ZuneRenderer: Failed to allocate texture structure\n"));
+        D(bug("ZuneGfx: Failed to allocate texture structure\n"));
         return NULL;
     }
 
@@ -56,7 +56,7 @@ AROS_LH6(struct ZuneTexture *, ZuneCreateTexture,
 
     AddTextureToList(base, texture);
 
-    D(bug("ZuneRenderer: Texture created successfully (%p)\n", texture));
+    D(bug("ZuneGfx: Texture created successfully (%p)\n", texture));
 
     EXIT_FUNCTION("ZuneCreateTexture");
     return texture;

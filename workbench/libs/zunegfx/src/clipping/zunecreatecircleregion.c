@@ -1,7 +1,7 @@
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - ZuneCreateCircleRegion
+    ZuneGfx Library - ZuneCreateCircleRegion
 */
 
 #include <aros/libcall.h>
@@ -47,7 +47,7 @@ NOTES
     with the AROS Region system.
 
 SEE ALSO
-    ZuneCreateRoundedRectRegion(), ZuneCreateEllipseRegion(), DisposeRegion()
+    ZuneCreateRoundedRectRegion(), DisposeRegion()
 
 *****************************************************************************/
 {
@@ -60,7 +60,7 @@ SEE ALSO
   ENTER_FUNCTION("ZuneCreateCircleRegion");
 
   if (!center || radius <= 0) {
-    D(bug("ZuneRenderer: Invalid parameters for circle region (center=%p, radius=%d)\n", center, radius));
+    D(bug("ZuneGfx: Invalid parameters for circle region (center=%p, radius=%d)\n", center, radius));
     EXIT_FUNCTION("ZuneCreateCircleRegion");
     return NULL;
   }
@@ -70,7 +70,7 @@ SEE ALSO
 
   region = NewRegion();
   if (!region) {
-    D(bug("ZuneRenderer: Failed to create circle region\n"));
+    D(bug("ZuneGfx: Failed to create circle region\n"));
     EXIT_FUNCTION("ZuneCreateCircleRegion");
     return NULL;
   }
@@ -101,7 +101,7 @@ SEE ALSO
         rect.MaxY = center_y + y;
 
         if (!OrRectRegion(region, &rect)) {
-          D(bug("ZuneRenderer: Failed to add rectangle to circle region\n"));
+          D(bug("ZuneGfx: Failed to add rectangle to circle region\n"));
           DisposeRegion(region);
           EXIT_FUNCTION("ZuneCreateCircleRegion");
           return NULL;
@@ -110,7 +110,7 @@ SEE ALSO
     }
   }
 
-  D(bug("ZuneRenderer: Created circle region center=(%d,%d) radius=%d\n",
+  D(bug("ZuneGfx: Created circle region center=(%d,%d) radius=%d\n",
         center_x, center_y, radius));
 
   EXIT_FUNCTION("ZuneCreateCircleRegion");

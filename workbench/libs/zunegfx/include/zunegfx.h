@@ -2,9 +2,9 @@
 #define LIBRARIES_ZUNEGFX_H
 
 /*
-    Copyright (C) 2025, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    Zune Renderer Library - Public API Header
+    ZuneGfx Library - Public API Header
 
     A modern, clean rendering library for AROS with unified target system
     and consistent naming conventions. Supports both immediate mode rendering
@@ -207,7 +207,7 @@ struct ZuneBrush {
   ULONG flags;
 
   /* INTERNAL CACHE - DO NOT MODIFY DIRECTLY
-   * These fields are populated automatically by ZuneRenderer when the brush
+   * These fields are populated automatically by ZuneGfx when the brush
    * is used in rendering operations. They cache pre-computed data for optimal
    * performance in tight rendering loops. */
   struct {
@@ -233,6 +233,16 @@ struct ZuneBrush {
       WORD src_x, src_y; /* Source rectangle start coordinates */
       UWORD src_w, src_h; /* Source rectangle dimensions */
     } texture_cache;
+
+    /* Cached data for RADIAL_GRADIENT - pre-rasterized */
+    struct {
+      ULONG *rasterized_pixels;  /* ARGB32 pixel data, NULL if not cached */
+      UWORD rasterized_width;    /* Width the cache was created for */
+      UWORD rasterized_height;   /* Height the cache was created for */
+      float center_x;            /* Absolute center X */
+      float center_y;            /* Absolute center Y */
+      float inv_radius;          /* 1.0f / radius for fast distance→t */
+    } radial_cache;
 
     /* Cached data for PATTERN - pre-computed colors */
     struct {
@@ -266,7 +276,7 @@ struct ZuneBrush {
     } radial;
     struct {
       LONG pen;         /* Pen index as understood by the target RastPort */
-      BOOL release_pen; /* TRUE if ZuneRenderer should release the pen */
+      BOOL release_pen; /* TRUE if ZuneGfx should release the pen */
       ULONG reserved;   /* Reserved for future use */
     } pen;
     struct {
@@ -421,8 +431,6 @@ struct ZuneBrush {
   ZuneCreateCircleRegion(ZUNE_POINT_PTR((cx), (cy)), (radius))
 #define ZuneCreateRoundedRectRegionRect(x, y, w, h, radius)                    \
   ZuneCreateRoundedRectRegion(ZUNE_RECT_PTR((x), (y), (w), (h)), (radius))
-#define ZuneCreateEllipseRegionAt(cx, cy, rx, ry)                              \
-  ZuneCreateEllipseRegion(ZUNE_POINT_PTR((cx), (cy)), (rx), (ry))
 
 /* Forward declarations */
 struct DrawingBoard;

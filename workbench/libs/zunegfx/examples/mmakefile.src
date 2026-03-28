@@ -4,25 +4,43 @@
 include $(SRCDIR)/config/aros.cfg
 
 FILES  := \
-    opengl_test \
-    compositor_test \
-    alpha_window_test
-#    rect_demo
-#    texture_from_file_test \
-#    line_drawing_test \
-#    sdf_antialiasing_test_simple \
-#    texture_simple_test \
-#    texture_tiled_demo
-#    texture_test \
-#    simplified_batching_example \
-#    simplified_drawingboard_example \
-#    batching_performance_test \
-#    antialiasing_example
+    demo_rect_locked \
+    demo_rect_unlocked \
+    demo_rect_aa_locked \
+    demo_rect_aa_unlocked \
+    demo_circle_locked \
+    demo_circle_unlocked \
+    demo_circle_aa_locked \
+    demo_circle_aa_unlocked \
+    demo_line_locked \
+    demo_line_unlocked \
+    demo_line_aa_locked \
+    demo_line_aa_unlocked \
+    demo_text_locked \
+    demo_text_unlocked \
+    demo_polyline_locked \
+    demo_polyline_unlocked \
+    demo_polygon_locked \
+    demo_polygon_unlocked \
+    demo_texture \
+    demo_pixel \
+    demo_clipping \
+    demo_sync \
+    demo_batch
 
 #MM workbench-libs-zunegfx-examples : includes linklibs workbench-libs-zunegfx
 
+TARGETDIR := $(AROSDIR)/Developer/Debug/Tests/Graphics/zunegfx
+
 %build_progs mmake=workbench-libs-zunegfx-examples \
-    files=$(FILES) targetdir=$(AROSDIR)/ \
+    files=$(FILES) targetdir=$(TARGETDIR) \
     uselibs="zunegfx muimaster mui GL"
+
+#MM
+workbench-libs-zunegfx-examples : $(TARGETDIR)/testimage.png
+
+$(TARGETDIR)/testimage.png : $(SRCDIR)/$(CURDIR)/testimage.png
+	%mkdir_q dir=$(TARGETDIR)
+	$(CP) $< $@
 
 %common
