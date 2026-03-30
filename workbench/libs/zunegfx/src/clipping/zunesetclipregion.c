@@ -82,6 +82,15 @@ SEE ALSO
 
   if (OrRegionRegion(region, rctx->clip_region)) {
     rctx->clipping_enabled = TRUE;
+
+    /* Activate clipping in the backend */
+    {
+      ZuneBackend *backend = ZuneGetRenderContextBackend(rctx);
+      if (backend && backend->ops && backend->ops->SetupClipping) {
+        backend->ops->SetupClipping(rctx, rctx->clip_region);
+      }
+    }
+
     D(bug("ZuneGfx: Clipping region installed successfully\n"));
   } else {
     D(bug("ZuneGfx: Failed to copy region\n"));

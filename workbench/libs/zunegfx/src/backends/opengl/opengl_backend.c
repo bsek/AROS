@@ -1183,4 +1183,8 @@ ZuneBackendOps opengl_backend_ops = {
 
     /* Polygon fill */
     .FillPolygon = OpenGLFillPolygon,
+
+    /* Clipping */
+    .SetupClipping = OpenGLSetupClipping,
+    .ClearClipping = OpenGLClearClipping,
 };

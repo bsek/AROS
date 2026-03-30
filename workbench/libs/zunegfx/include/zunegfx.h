@@ -498,6 +498,7 @@ struct RenderContext {
 
   /* Clipping */
   struct Region *clip_region; /* Clipping region */
+  struct Region *saved_clip_region; /* Previous Layer clip region (restored on clear) */
   BOOL clipping_enabled;      /* Clipping active */
 
   /* Text rendering */

@@ -56,6 +56,14 @@ SEE ALSO
     return;
   }
 
+  /* Deactivate clipping in the backend first */
+  {
+    ZuneBackend *backend = ZuneGetRenderContextBackend(rctx);
+    if (backend && backend->ops && backend->ops->ClearClipping) {
+      backend->ops->ClearClipping(rctx);
+    }
+  }
+
   rctx->clipping_enabled = FALSE;
   if (rctx->clip_region) {
     DisposeRegion(rctx->clip_region);

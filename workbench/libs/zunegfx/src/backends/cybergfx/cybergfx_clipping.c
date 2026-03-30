@@ -12,7 +12,9 @@
 #include <exec/types.h>
 #include <graphics/gfx.h>
 #include <graphics/regions.h>
+#include <graphics/layers.h>
 #include <proto/graphics.h>
+#include <proto/layers.h>
 #include <proto/cybergraphics.h>
 #include <libraries/cybergraphics.h>
 
@@ -23,14 +25,14 @@
 /*****************************************************************************
  * CybergfxSetupClipping
  *
- * CybergfxSetupClipping
+ * For RastPort targets with a Layer, installs the clip region on the Layer
+ * via InstallClipRegion(). The previous region is saved on the RenderContext
+ * so it can be restored when clipping is cleared.
  *
- * No special setup is needed; clipping is delegated to the RastPort or
- * handled implicitly when we clamp to DrawingBoard bounds.
+ * For DrawingBoard targets, this is a no-op — no region-based clipping.
  *****************************************************************************/
 BOOL CybergfxSetupClipping(struct RenderContext *rctx, struct Region *region) {
     ENTER_FUNCTION("CybergfxSetupClipping");
-    (void)region;
 
     if (!rctx) {
         D(bug("CybergfxSetupClipping: Invalid RenderContext\n"));
@@ -38,8 +40,23 @@ BOOL CybergfxSetupClipping(struct RenderContext *rctx, struct Region *region) {
         return FALSE;
     }
 
-    /* Clipping is handled by the target RastPort/DrawingBoard. Nothing to do. */
-    D(bug("CybergfxSetupClipping: Using native RastPort clipping\n"));
+    /* Only install clip region for RastPort targets that have a Layer */
+    if (!rctx->target_board && rctx->target_rastport &&
+        rctx->target_rastport->Layer && region) {
+        struct Region *install_region;
+
+        /* Make a copy of the region for InstallClipRegion — the Layer owns it */
+        install_region = NewRegion();
+        if (install_region) {
+            OrRegionRegion(region, install_region);
+            rctx->saved_clip_region = InstallClipRegion(
+                rctx->target_rastport->Layer, install_region);
+            D(bug("CybergfxSetupClipping: Installed clip region on Layer %p\n",
+                  rctx->target_rastport->Layer));
+        }
+    } else {
+        D(bug("CybergfxSetupClipping: No Layer, skipping (DrawingBoard or no RastPort)\n"));
+    }
 
     EXIT_FUNCTION("CybergfxSetupClipping");
     return TRUE;
@@ -125,8 +142,8 @@ BOOL CybergfxClipRectangle(struct RenderContext *rctx, WORD x, WORD y, WORD widt
 /*****************************************************************************
  * CybergfxClearClipping
  *
- * Clears any backend-specific clipping state. For cybergfx, this is mostly
- * a no-op since clipping state is managed by the core library.
+ * Restores the previous clip region on the Layer (saved during SetupClipping).
+ * For DrawingBoard targets, this is a no-op.
  *****************************************************************************/
 void CybergfxClearClipping(struct RenderContext *rctx) {
     ENTER_FUNCTION("CybergfxClearClipping");
@@ -136,12 +153,23 @@ void CybergfxClearClipping(struct RenderContext *rctx) {
         return;
     }
 
-    /* For software backends, clipping state is managed by the core library.
-     * We don't need to do anything special here, but we could add debugging
-     * or statistics tracking if needed.
-     */
+    /* Restore previous clip region on the Layer */
+    if (!rctx->target_board && rctx->target_rastport &&
+        rctx->target_rastport->Layer) {
+        struct Region *removed;
 
-    D(bug("CybergfxClearClipping: Clipping cleared for RenderContext %p\n", rctx));
+        removed = InstallClipRegion(
+            rctx->target_rastport->Layer, rctx->saved_clip_region);
+        rctx->saved_clip_region = NULL;
+
+        /* Dispose the region we installed (it was our copy) */
+        if (removed) {
+            DisposeRegion(removed);
+        }
+
+        D(bug("CybergfxClearClipping: Restored previous clip region on Layer %p\n",
+              rctx->target_rastport->Layer));
+    }
 
     EXIT_FUNCTION("CybergfxClearClipping");
 }
