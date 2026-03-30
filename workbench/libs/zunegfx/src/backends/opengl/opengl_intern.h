@@ -332,6 +332,13 @@ void OpenGLFillPolygon(struct RenderContext *rctx, struct ZunePoint *points,
 extern GLuint g_text_program;
 
 /*****************************************************************************/
+/* Internal Function Declarations - Clipping (opengl_clipping.c)             */
+/*****************************************************************************/
+
+BOOL OpenGLSetupClipping(struct RenderContext *rctx, struct Region *region);
+void OpenGLClearClipping(struct RenderContext *rctx);
+
+/*****************************************************************************/
 /* Fallback Functions (from zunegfx_fallback.c)                              */
 /*****************************************************************************/
 

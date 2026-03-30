@@ -139,6 +139,7 @@ BACKEND_FILES := \
         src/backends/opengl/opengl_sync \
         src/backends/opengl/opengl_pixel_utils \
         src/backends/opengl/opengl_drawing \
+        src/backends/opengl/opengl_clipping \
         src/backends/opengl/opengl_backend \
         src/backends/cybergfx/cybergfx_text \
         src/backends/cybergfx/cybergfx_polygon \
