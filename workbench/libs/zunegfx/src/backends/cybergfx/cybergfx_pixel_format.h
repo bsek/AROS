@@ -28,9 +28,12 @@
  */
 static inline ULONG pack_argb32(UBYTE a, UBYTE r, UBYTE g, UBYTE b) {
 #if AROS_BIG_ENDIAN
+    /* Big endian: ULONG 0xAARRGGBB stored as bytes AA RR GG BB — matches PIXFMT_ARGB32 */
     return (((ULONG)a) << 24) | (((ULONG)r) << 16) | (((ULONG)g) << 8) | ((ULONG)b);
 #else
-    /* Little endian: pack so memory bytes are A,R,G,B */
+    /* Little endian: PIXFMT_ARGB32 means memory bytes AA RR GG BB.
+     * A ULONG stored little-endian puts low byte first, so we pack
+     * with B in high bits so memory order becomes AA RR GG BB. */
     return (((ULONG)b) << 24) | (((ULONG)g) << 16) | (((ULONG)r) << 8) | ((ULONG)a);
 #endif
 }
@@ -52,11 +55,11 @@ static inline void unpack_argb32(ULONG pixel, UBYTE *a, UBYTE *r, UBYTE *g, UBYT
     *g = (pixel >> 8) & 0xFF;
     *b = pixel & 0xFF;
 #else
-    /* Little endian: memory bytes are A,R,G,B */
-    *b = (pixel >> 24) & 0xFF;
-    *g = (pixel >> 16) & 0xFF;
-    *r = (pixel >> 8) & 0xFF;
+    /* Little endian: memory bytes are AA RR GG BB, ULONG is BBGGRRAA */
     *a = pixel & 0xFF;
+    *r = (pixel >> 8) & 0xFF;
+    *g = (pixel >> 16) & 0xFF;
+    *b = (pixel >> 24) & 0xFF;
 #endif
 }
 

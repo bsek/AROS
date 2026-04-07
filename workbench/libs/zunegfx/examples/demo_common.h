@@ -53,9 +53,10 @@ ULONG ParseBackendArg(int argc, char **argv);
  * DemoInit - Initialize demo window and rendering context
  *
  * Opens libraries, creates window, RenderContext and DrawingBoard.
+ * Pass ZUNE_DRAWINGBOARD_LINEARMEM in flags for locked pixel access.
  * Returns TRUE on success.
  */
-BOOL DemoInit(struct DemoContext *ctx, const char *title, UWORD width, UWORD height, ULONG backend);
+BOOL DemoInit(struct DemoContext *ctx, const char *title, UWORD width, UWORD height, ULONG backend, ULONG flags);
 
 /*
  * DemoPresent - Present DrawingBoard to window

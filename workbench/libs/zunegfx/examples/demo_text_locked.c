@@ -137,7 +137,7 @@ int main(int argc, char **argv)
     printf("Text Demo (Locked) - %s\n", DemoBackendName(backend));
     printf("====================================\n\n");
 
-    if (!DemoInit(&ctx, "Text Demo (Locked)", 800, 480, backend))
+    if (!DemoInit(&ctx, "Text Demo (Locked)", 800, 480, backend, ZUNE_DRAWINGBOARD_LINEARMEM))
         return 1;
 
     ZuneClearRenderContext(ctx.rctx, ZUNE_COLOR_ARGB32(255, 40, 40, 60));

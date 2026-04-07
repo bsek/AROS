@@ -11,7 +11,7 @@
 #include <utility/tagitem.h>
 
 #include <clib/arossupport_protos.h>
-#define DEBUG 0
+#define DEBUG 1
 #include <aros/debug.h>
 
 #include "../../include/zunegfx.h"

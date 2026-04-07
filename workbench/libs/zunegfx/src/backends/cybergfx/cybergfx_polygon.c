@@ -154,7 +154,7 @@ static void FillSpanBrushRastPort(struct RenderContext *rctx,
 
     WritePixelArray(span_buffer, 0, 0, (ULONG)width * 4,
                     rp, x_start, y, width, 1,
-                    RECTFMT_ARGB);
+                    CYBERGFX_PIXELFORMAT_ARGB32);
 }
 
 /*

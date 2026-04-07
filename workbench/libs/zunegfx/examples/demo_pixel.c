@@ -145,7 +145,7 @@ int main(int argc, char **argv)
     printf("Pixel Demo - %s\n", DemoBackendName(backend));
     printf("==============================\n\n");
 
-    if (!DemoInit(&ctx, "Pixel Demo", 640, 400, backend))
+    if (!DemoInit(&ctx, "Pixel Demo", 640, 400, backend, ZUNE_DRAWINGBOARD_LINEARMEM))
         return 1;
 
     ZuneClearRenderContext(ctx.rctx, ZUNE_COLOR_ARGB32(255, 30, 30, 50));

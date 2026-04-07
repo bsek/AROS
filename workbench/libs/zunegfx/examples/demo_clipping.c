@@ -115,7 +115,7 @@ int main(int argc, char **argv)
     printf("Clipping Demo - %s\n", DemoBackendName(backend));
     printf("=================================\n\n");
 
-    if (!DemoInit(&ctx, "Clipping Demo", 500, 480, backend))
+    if (!DemoInit(&ctx, "Clipping Demo", 500, 480, backend, 0))
         return 1;
 
     ZuneClearRenderContext(ctx.rctx, ZUNE_COLOR_ARGB32(255, 30, 30, 50));

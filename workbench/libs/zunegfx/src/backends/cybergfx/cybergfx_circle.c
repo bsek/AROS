@@ -111,7 +111,7 @@ void CybergfxDrawCircle(struct RenderContext *rctx, WORD center_x, WORD center_y
             if (board->pixel_format == PIXFMT_ARGB32 || board->pixel_format == PIXFMT_RGBA32) {
                 ULONG *pixels = (ULONG *)board->pixels;
                 ULONG pitch_pixels = board->pitch / 4;
-                ULONG converted_color = fill_brush->data.solid.color;
+                ULONG converted_color = argb32_logical_to_native(fill_brush->data.solid.color);
 
                 if (pitch_pixels == 0) {
                     EXIT_FUNCTION("CybergfxDrawCircle");

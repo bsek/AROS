@@ -42,10 +42,14 @@ static void DrawAARectangles(struct DemoContext *ctx)
     ZuneDrawRectangleRoundedOutlineStyledAAXYWH(rctx, 290, 350, 100, 80, 20, 4, ZUNE_BLUE);
 
     /* Overlapping AA */
+    ZuneFillRectangleRoundedAAXYWH(rctx, 420, 100, 150, 100, 30,
+                                   ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(128, 255, 255, 0)));
     ZuneDrawRectangleRoundedOutlineStyledAAXYWH(rctx, 450, 130, 150, 100, 35, 5,
                                                 ZUNE_COLOR_ARGB32(255, 255, 0, 0));
 
     /* Small AA rectangles */
+    ZuneFillRectangleRoundedAAXYWH(rctx, 420, 280, 40, 30, 8,
+                                   ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(200, 255, 128, 64)));
     ZuneDrawRectangleRoundedOutlineStyledAAXYWH(rctx, 470, 290, 35, 25, 6, 2,
                                                 ZUNE_COLOR_ARGB32(200, 64, 255, 128));
     ZuneFillRectangleRoundedStyledAAXYWH(rctx, 515, 300, 45, 35, 10, 3,
@@ -80,7 +84,7 @@ int main(int argc, char **argv)
     printf("AA Rectangle Demo (Unlocked) - %s\n", DemoBackendName(backend));
     printf("============================================\n\n");
 
-    if (!DemoInit(&ctx, "AA Rectangle Demo (Unlocked)", 640, 480, backend))
+    if (!DemoInit(&ctx, "AA Rectangle Demo (Unlocked)", 640, 480, backend, 0))
         return 1;
 
     ZuneClearRenderContext(ctx.rctx, ZUNE_DARKGRAY);

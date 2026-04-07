@@ -49,22 +49,21 @@ static void DrawRectangles(struct DemoContext *ctx)
 
     /* Gradient brush */
     struct ZuneGradientStop gradient_stops[] = {
-        {0.0f, ZUNE_COLOR_ARGB32(255, 255, 0, 0)},
-        {0.5f, ZUNE_COLOR_ARGB32(255, 255, 255, 0)},
-        {1.0f, ZUNE_COLOR_ARGB32(255, 0, 0, 255)},
+        {0.0f, ZUNE_COLOR_ARGB32(255, 255, 128, 0)},
+        {0.5f, ZUNE_COLOR_ARGB32(255, 255, 0, 128)},
+        {1.0f, ZUNE_COLOR_ARGB32(255, 128, 0, 255)},
     };
     struct ZuneBrush gradient_brush = {
         .type = ZUNE_BRUSH_TYPE_LINEAR_GRADIENT,
         .flags = 0, .internal = {0},
         .data = {.linear = {
             .start = ZUNE_POINT_LITERAL(0, 0),
-            .end = ZUNE_POINT_LITERAL(0, 180),
+            .end = ZUNE_POINT_LITERAL(180, 0),
             .stops = gradient_stops,
             .stop_count = 3
         }}
     };
-    ZuneDrawRectangleRoundedXYWH(rctx, 420, 260, 180, 80, 28, &gradient_brush);
-    ZuneDrawRectangleXYWH(rctx, 630, 260, 140, 80, &gradient_brush);
+    ZuneDrawRectangleRoundedXYWH(rctx, 420, 250, 180, 80, 20, &gradient_brush);
 
     /* Texture brush from testimage.png */
     {
@@ -84,7 +83,7 @@ static void DrawRectangles(struct DemoContext *ctx)
                     .filter = ZUNE_BRUSH_FILTER_LINEAR
                 }}
             };
-            ZuneDrawRectangleRoundedXYWH(rctx, 420, 360, 180, 80, 20, &tex_brush);
+            ZuneDrawRectangleRoundedXYWH(rctx, 420, 350, 180, 80, 20, &tex_brush);
             ZuneDestroyTexture(rctx, ptex);
         }
     }
@@ -109,6 +108,10 @@ static void DrawRectangles(struct DemoContext *ctx)
     };
     ZuneDrawRectangleRoundedStyledXYWH(rctx, 620, 150, 140, 80, 20, 4,
                                        &styled_brush, ZUNE_WHITE);
+
+    ZuneDrawRectangleRoundedStyledXYWH(rctx, 620, 250, 140, 80, 25, 1,
+                                       ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(255, 255, 200, 100)),
+                                       ZUNE_COLOR_ARGB32(255, 150, 100, 50));
 }
 
 int main(int argc, char **argv)
@@ -119,7 +122,7 @@ int main(int argc, char **argv)
     printf("Rectangle Demo (Unlocked) - %s\n", DemoBackendName(backend));
     printf("===========================================\n\n");
 
-    if (!DemoInit(&ctx, "Rectangle Demo (Unlocked)", 800, 480, backend))
+    if (!DemoInit(&ctx, "Rectangle Demo (Unlocked)", 800, 480, backend, 0))
         return 1;
 
     ZuneClearRenderContext(ctx.rctx, ZUNE_DARKGRAY);

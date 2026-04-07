@@ -20,6 +20,7 @@
 
 #include "../backend_interface.h"
 #include "cybergfx_backend.h"
+#include "cybergfx_pixel_format.h"
 #include "../../zunegfx_intern.h"
 
 /*****************************************************************************

@@ -34,7 +34,7 @@ const char *DemoBackendName(ULONG backend)
     }
 }
 
-BOOL DemoInit(struct DemoContext *ctx, const char *title, UWORD width, UWORD height, ULONG backend)
+BOOL DemoInit(struct DemoContext *ctx, const char *title, UWORD width, UWORD height, ULONG backend, ULONG flags)
 {
     WORD inner_width, inner_height;
 
@@ -103,7 +103,7 @@ BOOL DemoInit(struct DemoContext *ctx, const char *title, UWORD width, UWORD hei
     }
 
     /* Create DrawingBoard */
-    ctx->board = ZuneCreateDrawingBoardForRenderContext(ctx->rctx, inner_width, inner_height, 0);
+    ctx->board = ZuneCreateDrawingBoardForRenderContext(ctx->rctx, inner_width, inner_height, flags);
     if (!ctx->board) {
         printf("ERROR: Cannot create DrawingBoard\n");
         return FALSE;

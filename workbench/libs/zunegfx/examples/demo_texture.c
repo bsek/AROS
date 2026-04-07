@@ -219,7 +219,7 @@ int main(int argc, char **argv)
     printf("Texture Demo - %s\n", DemoBackendName(backend));
     printf("================================\n\n");
 
-    if (!DemoInit(&ctx, "Texture Demo", 700, 480, backend))
+    if (!DemoInit(&ctx, "Texture Demo", 700, 480, backend, 0))
         return 1;
 
     ZuneClearRenderContext(ctx.rctx, ZUNE_COLOR_ARGB32(255, 30, 30, 50));
