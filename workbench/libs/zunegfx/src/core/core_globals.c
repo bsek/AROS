@@ -11,7 +11,7 @@
 #include "../../include/zunegfx.h"
 #include <aros/libcall.h>
 #include <clib/arossupport_protos.h>
-#define DEBUG 0
+#define DEBUG 1
 #include <aros/debug.h>
 #include <cybergraphx/cybergraphics.h>
 #include <exec/libraries.h>

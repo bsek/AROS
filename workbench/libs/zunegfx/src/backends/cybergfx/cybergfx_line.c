@@ -199,22 +199,22 @@ static void draw_straight_line(struct RenderContext *rctx, UWORD start_x, UWORD 
 
             if (start_x == end_x) {
                 /* Vertical line */
+                WORD y_min = MIN(start_y, end_y);
+                WORD y_max = MAX(start_y, end_y);
                 if (line_width == 1) {
-                    /* Single pixel vertical line */
-                    for (UWORD y = start_y; y <= end_y; y++) {
+                    for (WORD y = y_min; y <= y_max; y++) {
                         CybergfxWritePixelClamped(pixels, pitch_pixels, board->width,
                                                   board->height, start_x, y, pixel);
                     }
                 } else {
-                    /* Multi-pixel vertical line */
-                    UWORD half_width = line_width / 2;
-                    UWORD x_start = start_x - half_width;
-                    UWORD x_end = start_x + half_width;
+                    WORD half_width = line_width / 2;
+                    WORD x_start = start_x - half_width;
+                    WORD x_end = start_x + half_width;
                     if (line_width % 2 == 0)
-                        x_end--; /* Adjust for even widths */
+                        x_end--;
 
-                    for (UWORD y = start_y; y <= end_y; y++) {
-                        for (UWORD x = x_start; x <= x_end; x++) {
+                    for (WORD y = y_min; y <= y_max; y++) {
+                        for (WORD x = x_start; x <= x_end; x++) {
                             CybergfxWritePixelClamped(pixels, pitch_pixels, board->width,
                                                       board->height, x, y, pixel);
                         }
@@ -222,22 +222,22 @@ static void draw_straight_line(struct RenderContext *rctx, UWORD start_x, UWORD 
                 }
             } else {
                 /* Horizontal line */
+                WORD x_min = MIN(start_x, end_x);
+                WORD x_max = MAX(start_x, end_x);
                 if (line_width == 1) {
-                    /* Single pixel horizontal line */
-                    for (UWORD x = (UWORD)MIN(start_x, end_x); x <= (UWORD)MAX(start_x, end_x); x++) {
+                    for (WORD x = x_min; x <= x_max; x++) {
                         CybergfxWritePixelClamped(pixels, pitch_pixels, board->width,
                                                   board->height, x, start_y, pixel);
                     }
                 } else {
-                    /* Multi-pixel horizontal line */
-                    UWORD half_width = line_width / 2;
-                    UWORD y_start = start_y - half_width;
-                    UWORD y_end = start_y + half_width;
+                    WORD half_width = line_width / 2;
+                    WORD y_start = start_y - half_width;
+                    WORD y_end = start_y + half_width;
                     if (line_width % 2 == 0)
-                        y_end--; /* Adjust for even widths */
+                        y_end--;
 
-                    for (UWORD x = (UWORD)MIN(start_x, end_x); x <= (UWORD)MAX(start_x, end_x); x++) {
-                        for (UWORD y = y_start; y <= y_end; y++) {
+                    for (WORD x = x_min; x <= x_max; x++) {
+                        for (WORD y = y_start; y <= y_end; y++) {
                             CybergfxWritePixelClamped(pixels, pitch_pixels, board->width,
                                                       board->height, x, y, pixel);
                         }

@@ -109,7 +109,7 @@ int main(int argc, char **argv)
     printf("Sync/Interop Demo - %s\n", DemoBackendName(backend));
     printf("=====================================\n\n");
 
-    if (!DemoInit(&ctx, "Sync/Interop Demo", 500, 300, backend))
+    if (!DemoInit(&ctx, "Sync/Interop Demo", 500, 300, backend, 0))
         return 1;
 
     RunSyncDemo(&ctx);

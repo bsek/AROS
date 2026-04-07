@@ -46,7 +46,7 @@ int main(int argc, char **argv)
     printf("AA Line Demo (Unlocked) - %s\n", DemoBackendName(backend));
     printf("========================================\n\n");
 
-    if (!DemoInit(&ctx, "AA Line Demo (Unlocked)", 640, 480, backend))
+    if (!DemoInit(&ctx, "AA Line Demo (Unlocked)", 640, 480, backend, 0))
         return 1;
 
     ZuneClearRenderContext(ctx.rctx, ZUNE_DARKGRAY);

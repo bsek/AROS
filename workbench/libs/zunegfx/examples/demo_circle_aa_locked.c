@@ -66,7 +66,7 @@ int main(int argc, char **argv)
     printf("AA Circle Demo (Locked) - %s\n", DemoBackendName(backend));
     printf("========================================\n\n");
 
-    if (!DemoInit(&ctx, "AA Circle Demo (Locked)", 640, 480, backend))
+    if (!DemoInit(&ctx, "AA Circle Demo (Locked)", 640, 480, backend, ZUNE_DRAWINGBOARD_LINEARMEM))
         return 1;
 
     ZuneClearRenderContext(ctx.rctx, ZUNE_DARKGRAY);
