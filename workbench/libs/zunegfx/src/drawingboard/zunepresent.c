@@ -89,35 +89,45 @@ SEE ALSO
     return;
   }
 
-  /* Sync FBO region to bitmap before presenting */
   {
     ZuneBackend *backend = ZuneGetRenderContextBackend(rctx);
+    BOOL presented = FALSE;
+
     D(bug("ZuneGfx: ZunePresent - backend=%p\n", backend));
+
     if (backend && backend->ops) {
-      D(bug("ZuneGfx: ZunePresent - backend->ops=%p, name=%s\n",
-            backend->ops, backend->ops->name ? (const char *)backend->ops->name : "NULL"));
       if (backend->ops->FlushBatch) {
-        D(bug("ZuneGfx: ZunePresent - calling ZuneFlushBatch\n"));
         backend->ops->FlushBatch(rctx);
       }
-      if (backend->ops->CopyRegionFromDrawingBoard) {
-        D(bug("ZuneGfx: ZunePresent - calling CopyRegionFromDrawingBoard\n"));
-        backend->ops->CopyRegionFromDrawingBoard(rctx, src_x, src_y, width, height);
-      } else if (backend->ops->CopyFromDrawingBoard) {
-        D(bug("ZuneGfx: ZunePresent - calling CopyFromDrawingBoard\n"));
-        backend->ops->CopyFromDrawingBoard(rctx);
-      } else {
-        D(bug("ZuneGfx: ZunePresent - no sync function available!\n"));
+
+      /* Try direct hardware present path first.
+       * This renders the FBO texture to the window's GL back buffer
+       * and calls glASwapBuffers → BltPipeResourceRastPort → HIDD
+       * DisplayResource. Zero CPU pixel copies on hardware that
+       * supports it (VC4 uses DMA, others use their own path). */
+      if (backend->ops->PresentDrawingBoard) {
+        presented = backend->ops->PresentDrawingBoard(rctx,
+                        src_x, src_y, dst_x, dst_y, width, height);
       }
-    } else {
-      D(bug("ZuneGfx: ZunePresent - no backend available!\n"));
+
+      if (!presented) {
+        /* Fallback: sync FBO to bitmap, then blit bitmap to window */
+        D(bug("ZuneGfx: ZunePresent - using sync+blit fallback\n"));
+        if (backend->ops->CopyRegionFromDrawingBoard) {
+          backend->ops->CopyRegionFromDrawingBoard(rctx, src_x, src_y, width, height);
+        } else if (backend->ops->CopyFromDrawingBoard) {
+          backend->ops->CopyFromDrawingBoard(rctx);
+        }
+      }
+    }
+
+    if (!presented) {
+      /* Blit from DrawingBoard bitmap to window's RastPort */
+      BltBitMapRastPort(rctx->target_board->bitmap, src_x, src_y,
+                        rctx->window->RPort, dst_x, dst_y,
+                        width, height, 0xC0);
     }
   }
-
-  /* Blit from DrawingBoard bitmap to window's RastPort */
-  BltBitMapRastPort(rctx->target_board->bitmap, src_x, src_y,
-                    rctx->window->RPort, dst_x, dst_y,
-                    width, height, 0xC0);
 
   EXIT_FUNCTION("ZunePresent");
 

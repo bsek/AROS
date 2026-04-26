@@ -29,6 +29,8 @@ void OpenGLCleanupRenderContext(struct RenderContext *rctx)
     if (!rctx) {
         return;
     }
+
+    OpenGL_BatchCleanup(rctx);
 }
 
 /*****************************************************************************/
@@ -71,6 +73,12 @@ void OpenGLDrawPixel(struct RenderContext *rctx, WORD x, WORD y,
     }
 
     OpenGL_SyncIfNeeded(rctx);
+
+    /* Try geometry batch path */
+    if (rctx->batch_state &&
+        OpenGL_BatchAddPoint(rctx, x, y, color->r, color->g, color->b, color->a))
+        return;
+
     OpenGL_SetColor(color);
 
     glBegin(GL_POINTS);
@@ -94,14 +102,23 @@ void OpenGLDrawLine(struct RenderContext *rctx, WORD startX, WORD startY,
     }
 
     OpenGL_SyncIfNeeded(rctx);
+
+    /* Batch simple 1px non-AA lines */
+    if (width <= 1 && !antialias && rctx->batch_state &&
+        OpenGL_BatchAddLine(rctx, startX, startY, endX, endY,
+                            color->r, color->g, color->b, color->a))
+        return;
+
+    /* Non-batchable: thick or AA lines need GL state changes */
+    if (rctx->batch_state)
+        OpenGL_BatchFlush(rctx);
+
     OpenGL_SetColor(color);
 
-    /* Set line width */
     if (width > 1) {
         glLineWidth((GLfloat)width);
     }
 
-    /* Enable antialiasing if requested */
     if (antialias) {
         glEnable(GL_LINE_SMOOTH);
         glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
@@ -112,7 +129,6 @@ void OpenGLDrawLine(struct RenderContext *rctx, WORD startX, WORD startY,
     glVertex2i(endX, endY);
     glEnd();
 
-    /* Reset state */
     if (antialias) {
         glDisable(GL_LINE_SMOOTH);
     }
@@ -151,17 +167,26 @@ void OpenGLDrawRectangle(struct RenderContext *rctx, WORD x, WORD y,
         /* Handle fill */
         if (filled && fill_brush) {
             if (fill_brush->type == ZUNE_BRUSH_TYPE_SOLID) {
-                /* Fast path for solid colors - no texture needed */
                 ULONG color = fill_brush->data.solid.color;
-                glColor4ub(
-                    (color >> 16) & 0xFF,
-                    (color >> 8) & 0xFF,
-                    color & 0xFF,
-                    (color >> 24) & 0xFF
-                );
+                UBYTE cr = (color >> 16) & 0xFF;
+                UBYTE cg = (color >> 8) & 0xFF;
+                UBYTE cb = color & 0xFF;
+                UBYTE ca = (color >> 24) & 0xFF;
+
+                /* Try geometry batch — most common UI path */
+                if (rctx->batch_state && border_width == 0 &&
+                    OpenGL_BatchAddQuad(rctx, x, y, width, height, cr, cg, cb, ca))
+                {
+                    goto done;
+                }
+
+                /* Non-batched: flush any pending batch first */
+                if (rctx->batch_state)
+                    OpenGL_BatchFlush(rctx);
+
+                glColor4ub(cr, cg, cb, ca);
 
                 if (g_vbo_available && g_quad_vbo != 0 && glBindBuffer_ptr) {
-                    /* VBO-based solid rect rendering */
                     glPushMatrix();
                     glTranslatef((GLfloat)x, (GLfloat)y, 0.0f);
                     glScalef((GLfloat)width, (GLfloat)height, 1.0f);
@@ -518,6 +543,7 @@ void OpenGLDrawRectangle(struct RenderContext *rctx, WORD x, WORD y,
         }
     }
 
+done:
     OpenGL_FlushIfNotBatching(rctx);
 }
 

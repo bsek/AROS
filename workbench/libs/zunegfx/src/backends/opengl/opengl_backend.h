@@ -202,4 +202,32 @@ APTR OpenGL_GetMasterContext(void);
  */
 APTR OpenGL_EnsureMasterContext(struct Window *window);
 
+/*****************************************************************************/
+/* Geometry Batch Buffer                                                     */
+/*****************************************************************************/
+
+/* Vertex format: x, y, r, g, b, a (6 floats per vertex) */
+#define BATCH_VERTEX_FLOATS     6
+#define BATCH_VERTEX_BYTES      (BATCH_VERTEX_FLOATS * sizeof(GLfloat))
+
+/* Max vertices per batch. 6 vertices per quad (2 triangles), 2 per line.
+ * 4096 vertices = ~682 quads or 2048 lines per batch. */
+#define BATCH_MAX_VERTICES      4096
+
+/* Primitive types that can be in the batch */
+typedef enum {
+    BATCH_NONE = 0,
+    BATCH_TRIANGLES,    /* Solid filled quads (2 triangles each) */
+    BATCH_LINES,        /* Lines (2 vertices each) */
+    BATCH_POINTS        /* Points (1 vertex each) */
+} BatchPrimType;
+
+typedef struct OpenGLBatchState {
+    GLfloat     vertices[BATCH_MAX_VERTICES * BATCH_VERTEX_FLOATS];
+    ULONG       vertex_count;   /* Number of vertices accumulated */
+    BatchPrimType prim_type;    /* Current primitive type (or BATCH_NONE) */
+    GLuint      vbo_id;         /* VBO for uploading batch data */
+    BOOL        vbo_created;
+} OpenGLBatchState;
+
 #endif /* OPENGL_BACKEND_H */

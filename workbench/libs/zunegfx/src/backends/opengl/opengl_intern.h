@@ -258,6 +258,24 @@ BOOL OpenGL_SyncFBOToBitmap(struct RenderContext *rctx);
 BOOL OpenGL_SyncRegionFBOToBitmap(struct RenderContext *rctx,
                                   WORD x, WORD y, UWORD width, UWORD height);
 void OpenGL_SyncFromRastPort(struct RenderContext *rctx);
+/* Geometry batching */
+void OpenGL_BatchInit(struct RenderContext *rctx);
+void OpenGL_BatchCleanup(struct RenderContext *rctx);
+void OpenGL_BatchFlush(struct RenderContext *rctx);
+BOOL OpenGL_BatchAddQuad(struct RenderContext *rctx,
+                         WORD x, WORD y, UWORD w, UWORD h,
+                         UBYTE r, UBYTE g, UBYTE b, UBYTE a);
+BOOL OpenGL_BatchAddLine(struct RenderContext *rctx,
+                         WORD x1, WORD y1, WORD x2, WORD y2,
+                         UBYTE r, UBYTE g, UBYTE b, UBYTE a);
+BOOL OpenGL_BatchAddPoint(struct RenderContext *rctx,
+                          WORD x, WORD y,
+                          UBYTE r, UBYTE g, UBYTE b, UBYTE a);
+
+BOOL OpenGL_PresentDrawingBoard(struct RenderContext *rctx,
+                                WORD src_x, WORD src_y,
+                                WORD dst_x, WORD dst_y,
+                                UWORD width, UWORD height);
 void OpenGL_SyncIfNeeded(struct RenderContext *rctx);
 void OpenGL_FlushIfNotBatching(struct RenderContext *rctx);
 
