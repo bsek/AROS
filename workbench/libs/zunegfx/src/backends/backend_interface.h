@@ -173,6 +173,14 @@ typedef struct ZuneBackendOps {
   BOOL (*CopyRegionFromDrawingBoard)(struct RenderContext *rctx,
                                      WORD x, WORD y, UWORD width, UWORD height);
 
+  /* Direct present: render DrawingBoard to window via hardware path,
+   * bypassing bitmap sync + BltBitMapRastPort. Returns TRUE if handled,
+   * FALSE to fall back to sync + blit. */
+  BOOL (*PresentDrawingBoard)(struct RenderContext *rctx,
+                              WORD src_x, WORD src_y,
+                              WORD dst_x, WORD dst_y,
+                              UWORD width, UWORD height);
+
   /* Text rendering */
   void (*DrawText)(struct RenderContext *rctx, WORD x, WORD y,
                    CONST_STRPTR string, UWORD count,

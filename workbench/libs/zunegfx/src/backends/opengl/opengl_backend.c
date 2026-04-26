@@ -764,13 +764,14 @@ static void OpenGLSetPixel(struct DrawingBoard *board, WORD x, WORD y,
 
 static void OpenGLBeginBatch(struct RenderContext *rctx)
 {
-    /*
-     * OpenGL naturally batches commands. We could use this to
-     * defer glASwapBuffers until ZuneEndBatch.
-     */
-    if (rctx) {
-        rctx->batching_enabled = TRUE;
-    }
+    if (!rctx)
+        return;
+
+    rctx->batching_enabled = TRUE;
+
+    /* Initialize geometry batch buffer on first use */
+    if (!rctx->batch_state)
+        OpenGL_BatchInit(rctx);
 }
 
 static void OpenGLEndBatch(struct RenderContext *rctx)
@@ -779,12 +780,18 @@ static void OpenGLEndBatch(struct RenderContext *rctx)
         return;
     }
 
+    /* Flush accumulated geometry first */
+    OpenGL_BatchFlush(rctx);
+
     rctx->batching_enabled = FALSE;
 
-    /* Flush and swap buffers using global context */
+    /* Flush GL commands. Only swap if rendering to window. */
     if (g_opengl_priv && g_opengl_priv->gl_context) {
         glFlush();
-        glASwapBuffers((GLAContext)g_opengl_priv->gl_context);
+        if (g_opengl_priv->current_target_type == OPENGL_TARGET_WINDOW) {
+            glASwapBuffers((GLAContext)g_opengl_priv->gl_context);
+            g_opengl_priv->needs_sync = TRUE;
+        }
     }
 }
 
@@ -794,10 +801,16 @@ static void OpenGLFlushBatch(struct RenderContext *rctx)
         return;
     }
 
-    /* Flush and swap buffers using global context */
+    /* Flush accumulated geometry */
+    OpenGL_BatchFlush(rctx);
+
+    /* Flush GL commands to the pipeline. */
     if (g_opengl_priv && g_opengl_priv->gl_context) {
         glFlush();
-        glASwapBuffers((GLAContext)g_opengl_priv->gl_context);
+        if (g_opengl_priv->current_target_type == OPENGL_TARGET_WINDOW) {
+            glASwapBuffers((GLAContext)g_opengl_priv->gl_context);
+            g_opengl_priv->needs_sync = TRUE;
+        }
     }
 }
 
@@ -1175,6 +1188,7 @@ ZuneBackendOps opengl_backend_ops = {
     .CleanupDrawingBoard = OpenGLCleanupDrawingBoard,
     .CopyFromDrawingBoard = OpenGL_SyncFBOToBitmap,
     .CopyRegionFromDrawingBoard = OpenGL_SyncRegionFBOToBitmap,
+    .PresentDrawingBoard = OpenGL_PresentDrawingBoard,
 
     .CopyFromRastPort = OpenGLCopyFromRastPort,
 

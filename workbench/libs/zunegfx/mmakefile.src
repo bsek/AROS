@@ -137,6 +137,7 @@ BACKEND_FILES := \
         src/backends/opengl/opengl_fbo \
         src/backends/opengl/opengl_context \
         src/backends/opengl/opengl_sync \
+        src/backends/opengl/opengl_batch \
         src/backends/opengl/opengl_pixel_utils \
         src/backends/opengl/opengl_drawing \
         src/backends/opengl/opengl_clipping \

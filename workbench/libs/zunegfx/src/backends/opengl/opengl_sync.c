@@ -459,6 +459,101 @@ void OpenGL_SyncFromRastPort(struct RenderContext *rctx)
     glDeleteTextures(1, &texture);
 }
 
+/*****************************************************************************/
+/* Direct Present: FBO → Window via glASwapBuffers (hardware path)           */
+/*****************************************************************************/
+
+/*
+ * OpenGL_PresentDrawingBoard - Present FBO to window via hardware path
+ *
+ * Instead of glReadPixels → bitmap → BltBitMapRastPort (two CPU copies),
+ * this renders the FBO texture to the window's GL back buffer and calls
+ * glASwapBuffers, which goes through BltPipeResourceRastPort → HIDD
+ * DisplayResource. On VC4 this uses DMA; on other hardware, whatever
+ * the HIDD provides. Fully portable via the Gallium API.
+ */
+BOOL OpenGL_PresentDrawingBoard(struct RenderContext *rctx,
+                                WORD src_x, WORD src_y,
+                                WORD dst_x, WORD dst_y,
+                                UWORD width, UWORD height)
+{
+    struct DrawingBoard *board;
+    OpenGLFBOData *fbo;
+    OpenGLWindowContext *win_ctx;
+    GLfloat tex_x1, tex_y1, tex_x2, tex_y2;
+
+    if (!rctx || !rctx->target_board || !rctx->window)
+        return FALSE;
+
+    board = rctx->target_board;
+    fbo = (OpenGLFBOData *)board->backend_data;
+
+    if (!fbo || !fbo->valid || !fbo->texture_id)
+        return FALSE;
+
+    if (!g_opengl_priv || !g_opengl_priv->shared_contexts_supported)
+        return FALSE;  /* Need per-window contexts for this path */
+
+    /* Find or create the window's GL context */
+    win_ctx = OpenGL_FindWindowContext(rctx->window);
+    if (!win_ctx)
+        return FALSE;
+
+    /* Flush any pending FBO rendering */
+    glFlush();
+
+    /* Switch to the window context (unbinds FBO, renders to back buffer) */
+    OpenGL_MakeContextCurrent(win_ctx);
+
+    /* Unbind any FBO — render to the window's back buffer */
+    if (glBindFramebuffer_ptr)
+        glBindFramebuffer_ptr(GL_FRAMEBUFFER, 0);
+
+    /* Set up orthographic projection matching window inner size */
+    {
+        UWORD win_w = rctx->window->Width - rctx->window->BorderLeft - rctx->window->BorderRight;
+        UWORD win_h = rctx->window->Height - rctx->window->BorderTop - rctx->window->BorderBottom;
+        OpenGL_SetupOrthoProjection(win_w, win_h);
+    }
+
+    /* Calculate texture coordinates for the source region */
+    tex_x1 = (GLfloat)src_x / (GLfloat)fbo->width;
+    tex_y1 = 1.0f - (GLfloat)src_y / (GLfloat)fbo->height;
+    tex_x2 = (GLfloat)(src_x + width) / (GLfloat)fbo->width;
+    tex_y2 = 1.0f - (GLfloat)(src_y + height) / (GLfloat)fbo->height;
+
+    /* Draw FBO texture to the window back buffer */
+    if (glUseProgram_ptr)
+        glUseProgram_ptr(0);
+
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, fbo->texture_id);
+    glDisable(GL_BLEND);
+    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+
+    glBegin(GL_QUADS);
+        glTexCoord2f(tex_x1, tex_y1); glVertex2i(dst_x, dst_y);
+        glTexCoord2f(tex_x2, tex_y1); glVertex2i(dst_x + width, dst_y);
+        glTexCoord2f(tex_x2, tex_y2); glVertex2i(dst_x + width, dst_y + height);
+        glTexCoord2f(tex_x1, tex_y2); glVertex2i(dst_x, dst_y + height);
+    glEnd();
+
+    glDisable(GL_TEXTURE_2D);
+    glEnable(GL_BLEND);
+
+    /* glASwapBuffers flushes the pipeline and calls BltPipeResourceRastPort,
+     * which goes through the HIDD's DisplayResource — DMA on VC4, whatever
+     * the hardware provides on other platforms. */
+    glASwapBuffers((GLAContext)win_ctx->gl_context);
+
+    /* Invalidate target state — we switched away from the FBO */
+    g_opengl_priv->current_target_type = OPENGL_TARGET_NONE;
+    g_opengl_priv->current_board = NULL;
+    g_opengl_priv->current_window = NULL;
+
+    return TRUE;
+}
+
 void OpenGL_SyncIfNeeded(struct RenderContext *rctx)
 {
     if (!g_opengl_priv || !g_opengl_priv->needs_sync) {
@@ -470,6 +565,14 @@ void OpenGL_SyncIfNeeded(struct RenderContext *rctx)
 
 /*
  * OpenGL_FlushIfNotBatching - Flush OpenGL rendering to make it visible
+ *
+ * When rendering to an FBO (DrawingBoard), skip flush entirely — commands
+ * are buffered by Mesa and only need to be flushed at present/sync time.
+ * This avoids per-draw-call GPU submissions (each glFlush on VC4 triggers
+ * ioctl_submit_cl).
+ *
+ * When rendering directly to a window, flush + swap to make it visible
+ * immediately.
  */
 void OpenGL_FlushIfNotBatching(struct RenderContext *rctx)
 {
@@ -477,13 +580,19 @@ void OpenGL_FlushIfNotBatching(struct RenderContext *rctx)
         return;  /* Don't flush during batching */
     }
 
-    if (g_opengl_priv && g_opengl_priv->gl_context) {
-        glFlush();
+    if (!g_opengl_priv || !g_opengl_priv->gl_context) {
+        return;
+    }
 
-        if (g_opengl_priv->current_target_type == OPENGL_TARGET_WINDOW) {
-            glASwapBuffers((GLAContext)g_opengl_priv->gl_context);
-            /* After swapping, we need to sync again next time */
-            g_opengl_priv->needs_sync = TRUE;
-        }
+    /* FBO target: defer flush until present/sync */
+    if (g_opengl_priv->current_target_type == OPENGL_TARGET_DRAWINGBOARD) {
+        return;
+    }
+
+    /* Window target: flush and swap to make visible immediately */
+    if (g_opengl_priv->current_target_type == OPENGL_TARGET_WINDOW) {
+        glFlush();
+        glASwapBuffers((GLAContext)g_opengl_priv->gl_context);
+        g_opengl_priv->needs_sync = TRUE;
     }
 }
