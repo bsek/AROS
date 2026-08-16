@@ -121,6 +121,12 @@ CONFIG_OPTS :=  --build=$(AROS_HOST_CPU)-$(AROS_HOST_ARCH)      \
 ifeq ($(GRUB2_USELZMA),yes)
 CONFIG_OPTS += \
 		        --enable-liblzma
+# AROS' configure found liblzma via pkg-config, but grub2's own configure
+# does a bare lzma.h check with HOST_CFLAGS wiped (above), which misses
+# non-default prefixes - homebrew on darwin hosts in particular. Feed it
+# the same paths pkg-config reports (empty on default-prefix systems).
+GRUB2_LZMA_ENV := CPPFLAGS="$(shell pkg-config --cflags-only-I liblzma 2>/dev/null)" \
+                  LDFLAGS="$(shell pkg-config --libs-only-L liblzma 2>/dev/null)"
 endif
 
 ifeq ($(AROS_TOOLCHAIN),llvm)
@@ -165,12 +171,12 @@ GRUB2_HOST_OPTS := \
 %build_with_configure mmake=grub2-host compiler=host \
         prefix="$(DESTDIR)" srcdir=$(GRUBSRCDIR) \
         package=pc extraoptions="$(GRUB2_HOST_OPTS) --with-platform=pc" \
-        targetisaflags= config_env_extra="$(GRUB2_HOST_ENV)"
+        targetisaflags= config_env_extra="$(GRUB2_HOST_ENV) $(GRUB2_LZMA_ENV)"
 
 %build_with_configure mmake=grub2-efi-host compiler=host \
         prefix="$(DESTDIR)" srcdir=$(GRUBSRCDIR) touch=no \
         package=efi-$(AROS_TARGET_CPU) extraoptions="$(GRUB2_HOST_OPTS) --with-platform=efi" \
-        targetisaflags= config_env_extra="$(GRUB2_EFI_ENV)"
+        targetisaflags= config_env_extra="$(GRUB2_EFI_ENV) $(GRUB2_LZMA_ENV)"
 
 ifneq ($(AROS_TARGET_CPU32),)
 GRUB2_EFI32_OPTS := \
@@ -180,7 +186,7 @@ GRUB2_EFI32_OPTS := \
 %build_with_configure mmake=grub2-efi32-host compiler=host \
         prefix="$(DESTDIR)" srcdir=$(GRUBSRCDIR) touch=no \
         package=efi-$(AROS_TARGET_CPU32) extraoptions="$(GRUB2_EFI32_OPTS) --with-platform=efi" \
-        targetisaflags= config_env_extra="$(GRUB2_EFI32_ENV)"
+        targetisaflags= config_env_extra="$(GRUB2_EFI32_ENV) $(GRUB2_LZMA_ENV)"
 endif
 
 PC_MODS	    := biosdisk
