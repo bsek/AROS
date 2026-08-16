@@ -162,10 +162,63 @@
             break;
         case(TaskTag_CPUUsage):
             {
+#if defined(__arm__)
+                /*
+                 * arm has no periodic sweep maintaining iet_CpuUsage (x86
+                 * fills it in from apic_heartbeat), so derive it here, when
+                 * it is read. iet_private2 is the task's cumulative busy
+                 * time in microseconds; measure how much of the wall-clock
+                 * window since our last sample it grew by. Kept in 32 bits
+                 * so the arithmetic survives the microsecond counter's
+                 * ~71 minute wrap.
+                 */
+                if (task_et)
+                {
+                    ULONG now = (ULONG)KrnTimeStamp();
+                    ULONG busyNow = (ULONG)task_et->iet_private2;
+                    ULONG window = now - (ULONG)task_et->iet_LastUsageStamp;
+
+                    /*
+                     * The running task's current slice is not in
+                     * iet_private2 yet - fold it in, or a task sampled
+                     * mid-slice looks idle for up to a full quantum. Adding
+                     * it keeps busyNow continuous across the switch that
+                     * commits it, so nothing is counted twice.
+                     * iet_private1 == 0 = never dispatched (boot/bootstrap
+                     * tasks installed via SET_THIS_TASK) - no slice started,
+                     * a delta against 0 would fold in the whole uptime.
+                     */
+                    if (task->tc_State == TS_RUN && task_et->iet_private1)
+                        busyNow += now - (ULONG)task_et->iet_private1;
+
+                    if (task_et->iet_LastUsageStamp && window)
+                    {
+                        ULONG busy = busyNow - (ULONG)task_et->iet_LastBusy;
+
+                        if (busy >= window)
+                            task_et->iet_CpuUsage = 0xffffffff;
+                        else
+                            task_et->iet_CpuUsage = (ULONG)(((UQUAD)busy << 32) / window);
+                    }
+                    else
+                    {
+                        /* First ever sample - nothing to compare against. */
+                        task_et->iet_CpuUsage = 0;
+                    }
+
+                    task_et->iet_LastBusy = busyNow;
+                    task_et->iet_LastUsageStamp = now;
+
+                    *(ULONG *)(Tag->ti_Data) = task_et->iet_CpuUsage;
+                }
+                else
+                    *(ULONG *)(Tag->ti_Data) = 0;
+#else
                 if (task_et)
                     *(ULONG *)(Tag->ti_Data) = task_et->iet_CpuUsage;
                 else
                     *(ULONG *)(Tag->ti_Data) = 0;
+#endif
             }
             break;
         case(TaskTag_StartTime):
