@@ -21,6 +21,7 @@
 #include <proto/arossupport.h>
 #include <proto/bootloader.h>
 #include <proto/exec.h>
+#include <proto/execlock.h>
 #include <proto/kernel.h>
 
 
@@ -86,6 +87,26 @@ int vblank_Init(struct TimerBase *LIBBASE);
 static int Timer_Init(struct TimerBase *TimerBase)
 {
     D(bug("[Timer] Timer_Init: kernel.resource @ 0x%p\n", KernelBase));
+
+#if defined(__AROSEXEC_SMP__)
+    /*
+     * SMP: the request lists (tb_Lists) are walked from the VBlank/EClock
+     * IRQ on the boot CPU and mutated by BeginIO from any CPU, so they need
+     * a real cross-CPU lock. lowlevel.c takes tb_ListLock only when
+     * tb_ExecLockBase is set - the generic rom/timer/timer_init.c sets it up,
+     * but this raspi-specific Init replaces that one, so do it here too.
+     * Without this the lists run unlocked and concurrent Delay() corrupts
+     * them (a dropped request hangs the waiting task forever).
+     */
+    {
+        struct ExecLockBase *ExecLockBase;
+        if ((ExecLockBase = OpenResource("execlock.resource")) != NULL)
+        {
+            TimerBase->tb_ExecLockBase = ExecLockBase;
+            TimerBase->tb_ListLock = AllocLock();
+        }
+    }
+#endif
 
     TimerBase->tb_Platform.tbp_periiobase = KrnGetSystemAttr(KATTR_PeripheralBase);
 
