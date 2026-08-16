@@ -18,23 +18,84 @@
 void core_MMUUpdatePageTables(void)
 {
     static pde_t *pde = (pde_t *)BOOTMEMADDR(bm_pde);
+    unsigned int ttbr;
 
-    /* Invalidate caches */
-    asm volatile("mcr   p15, 0, %[r], c8, c7, 0" : : [r] "r" (0x0));   //Invalidate entire unified TLB
-    asm volatile("mcr   p15, 0, %[r], c8, c6, 0" : : [r] "r" (0x0));   //Invalidate entire data TLB
-    asm volatile("mcr   p15, 0, %[r], c8, c5, 0" : : [r] "r" (0x0));   //Invalidate entire instruction TLB
-    asm volatile("mcr   p15, 0, %[r], c7, c5, 6" : : [r] "r" (0x0));   //Invalidate entire branch prediction array
-    asm volatile("mcr   p15, 0, %[r], c7, c5, 0" : : [r] "r" (0x0));   //Invalidate icache
+    /* Invalidate caches and TLBs */
+#if defined(__AROSEXEC_SMP__)
+    /*
+     * Inner Shareable broadcast variants - take effect on all CPUs in
+     * the inner shareable domain. Requires ACTLR.SMP set on each CPU
+     * for the broadcast to be honoured.
+     */
+    asm volatile("mcr   p15, 0, %[r], c8, c3, 0" : : [r] "r" (0x0));   // TLBIALLIS
+    asm volatile("mcr   p15, 0, %[r], c7, c1, 6" : : [r] "r" (0x0));   // BPIALLIS
+    asm volatile("mcr   p15, 0, %[r], c7, c1, 0" : : [r] "r" (0x0));   // ICIALLUIS
+#else
+    asm volatile("mcr   p15, 0, %[r], c8, c7, 0" : : [r] "r" (0x0));   // TLBIALL
+    asm volatile("mcr   p15, 0, %[r], c8, c6, 0" : : [r] "r" (0x0));   // DTLBIALL
+    asm volatile("mcr   p15, 0, %[r], c8, c5, 0" : : [r] "r" (0x0));   // ITLBIALL
+    asm volatile("mcr   p15, 0, %[r], c7, c5, 6" : : [r] "r" (0x0));   // BPIALL
+    asm volatile("mcr   p15, 0, %[r], c7, c5, 0" : : [r] "r" (0x0));   // ICIALLU
+#endif
 
-    /* setup_ttbr0/1 */
-    asm volatile("mcr   p15, 0, %[addr], c2, c0, 1" : : [addr] "r" (pde));
-    /* setup_ttbrc */
+    /* setup_ttbr1 */
+    ttbr = (unsigned int)pde;
+#if defined(__AROSEXEC_SMP__)
+    /*
+     * Inner-shareable, write-back, write-allocate page table walks:
+     *   bit 1 (S)              = 1
+     *   bit 3 (RGN[0])         = 1   (Outer WB-WA)
+     *   bit 6 (IRGN[0])        = 1   (Inner WB-WA, with IRGN[1]=bit 0=0)
+     *   -> 0x4A
+     *
+     * The descriptors in the page table also need their S bit set for
+     * the MMU to mark accesses Shareable. That is the bootstrap's
+     * responsibility - not handled here.
+     */
+    ttbr |= 0x4A;
+#endif
+    asm volatile("mcr   p15, 0, %[addr], c2, c0, 1" : : [addr] "r" (ttbr));
+#if defined(__AROSEXEC_SMP__)
+    /*
+     * TTBR0 (low 32MB: SysBase, scheduler lists, all hot kernel data)
+     * must use the same shareable WBWA walk attributes. The bootstrap
+     * (arch/arm-raspi/boot/mmu.c) loaded it with the attribute bits
+     * clear, so the boot CPU would walk the same tables non-cacheable/
+     * non-shareable while the secondaries (trampoline sets pde|0x4A)
+     * walk them inner-shareable - an ARMv7 mismatched-attributes
+     * violation that lets the boot CPU read stale descriptors.
+     */
+    asm volatile("mcr   p15, 0, %[addr], c2, c0, 0" : : [addr] "r" (ttbr));
+    asm volatile("mcr   p15, 0, %[r], c7, c10, 4" : : [r] "r" (0)); /* dsb */
+    asm volatile("mcr   p15, 0, %[r], c7, c5, 4" : : [r] "r" (0));  /* isb */
+#endif
+    /* setup_ttbrc - TTBR0 covers low 32MB, TTBR1 covers the rest */
     asm volatile("mcr   p15, 0, %[n], c2, c0, 2" : : [n] "r" (7));
 }
 
 void core_SetupMMU(struct TagItem *msg)
 {
     register unsigned int control;
+
+#if defined(__AROSEXEC_SMP__)
+    /*
+     * Defensive SMP/snoop enable. Only Cortex-A7 has SMPEN at ACTLR
+     * bit 6 - Cortex-A53 (Pi 3) keeps SMPEN in CPUECTLR (EL3-only,
+     * set by armstub or in mpcore_trampoline's leave_hyper path).
+     * Writing ACTLR bit 6 on A53 hits an unrelated implementation-
+     * defined bit, so gate on MIDR.
+     */
+    register unsigned int midr, actlr;
+    asm volatile("mrc p15, 0, %0, c0, c0, 0" : "=r" (midr));
+    if ((midr & 0xfff0) == 0xc070)
+    {
+        asm volatile("mrc p15, 0, %0, c1, c0, 1" : "=r" (actlr));
+        actlr |= (1 << 6);
+        asm volatile("mcr p15, 0, %0, c1, c0, 1" : : "r" (actlr));
+        asm volatile("dsb" ::: "memory");
+        asm volatile("isb" ::: "memory");
+    }
+#endif
 
     core_MMUUpdatePageTables();
 

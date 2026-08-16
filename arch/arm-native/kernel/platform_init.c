@@ -81,12 +81,50 @@ static int platform_PostInit(struct KernelBase *KernelBase)
 
     D(bug("[Kernel] platform_PostInit: Performing Post Init..\n"));
 
+#if defined(__AROSEXEC_SMP__)
+    /*
+     * Pin the boot task to CPU 0 BEFORE ARMI_Init wakes the secondary
+     * cores. Exec's own SMP init (Exec_ARMCPUSMPInit) also does this,
+     * but it runs after us - and until then the boot task's
+     * iet_CpuAffinity is NULL == "run anywhere", so a secondary taking
+     * its first CNTP tick could dispatch the boot task mid-coldstart.
+     * The single-threaded coldstart sequence is not migration-safe.
+     */
+    {
+        struct Task *bootTask = FindTask(NULL);
+        struct IntETask *iet = bootTask ? (struct IntETask *)GetETask(bootTask) : NULL;
+
+        if (iet && !iet->iet_CpuAffinity)
+        {
+            void *bootAff = KrnAllocCPUMask();
+            if (bootAff)
+            {
+                KrnGetCPUMask(0, bootAff);
+                iet->iet_CpuAffinity = bootAff;
+                iet->iet_CpuNumber = 0;
+            }
+        }
+    }
+#endif
+
     if (__arm_arosintern.ARMI_Init)
         __arm_arosintern.ARMI_Init(KernelBase, SysBase);
     
     D(bug("[Kernel] platform_PostInit: Registering Heartbeat timer..\n"));
 
     KrnAddSysTimerHandler(KernelBase);
+
+#if defined(__AROSEXEC_SMP__)
+    /*
+     * On SMP every core - including the boot CPU - expires its scheduler
+     * quantum from its own per-core CNTP heartbeat, not from the VBlank
+     * (see the arm-native VBlankServer override). The GPU system timer
+     * registered above now only drives the VBlank. Arm the boot CPU's
+     * CNTP here; the secondaries arm theirs in cpu_Register.
+     */
+    if (__arm_arosintern.ARMI_InitTimerCore)
+        __arm_arosintern.ARMI_InitTimerCore();
+#endif
 
     D(bug("[Kernel] platform_PostInit: Done..\n"));
 
