@@ -85,9 +85,21 @@ AROS_UFH3(int, CleanMem,
     AROS_USERFUNC_INIT
     
     struct DiskFontHeader *dfh, *dfh2;
+    struct SignalSemaphore *fontsem;
 
     D(bug("Inside CleanMem\n"));
-    
+
+    /*
+     * Unlinking from GfxBase->TextFonts must be arbitrated with graphics'
+     * font semaphore or an OpenFont walk on another core can step on the
+     * node mid-removal. We run in low-memory-handler context (Forbid,
+     * possibly inside an allocator), so never block on it - just report
+     * that nothing was freed and let the caller try other handlers.
+     */
+    fontsem = GetFontSemaphore();
+    if (!AttemptSemaphore(fontsem))
+        return MEM_DID_NOTHING;
+
     ForeachNodeSafe(&LIBBASE->diskfontlist, dfh, dfh2)
     {
         if (dfh->dfh_TF.tf_Accessors < 1)
@@ -109,8 +121,10 @@ AROS_UFH3(int, CleanMem,
         }
     }
     
+    ReleaseSemaphore(fontsem);
+
     D(bug("CleanMem Finished\n"));
-    
+
     return MEM_ALL_DONE;
     
     AROS_USERFUNC_EXIT
