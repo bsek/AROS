@@ -7,36 +7,29 @@ allowing users to customize paths for their AROS build environment.
 """
 
 import os
+import re
 import sys
 import argparse
+import tempfile
 from pathlib import Path
 from typing import Optional, Dict, List
 
 
-def find_clang_include_paths() -> List[str]:
+def substitute_block(content: str, token: str, items: List[str]) -> str:
     """
-    Automatically detect clang include paths on the system.
-    Returns a list of clang builtin include directories.
+    Replace the line containing ${token} with one YAML list entry per item,
+    indented like the placeholder line. Drops the line entirely if items is
+    empty, so no stray blank list entry is left behind.
     """
-    clang_paths = []
-    clang_base_dirs = [
-        "/usr/lib/clang",
-        "/usr/local/lib/clang",
-        "/opt/homebrew/lib/clang"  # macOS Homebrew
-    ]
-
-    for base_dir in clang_base_dirs:
-        if os.path.exists(base_dir):
-            try:
-                versions = sorted(os.listdir(base_dir), reverse=True)
-                for version in versions:
-                    version_path = os.path.join(base_dir, version, "include")
-                    if os.path.exists(version_path):
-                        clang_paths.append(version_path)
-            except (OSError, PermissionError):
-                continue
-
-    return clang_paths[:5]  # Limit to 5 most recent versions
+    placeholder = "${%s}" % token
+    out = []
+    for line in content.split('\n'):
+        if placeholder not in line:
+            out.append(line)
+            continue
+        indent = line[:len(line) - len(line.lstrip())]
+        out.extend(f'{indent}- "{item}"' for item in items)
+    return '\n'.join(out)
 
 
 def validate_directory(path: str, name: str) -> bool:
@@ -73,24 +66,32 @@ def detect_source_directory() -> Optional[str]:
     return None
 
 
+def list_target_architectures(build_dir: str) -> List[str]:
+    """
+    List target architectures in a build directory. A target is any bin/<name>
+    that carries an installed header tree; this excludes the host tools
+    directory (bin/darwin-aarch64, bin/linux-x86_64 when cross compiling)
+    without needing a hardcoded list of target names.
+    """
+    bin_dir = Path(build_dir) / "bin"
+    if not bin_dir.is_dir():
+        return []
+
+    try:
+        return sorted(d.name for d in bin_dir.iterdir()
+                      if (d / "AROS" / "Developer" / "include").is_dir())
+    except (OSError, PermissionError):
+        return []
+
+
 def detect_build_directory() -> Optional[str]:
     """Try to auto-detect AROS build directory."""
     current_dir = Path.cwd()
 
-    # Look for common AROS build indicators
-    build_indicators = [
-        "bin/linux-x86_64/AROS",
-        "bin/pc-i386/AROS",
-        "bin/pc-x86_64/AROS",
-        "bin/amiga-m68k/AROS",
-        "bin/raspi-armhf/AROS"
-    ]
-
     # First check if we're already in a build directory
     for path in [current_dir] + list(current_dir.parents):
-        for indicator in build_indicators:
-            if (path / indicator).exists():
-                return str(path)
+        if list_target_architectures(str(path)):
+            return str(path)
 
     # If not found, try to find source directory and look for sibling build directories
     source_dir = detect_source_directory()
@@ -104,9 +105,8 @@ def detect_build_directory() -> Optional[str]:
                 for sibling in parent_dir.iterdir():
                     if sibling.is_dir() and sibling != source_path:
                         # Check if this sibling looks like a build directory
-                        for indicator in build_indicators:
-                            if (sibling / indicator).exists():
-                                return str(sibling)
+                        if list_target_architectures(str(sibling)):
+                            return str(sibling)
 
             except (OSError, PermissionError):
                 pass
@@ -171,46 +171,85 @@ def print_directory_structure_help():
 
 def detect_target_architecture(build_dir: str) -> Optional[str]:
     """Try to auto-detect target architecture from build directory."""
-    bin_dir = os.path.join(build_dir, "bin")
-    if not os.path.exists(bin_dir):
-        return None
+    targets = list_target_architectures(build_dir)
+    return targets[0] if targets else None
 
-    # Common AROS target architectures
-    common_targets = [
-        "linux-x86_64",
-        "pc-x86_64",
-        "pc-i386",
-        "amiga-m68k",
-        "raspi-armhf"
-    ]
 
-    try:
-        available_targets = os.listdir(bin_dir)
-        for target in common_targets:
-            if target in available_targets:
-                aros_path = os.path.join(bin_dir, target, "AROS")
-                if os.path.exists(aros_path):
-                    return target
-    except (OSError, PermissionError):
-        pass
+# AROS target directories are named <platform>-<cpu>: raspi-aarch64,
+# raspi-arm, pc-x86_64, linux-x86_64, amiga-m68k, opensbi-riscv64.
+# The cpu suffix is what decides the triple.
+CPU_TRIPLES: Dict[str, str] = {
+    "aarch64": "aarch64-unknown-aros",
+    "arm": "arm-unknown-aros",
+    "armeb": "armeb-unknown-aros",
+    "i386": "i386-unknown-aros",
+    "m68k": "m68k-unknown-aros",
+    "ppc": "powerpc-unknown-aros",
+    "riscv": "riscv32-unknown-aros",
+    "riscv64": "riscv64-unknown-aros",
+    "x86_64": "x86_64-unknown-aros",
+}
 
-    return None
+# Extra flags clang needs per cpu to match how AROS is actually built.
+CPU_FLAGS: Dict[str, List[str]] = {
+    # Every live AROS arm target (raspi, efika) is hard-float; without this
+    # clang warns "unknown platform, assuming -mfloat-abi=soft".
+    "arm": ["-mfloat-abi=hard"],
+}
+
+
+def get_target_cpu(target_arch: str) -> str:
+    """Extract the cpu part of an AROS target name (raspi-aarch64 -> aarch64)."""
+    return target_arch.rsplit("-", 1)[-1]
 
 
 def get_target_triple(target_arch: str) -> str:
     """Convert AROS target architecture to clang target triple."""
-    target_map = {
-        "linux-x86_64": "x86_64-unknown-linux-gnu",
-        "pc-x86_64": "x86_64-pc-none-elf",
-        "pc-i386": "i386-pc-none-elf",
-        "amiga-m68k": "m68k-unknown-amigaos",
-        "raspi-armhf": "arm-unknown-linux-gnueabihf"
-    }
-    return target_map.get(target_arch, "x86_64-unknown-linux-gnu")
+    cpu = get_target_cpu(target_arch)
+    if cpu not in CPU_TRIPLES:
+        print(f"Warning: unknown cpu '{cpu}' in target '{target_arch}'; "
+              f"falling back to {cpu}-unknown-aros.")
+        print(f"         Known cpus: {', '.join(sorted(CPU_TRIPLES))}")
+    return CPU_TRIPLES.get(cpu, f"{cpu}-unknown-aros")
 
 
-def generate_config(template_path: str, build_dir: str, target_arch: str,
-                   output_path: str, clang_paths: Optional[List[str]] = None) -> bool:
+def discover_kernel_dirs(source_dir: str, cpu: str) -> List[str]:
+    """
+    Find arch/<dir>/kernel directories that apply to this cpu. Data driven
+    rather than a hardcoded list, so new ports (riscv64-opensbi and friends)
+    are picked up without touching this script.
+    """
+    arch_dir = Path(source_dir) / "arch"
+    if not arch_dir.is_dir():
+        return []
+
+    try:
+        candidates = sorted(d.name for d in arch_dir.iterdir() if d.is_dir())
+    except (OSError, PermissionError):
+        return []
+
+    # riscv64 ports also carry generic riscv code, and every native port
+    # shares arch/all-native.
+    prefixes = [f"{cpu}-"]
+    if cpu == "riscv64":
+        prefixes.append("riscv-")
+    prefixes.append("all-native")
+
+    return [name for name in candidates
+            if any(name.startswith(p) or name == p.rstrip("-") for p in prefixes)
+            and (arch_dir / name / "kernel").is_dir()]
+
+
+def get_kernel_pathmatch(cpu: str) -> str:
+    """PathMatch regex covering kernel-ish sources for this cpu."""
+    alts = ["rom/kernel", f"arch/{cpu}-[^/]*", "arch/all-native", "bootstrap"]
+    if cpu == "riscv64":
+        alts.insert(2, "arch/riscv-[^/]*")
+    return "(.*/)?(" + "|".join(alts) + ")/.*"
+
+
+def generate_config(template_path: str, source_dir: str, build_dir: str,
+                   target_arch: str, output_path: str) -> bool:
     """Generate .clangd config from template."""
 
     if not os.path.exists(template_path):
@@ -224,54 +263,40 @@ def generate_config(template_path: str, build_dir: str, target_arch: str,
         print(f"Error reading template file: {e}")
         return False
 
-    # Replace template variables
-    config_content = template_content.replace("${AROS_BUILD_DIR}", build_dir)
-    config_content = config_content.replace("${AROS_TARGET_ARCH}", target_arch)
+    cpu = get_target_cpu(target_arch)
 
-    # Update target triple
-    target_triple = get_target_triple(target_arch)
-    config_content = config_content.replace(
-        '"x86_64-unknown-linux-gnu"',
-        f'"{target_triple}"'
-    )
+    # Multi-line blocks first: these replace a whole placeholder line.
+    kernel_includes = [f"-I{os.path.join(source_dir, 'arch', name, 'kernel')}"
+                       for name in discover_kernel_dirs(source_dir, cpu)]
+    config_content = substitute_block(template_content,
+                                      "AROS_KERNEL_INCLUDES", kernel_includes)
+    config_content = substitute_block(config_content,
+                                      "AROS_CPU_FLAGS", CPU_FLAGS.get(cpu, []))
 
-    # Update clang include paths if provided
-    if clang_paths:
-        # Find the clang include section and replace it
-        clang_section_start = config_content.find("# Clang builtin includes")
-        if clang_section_start != -1:
-            # Find the end of the clang section (next comment or section)
-            lines = config_content[clang_section_start:].split('\n')
-            new_clang_lines = ["    # Clang builtin includes (minimal, for compiler intrinsics only)"]
+    # Plain scalar substitutions.
+    for token, value in (
+        ("AROS_SOURCE_DIR", source_dir),
+        ("AROS_BUILD_DIR", build_dir),
+        ("AROS_TARGET_ARCH", target_arch),
+        ("AROS_TARGET_TRIPLE", get_target_triple(target_arch)),
+        ("AROS_TARGET_CPU", cpu),
+        ("AROS_KERNEL_PATHMATCH", get_kernel_pathmatch(cpu)),
+    ):
+        config_content = config_content.replace("${%s}" % token, value)
 
-            for path in clang_paths:
-                new_clang_lines.extend([
-                    "    - \"-isystem\"",
-                    f"    - \"{path}\""
-                ])
+    leftovers = re.findall(r"\$\{[A-Z_]+\}", config_content)
+    if leftovers:
+        print(f"Error: unsubstituted template variables: {', '.join(sorted(set(leftovers)))}")
+        return False
 
-            # Find where to stop replacing (look for next non-clang section)
-            end_line = 0
-            for i, line in enumerate(lines[1:], 1):
-                if line.strip() and not line.startswith("    - ") and not line.startswith("    #"):
-                    end_line = i
-                    break
-
-            if end_line > 0:
-                before = config_content[:clang_section_start]
-                after_start = clang_section_start + len('\n'.join(lines[:end_line]))
-                after = config_content[after_start:]
-                config_content = before + '\n'.join(new_clang_lines) + '\n' + after
-
-    # Remove the template documentation section
-    doc_start = config_content.find("\n---\n")
-    if doc_start != -1:
-        config_content = config_content[:doc_start]
-
-    # Write the generated config
+    # Write via a temporary file so a failure cannot leave a truncated .clangd.
     try:
-        with open(output_path, 'w', encoding='utf-8') as f:
+        out_dir = os.path.dirname(os.path.abspath(output_path))
+        with tempfile.NamedTemporaryFile('w', encoding='utf-8', dir=out_dir,
+                                         delete=False) as f:
             f.write(config_content)
+            tmp_path = f.name
+        os.replace(tmp_path, output_path)
         print(f"Generated .clangd configuration: {output_path}")
         return True
     except OSError as e:
@@ -290,6 +315,18 @@ def interactive_mode():
 
     if detected_source:
         print(f"✓ Auto-detected AROS source directory: {detected_source}")
+        use_detected_source = input("Use this source directory? [Y/n]: ").strip().lower()
+        if use_detected_source in ('', 'y', 'yes'):
+            source_dir = detected_source
+        else:
+            source_dir = input("Enter AROS source directory path: ").strip()
+    else:
+        print("❌ Could not auto-detect AROS source directory.")
+        source_dir = input("Enter AROS source directory path: ").strip()
+
+    source_dir = os.path.abspath(os.path.expanduser(source_dir))
+    if not validate_directory(source_dir, "AROS source"):
+        sys.exit(1)
 
     if detected_build:
         print(f"✓ Auto-detected AROS build directory: {detected_build}")
@@ -327,7 +364,8 @@ def interactive_mode():
             target_arch = input("Enter target architecture (e.g., linux-x86_64): ").strip()
     else:
         print("Could not auto-detect target architecture.")
-        print("Common targets: linux-x86_64, pc-x86_64, pc-i386, amiga-m68k")
+        print("Common targets: raspi-aarch64, raspi-arm, pc-x86_64, pc-i386,")
+        print("                linux-x86_64, amiga-m68k, opensbi-riscv64")
         target_arch = input("Enter target architecture: ").strip()
 
     # Validate target directory
@@ -336,29 +374,9 @@ def interactive_mode():
         print("Warning: Target directory structure may not be complete.")
         print(f"Expected structure: {build_dir}/bin/{target_arch}/AROS/")
 
-        # Show available targets if bin directory exists
-        bin_path = os.path.join(build_dir, "bin")
-        if os.path.exists(bin_path):
-            try:
-                available = [d for d in os.listdir(bin_path)
-                           if os.path.isdir(os.path.join(bin_path, d))]
-                if available:
-                    print(f"Available targets in {bin_path}: {', '.join(available)}")
-            except (OSError, PermissionError):
-                pass
-
-    # Auto-detect clang paths
-    clang_paths = find_clang_include_paths()
-    if clang_paths:
-        print(f"Found {len(clang_paths)} clang include directories:")
-        for path in clang_paths:
-            print(f"  - {path}")
-        use_clang = input("Use detected clang paths? [Y/n]: ").strip().lower()
-        if use_clang not in ('', 'y', 'yes'):
-            clang_paths = None
-    else:
-        print("Could not find clang include directories.")
-        clang_paths = None
+        available = list_target_architectures(build_dir)
+        if available:
+            print(f"Available targets: {', '.join(available)}")
 
     # Output file
     default_output = ".clangd"
@@ -366,7 +384,7 @@ def interactive_mode():
     if not output_path:
         output_path = default_output
 
-    return build_dir, target_arch, output_path, clang_paths
+    return source_dir, build_dir, target_arch, output_path
 
 
 def main():
@@ -388,7 +406,7 @@ Common Directory Structures:
 
 Examples:
   %(prog)s --interactive
-  %(prog)s --build-dir /home/user/aros-build --target linux-x86_64
+  %(prog)s --build-dir /home/user/aros-build --target raspi-aarch64
   %(prog)s -b ~/abiv1 -t pc-x86_64 -o custom.clangd
   %(prog)s --help-structure  # Show detailed directory structure info
         """
@@ -401,13 +419,18 @@ Examples:
     )
 
     parser.add_argument(
+        "--source-dir", "-s",
+        help="AROS source directory path (default: auto-detected)"
+    )
+
+    parser.add_argument(
         "--build-dir", "-b",
         help="AROS build directory path"
     )
 
     parser.add_argument(
         "--target", "-t",
-        help="Target architecture (e.g., linux-x86_64, pc-i386)"
+        help="Target architecture (e.g., raspi-aarch64, pc-x86_64)"
     )
 
     parser.add_argument(
@@ -420,12 +443,6 @@ Examples:
         "--template",
         default="scripts/.clangd.template",
         help="Template file path (default: .clangd.template)"
-    )
-
-    parser.add_argument(
-        "--no-auto-clang",
-        action="store_true",
-        help="Don't auto-detect clang include paths"
     )
 
     parser.add_argument(
@@ -443,10 +460,18 @@ Examples:
 
     # Interactive mode
     if args.interactive or (not args.build_dir and not args.target):
-        build_dir, target_arch, output_path, clang_paths = interactive_mode()
+        source_dir, build_dir, target_arch, output_path = interactive_mode()
     else:
         if not args.build_dir or not args.target:
             parser.error("--build-dir and --target are required in non-interactive mode")
+
+        source_dir = args.source_dir or detect_source_directory()
+        if not source_dir:
+            parser.error("could not auto-detect the AROS source directory; "
+                         "pass --source-dir")
+        source_dir = os.path.abspath(os.path.expanduser(source_dir))
+        if not validate_directory(source_dir, "AROS source"):
+            sys.exit(1)
 
         build_dir = os.path.expanduser(args.build_dir)
         target_arch = args.target
@@ -470,35 +495,25 @@ Examples:
             print(f"Expected: {target_path}/AROS/Developer/include/")
 
             # Show available targets
-            bin_path = os.path.join(build_dir, "bin")
-            if os.path.exists(bin_path):
-                try:
-                    available = [d for d in os.listdir(bin_path)
-                               if os.path.isdir(os.path.join(bin_path, d))]
-                    if available:
-                        print(f"Available targets: {', '.join(available)}")
-                except (OSError, PermissionError):
-                    pass
-
-        # Auto-detect clang paths unless disabled
-        clang_paths = None if args.no_auto_clang else find_clang_include_paths()
+            available = list_target_architectures(build_dir)
+            if available:
+                print(f"Available targets: {', '.join(available)}")
 
     # Generate configuration
     success = generate_config(
         args.template,
+        source_dir,
         build_dir,
         target_arch,
-        output_path,
-        clang_paths
+        output_path
     )
 
     if success:
         print(f"\nConfiguration generated successfully!")
+        print(f"Source directory: {source_dir}")
         print(f"Build directory: {build_dir}")
         print(f"Target architecture: {target_arch}")
         print(f"Target triple: {get_target_triple(target_arch)}")
-        if clang_paths:
-            print(f"Clang includes: {len(clang_paths)} paths detected")
 
         # Show key paths that will be used
         developer_path = os.path.join(build_dir, "bin", target_arch, "AROS", "Developer", "include")
