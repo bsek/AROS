@@ -27,7 +27,7 @@ workbench-network-wirelessmanager-touchfileflag := $(GENDIR)/$(CURDIR)/.files-to
 $(workbench-network-wirelessmanager-configflag) : \
 	$(AROS_INCLUDES)/aros/config.h $(AROS_INCLUDES)/exec/tasks.h \
 	$(AROS_INCLUDES)/exec/ports.h $(AROS_INCLUDES)/dos/dosextens.h \
-	$(GENDIR)/$(CURDIR)/../.dirs-copied
+	$(dir $(GENDIR)/$(CURDIR)).dirs-copied
 
 # Same for this directory's own sources: the macro copies them into the build
 # tree behind a stamp with no prerequisites, so an edit here would otherwise
