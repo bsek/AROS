@@ -42,7 +42,7 @@ APTR MF_IteratorInit(struct DiskfontBase *DiskfontBase)
 
     /* Held until MF_IteratorFree; Forbid() alone does not exclude
      * AddFont/RemFont on another core. */
-    ObtainSemaphore(GetFontSemaphore());
+    ObtainSemaphore(DiskfontBase->gfxfontsem);
 
     /* Get the first font */
     mfdata->CurrentFont = (struct TextFont*)GetHead(&GfxBase->TextFonts);
@@ -103,7 +103,7 @@ VOID MF_IteratorFree(APTR iterator, struct DiskfontBase *DiskfontBase)
         return;
 
     FreeVec(mfdata);
-    ReleaseSemaphore(GetFontSemaphore());
+    ReleaseSemaphore(DiskfontBase->gfxfontsem);
 }
 
 /****************************************************************************************/
