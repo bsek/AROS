@@ -54,6 +54,11 @@ BOOL DriverInit(struct DriverBase *AHIsubBase)
         return FALSE;
     }
 
+    /* The device tree describes a jack the emulator does not model - refuse,
+     * so AHI keeps the void driver rather than a mode that stays silent. */
+    if (KrnGetSystemAttr(KATTR_Emulated) == 1)
+        return FALSE;
+
     return TRUE;
 }
 

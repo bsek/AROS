@@ -388,8 +388,9 @@ BOOL MNAME_DISPLAY(SetCursorShape)(OOP_Class *cl, OOP_Object *o, struct pHidd_Di
     struct VideoCoreGfx_staticdata *xsd = XSD(cl);
     IPTR width = 0, height = 0;
 
+    /* Without a cursor buffer the base class renders a software pointer */
     if (!xsd->vcsd_CurBuf)
-        return FALSE;
+        return (BOOL)OOP_DoSuperMethod(cl, o, (OOP_Msg)msg);
 
     if (msg->shape == NULL)
     {
@@ -471,7 +472,7 @@ BOOL MNAME_DISPLAY(SetCursorPos)(OOP_Class *cl, OOP_Object *o, struct pHidd_Disp
     struct VideoCoreGfx_staticdata *xsd = XSD(cl);
 
     if (!xsd->vcsd_CurBuf)
-        return FALSE;
+        return (BOOL)OOP_DoSuperMethod(cl, o, (OOP_Msg)msg);
 
     /* Firmware places the image top-left at (x,y) and ignores the
      * SETCURSORINFO hotspot, so apply the AROS hotspot offset here
@@ -510,7 +511,10 @@ VOID MNAME_DISPLAY(SetCursorVisible)(OOP_Class *cl, OOP_Object *o, struct pHidd_
     struct VideoCoreGfx_staticdata *xsd = XSD(cl);
 
     if (!xsd->vcsd_CurBuf)
+    {
+        OOP_DoSuperMethod(cl, o, (OOP_Msg)msg);
         return;
+    }
 
     xsd->vcsd_CurVisible = msg->visible ? TRUE : FALSE;
 

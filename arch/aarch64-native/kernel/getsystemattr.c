@@ -51,6 +51,9 @@ AROS_LH1(intptr_t, KrnGetSystemAttr,
     case KATTR_FrameBufferPitch:
         return (intptr_t)krn_fb_pitch();
 
+    case KATTR_Emulated:
+        return (intptr_t)__arm_emulated;
+
     default:
         return -1;
     }

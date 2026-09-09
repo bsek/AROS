@@ -139,6 +139,8 @@ static inline void uart_putc(char c)
 }
 static void uart_puts(const char *s) { while (*s) uart_putc(*s++); }
 
+int __arm_emulated = 0;
+
 void __attribute__((used)) kernel_cstart(struct TagItem *msg)
 {
     UWORD *ranges[3];
@@ -263,6 +265,9 @@ void __attribute__((used)) kernel_cstart(struct TagItem *msg)
             break;
         case KRN_FrameBufferPitch:
             fb_pitch = msg->ti_Data;
+            break;
+        case KRN_Emulated:
+            __arm_emulated = (int)msg->ti_Data;
             break;
         }
         msg++;

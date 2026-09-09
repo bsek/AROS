@@ -21,6 +21,8 @@ BOOL DriverInit(struct DriverBase *AHIsubBase) {
     if (!KernelBase) return FALSE;
     RPiI2SBase->periiobase = KrnGetSystemAttr(KATTR_PeripheralBase);
     if (!RPiI2SBase->periiobase) return FALSE;
+    /* No I2S block under emulation - refuse, so AHI keeps the void driver. */
+    if (KrnGetSystemAttr(KATTR_Emulated) == 1) return FALSE;
     return TRUE;
 }
 

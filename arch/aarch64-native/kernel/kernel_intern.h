@@ -36,6 +36,9 @@ void *dt_find_property(void *key, char *propname);
 int dt_get_prop_len(void *prop);
 void *dt_get_prop_value(void *prop);
 
+/* TRUE when the bootstrap found an emulator rather than a Raspberry Pi. */
+extern int __arm_emulated;
+
 void cpu_Probe(struct ARM_Implementation *);
 void cpu_Init(struct ARM_Implementation *, struct TagItem *);
 

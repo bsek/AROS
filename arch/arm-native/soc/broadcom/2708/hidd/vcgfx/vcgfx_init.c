@@ -132,6 +132,21 @@ static int FNAME_SUPPORT(Init)(LIBBASETYPEPTR LIBBASE)
     D(bug("[VideoCoreGfx] %s: VideoCore Mailbox resource @ 0x%p\n", __PRETTY_FUNCTION__, MBoxBase));
     D(bug("[VideoCoreGfx] %s: VideoCore message buffer @ 0x%p\n", __PRETTY_FUNCTION__, xsd->vcsd_MBoxMessage));
 
+    /* Emulation models none of the display hardware. Where the bootstrap left a
+     * framebuffer behind, fbgfx drives that surface honestly, so step aside for
+     * it rather than drive what is absent. */
+    if (KrnGetSystemAttr(KATTR_Emulated) == 1)
+    {
+        IPTR fb = (IPTR)KrnGetSystemAttr(KATTR_FrameBuffer);
+
+        if (fb && (fb != (IPTR)-1))
+        {
+            D(bug("[VideoCoreGfx] %s: emulated - leaving the display to fbgfx\n",
+                __PRETTY_FUNCTION__));
+            goto failure;
+        }
+    }
+
 
     VC4_MBOX_LOCK(xsd);
     xsd->vcsd_MBoxMessage[0] = AROS_LE2LONG(8 * 4);

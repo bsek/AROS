@@ -201,6 +201,11 @@ BOOL DriverInit(struct DriverBase *AHIsubBase)
         return FALSE;
     }
 
+    /* No HDMI audio block under emulation - refuse, so AHI keeps the void
+     * driver rather than a mode that stays silent. */
+    if (KrnGetSystemAttr(KATTR_Emulated) == 1)
+        return FALSE;
+
     if (RPiHDMIBase->periiobase == BCM2712_PERIIOBASE)
     {
         OpenFirmwareBase = OpenResource("openfirmware.resource");

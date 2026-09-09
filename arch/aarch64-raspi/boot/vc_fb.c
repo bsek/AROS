@@ -57,11 +57,13 @@ int vcfb_init(void)
         if (!vcmb_msg || (vcmb_msg[1] != AROS_LONG2LE(VCTAG_RESP)))
             return 0;
 
-        if (((fb_width = AROS_LE2LONG(vcmb_msg[5])) == 0) || ((fb_height = AROS_LE2LONG(vcmb_msg[6])) == 0))
+        if ((((fb_width = AROS_LE2LONG(vcmb_msg[5])) == 0) || 
+            ((fb_height = AROS_LE2LONG(vcmb_msg[6])) == 0) 
+            ) || (fb_width <= 1024 || fb_height <= 768))
         {
             fb_width = 1024;
             fb_height = 768;
-        }
+        } 
 
         D(kprintf("[VCFB] fb_width=%d, fb_height=%d\n", fb_width, fb_height));
     }

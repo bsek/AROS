@@ -81,3 +81,53 @@ void vcmb_write(uintptr_t mb, unsigned int chan, void *msg)
         wr32le(mb + VCMB_WRITE, (uint32_t)((uintptr_t)msg | chan));
     }
 }
+
+/*
+ * A tag the firmware handled reports its response length. QEMU acknowledges
+ * every tag but leaves that length at zero for the ones it does not implement,
+ * and memory allocation is among those - so an ALLOCMEM that answers nothing
+ * means we are on an emulator rather than a Raspberry Pi.
+ */
+int vcmb_firmware_present(uintptr_t mb, volatile unsigned int *msg)
+{
+    unsigned int handle;
+    int answered;
+
+    msg[0] = AROS_LONG2LE(10 * 4);
+    msg[1] = AROS_LONG2LE(VCTAG_REQ);
+    msg[2] = AROS_LONG2LE(VCTAG_ALLOCMEM);
+    msg[3] = AROS_LONG2LE(12);
+    msg[4] = AROS_LONG2LE(12);
+    msg[5] = AROS_LONG2LE(4);
+    msg[6] = AROS_LONG2LE(4);
+    msg[7] = AROS_LONG2LE(VCMEM_DIRECT);
+    msg[8] = 0;
+    msg[9] = 0;
+
+    vcmb_write(mb, VCMB_PROPCHAN, (void *)msg);
+    msg = vcmb_read(mb, VCMB_PROPCHAN);
+
+    if (!msg || (msg[1] != AROS_LONG2LE(VCTAG_RESP)))
+        return 0;
+
+    answered = (AROS_LE2LONG(msg[4]) & 0x7fffffff) >= 4;
+    handle = AROS_LE2LONG(msg[5]);
+
+    /* Hand the block straight back on real firmware. */
+    if (answered && handle)
+    {
+        msg[0] = AROS_LONG2LE(8 * 4);
+        msg[1] = AROS_LONG2LE(VCTAG_REQ);
+        msg[2] = AROS_LONG2LE(VCTAG_FREEMEM);
+        msg[3] = AROS_LONG2LE(4);
+        msg[4] = AROS_LONG2LE(4);
+        msg[5] = AROS_LONG2LE(handle);
+        msg[6] = 0;
+        msg[7] = 0;
+
+        vcmb_write(mb, VCMB_PROPCHAN, (void *)msg);
+        vcmb_read(mb, VCMB_PROPCHAN);
+    }
+
+    return answered;
+}

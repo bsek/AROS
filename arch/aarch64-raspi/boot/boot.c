@@ -641,6 +641,16 @@ void boot(uintptr_t dtb_addr, uintptr_t arch, uintptr_t dummy2, uintptr_t dummy3
     boottag->ti_Data = (IPTR)bootstrapName;
     boottag++;
 
+    /* Drivers for hardware an emulator does not model can stand aside. */
+    if (!vcmb_firmware_present(__vcmb_base, (unsigned int *)BOOTMEMADDR(bm_mboxmsg)))
+    {
+        kprintf("[BOOT] no VideoCore firmware - running emulated\n");
+
+        boottag->ti_Tag = KRN_Emulated;
+        boottag->ti_Data = 1;
+        boottag++;
+    }
+
     if (vcfb_init())
     {
         boottag->ti_Tag = KRN_FuncPutC;
