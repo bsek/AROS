@@ -77,6 +77,7 @@ typedef enum
 #define KRN_FrameBufferPitch    (KRN_Dummy + 37) /* Framebuffer bytes per line			*/
 #define KRN_PeripheralBase      (KRN_Dummy + 38) /* SoC peripheral IO physical base address */
 #define KRN_DebugUartBase       (KRN_Dummy + 39) /* CPU address of the boot debug UART */
+#define KRN_Emulated            (KRN_Dummy + 40) /* TRUE when the bootstrap identified an emulator */
 /*
  * KRN_MEMLower/KRN_MEMUpper may appear more than once, one pair per physical
  * memory range the bootstrap found, lower first. The first pair describes the
@@ -119,6 +120,7 @@ typedef void (*irqhandler_t)(void *data, void *data2);
 #define KATTR_FrameBufferDepth  (KATTR_CPULoad_END + 6) /* [.G] (IPTR)    - Framebuffer bits per pixel                                  */
 #define KATTR_FrameBufferPitch  (KATTR_CPULoad_END + 7) /* [.G] (IPTR)    - Framebuffer bytes per line                                  */
 #define KATTR_PlatformTimer     (KATTR_CPULoad_END + 8) /* [.G] (APTR)    - Kernel tick timer shared with timer.device (platform specific) */
+#define KATTR_Emulated          (KATTR_CPULoad_END + 9) /* [.G] (IPTR)    - TRUE when the bootstrap found an emulator rather than the real platform */
 
 /* Tag IDs for KrnStatMemory() */
 #define KMS_Free		(TAG_USER + 0x04000000)
