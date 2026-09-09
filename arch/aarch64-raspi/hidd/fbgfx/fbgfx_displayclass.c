@@ -16,6 +16,10 @@
 #include <hardware/custom.h>
 #include <hidd/hidd.h>
 #include <hidd/gfx.h>
+#include <hidd/gallium.h>
+#include <proto/dos.h>
+#include <dos/var.h>
+#include <hardware/bcm2708.h>
 #include <oop/oop.h>
 #include <clib/alib_protos.h>
 #include <string.h>
@@ -127,6 +131,28 @@ VOID FBGfxDisplay__Root__Get(OOP_Class *cl, OOP_Object *o, struct pRoot_Get *msg
     OOP_DoSuperMethod(cl, o, (OOP_Msg)msg);
 }
 
+/*
+ * An explicit SYS/Gallium.default names a driver to use, so honour it rather
+ * than handing out the hardware one. dos.library is opened here and not from
+ * InitLib: this class is resident and inits before dos exists.
+ */
+static BOOL software_gallium_requested(void)
+{
+    struct Library *DOSBase = OpenLibrary("dos.library", 0);
+    BOOL requested = FALSE;
+
+    if (DOSBase)
+    {
+        char buf[64];
+
+        requested = GetVar("SYS/Gallium.default", buf, sizeof(buf),
+                           GVF_GLOBAL_ONLY | LV_VAR) > 0;
+        CloseLibrary(DOSBase);
+    }
+
+    return requested;
+}
+
 /*********  Display::CreateObject()  ***************************/
 
 OOP_Object *FBGfxDisplay__Hidd_Display__CreateObject(OOP_Class *cl, OOP_Object *o, struct pHidd_Display_CreateObject *msg)
@@ -173,7 +199,39 @@ OOP_Object *FBGfxDisplay__Hidd_Display__CreateObject(OOP_Class *cl, OOP_Object *
         object = (OOP_Object *)OOP_DoSuperMethod(cl, o, (OOP_Msg)&p);
     }
     else
-        object = (OOP_Object *)OOP_DoSuperMethod(cl, o, (OOP_Msg)msg);
+    {
+        /* Lazy: at InitLib time neither the disk nor the gallium framework
+         * is up, but both are by the time CreatePipe asks. v3d decides for
+         * itself whether it has hardware - it probes the device tree - so a
+         * board without it just falls through to the software rasteriser. */
+        if (!XSD(cl)->basegallium)
+            XSD(cl)->basegallium = OOP_FindClass(CLID_Hidd_Gallium);
+
+        if (XSD(cl)->basegallium && msg->cl == XSD(cl)->basegallium)
+        {
+            /* Left NULL where a driver was named or the hardware declines;
+             * CreatePipe then takes its own fallback. */
+            if (!software_gallium_requested())
+            {
+                /* V3D on the 2711 and 2712, VideoCore IV before that. Both
+                 * live on the FS, so load on first request - the OOP class
+                 * has to register before OOP_NewObject. */
+                BOOL isv3d = XSD(cl)->periiobase == BCM2711_PERIIOBASE
+                          || XSD(cl)->periiobase == BCM2712_PERIIOBASE;
+                CONST_STRPTR lib = isv3d ? "v3d.hidd" : "vc4gallium.hidd";
+                CONST_STRPTR clid = isv3d ? "hidd.gallium.v3d"
+                                          : "hidd.gallium.vc4";
+
+                if (!XSD(cl)->galliumlib)
+                    XSD(cl)->galliumlib = OpenLibrary(lib, 0);
+
+                if (XSD(cl)->galliumlib)
+                    object = OOP_NewObject(NULL, (STRPTR)clid, msg->attrList);
+            }
+        }
+        else
+            object = (OOP_Object *)OOP_DoSuperMethod(cl, o, (OOP_Msg)msg);
+    }
 
     ReturnPtr("FBGfx.Display::CreateObject", OOP_Object *, object);
 }

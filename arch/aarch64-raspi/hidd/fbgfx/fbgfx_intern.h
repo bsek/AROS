@@ -39,6 +39,9 @@ struct FBGfx_staticdata
     struct HWData   	    data;
     struct SignalSemaphore  framebufferlock;
     struct SignalSemaphore  HW_acc;
+    IPTR    	    	    periiobase;         /* which VideoCore sits next to us */
+    OOP_Class 	    	    *basegallium;       /* CLID_Hidd_Gallium, looked up lazily */
+    struct Library  	    *galliumlib;        /* keeps the gallium hidd loaded */
     OOP_MethodID	    mid_Dispose;
     OOP_AttrBase	    attrBases[ATTRBASES_NUM];
 };

@@ -7,6 +7,7 @@
 #include <proto/exec.h>
 #include <proto/graphics.h>
 #include <proto/oop.h>
+#include <proto/kernel.h>
 
 #include <exec/types.h>
 #include <exec/lists.h>
@@ -73,9 +74,14 @@ static const STRPTR interfaces[ATTRBASES_NUM] =
 static int FBGfx_Init(LIBBASETYPEPTR LIBBASE)
 {
     struct FBGfx_staticdata *xsd = &LIBBASE->vsd;
+    struct KernelBase *KernelBase = OpenResource("kernel.resource");
     struct GfxBase *GfxBase;
     ULONG err;
     int res = FALSE;
+
+    /* Which VideoCore we sit next to, for the gallium driver choice. */
+    if (KernelBase)
+        xsd->periiobase = (IPTR)KrnGetSystemAttr(KATTR_PeripheralBase);
 
     /*
      * Open graphics.library ourselves because we will close it
