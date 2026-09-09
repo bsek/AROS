@@ -13,6 +13,9 @@
 #include <proto/exec.h>
 #include <proto/oop.h>
 #include <proto/utility.h>
+#include <proto/dos.h>
+
+#include <dos/var.h>
 #include <aros/symbolsets.h>
 #include <devices/inputevent.h>
 #include <exec/alerts.h>
@@ -668,6 +671,28 @@ VOID MNAME_GFX(CopyBox)(OOP_Class *cl, OOP_Object *o, struct pHidd_Gfx_CopyBox *
     }
 }
 
+/*
+ * An explicit SYS/Gallium.default names a driver to use, so honour it rather
+ * than handing out the hardware one. dos.library is opened here and not from
+ * InitLib: this class is resident and inits before dos exists.
+ */
+static BOOL software_gallium_requested(void)
+{
+    struct Library *DOSBase = OpenLibrary("dos.library", 0);
+    BOOL requested = FALSE;
+
+    if (DOSBase)
+    {
+        char buf[64];
+
+        requested = GetVar("SYS/Gallium.default", buf, sizeof(buf),
+                           GVF_GLOBAL_ONLY | LV_VAR) > 0;
+        CloseLibrary(DOSBase);
+    }
+
+    return requested;
+}
+
 OOP_Object *MNAME_DISPLAY(CreateObject)(OOP_Class *cl, OOP_Object *o, struct pHidd_Display_CreateObject *msg)
 {
     OOP_Object      *object = NULL;
@@ -720,7 +745,8 @@ OOP_Object *MNAME_DISPLAY(CreateObject)(OOP_Class *cl, OOP_Object *o, struct pHi
         if (!XSD(cl)->vcsd_basegallium)
             XSD(cl)->vcsd_basegallium = OOP_FindClass(CLID_Hidd_Gallium);
 
-        if (XSD(cl)->vcsd_basegallium && msg->cl == XSD(cl)->vcsd_basegallium)
+        if (XSD(cl)->vcsd_basegallium && msg->cl == XSD(cl)->vcsd_basegallium
+            && !software_gallium_requested())
         {
             /* The display driver knows which GPU sits next to it: V3D 4.2
              * (hidd/v3d) on the BCM2711, VideoCore IV (vc4gallium)
