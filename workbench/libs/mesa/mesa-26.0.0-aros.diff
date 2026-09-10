@@ -133,6 +133,150 @@ diff -ruN mesa-26.0.0/src/util/os_misc.h mesa-26.0.0.aros/src/util/os_misc.h
 
  #include "util/detect.h"
 
+--- mesa-26.0.0/src/util/set.c	2025-02-11 12:07:00.000000000 +0000
++++ mesa-26.0.0.aros/src/util/set.c	2026-09-09 00:00:00.000000000 +0000
+@@ -48,8 +48,9 @@
+  * free to avoid exponential performance degradation as the hash table fills
+  */
+ 
++/* The tombstone address is stored per set, so a set handed to code linked
++ * against another copy of this file still sees the same sentinel. */
+ static const uint32_t deleted_key_value;
+-static const void *deleted_key = &deleted_key_value;
+ 
+ static const struct {
+    uint32_t max_entries, size, rehash;
+@@ -108,9 +109,9 @@
+ };
+ 
+ ASSERTED static inline bool
+-key_pointer_is_reserved(const void *key)
++key_pointer_is_reserved(const struct set *ht, const void *key)
+ {
+-   return key == NULL || key == deleted_key;
++   return key == NULL || key == ht->deleted_key;
+ }
+ 
+ static int
+@@ -120,15 +121,15 @@
+ }
+ 
+ static int
+-entry_is_deleted(struct set_entry *entry)
++entry_is_deleted(const struct set *ht, struct set_entry *entry)
+ {
+-   return entry->key == deleted_key;
++   return entry->key == ht->deleted_key;
+ }
+ 
+ static int
+-entry_is_present(struct set_entry *entry)
++entry_is_present(const struct set *ht, struct set_entry *entry)
+ {
+-   return entry->key != NULL && entry->key != deleted_key;
++   return entry->key != NULL && entry->key != ht->deleted_key;
+ }
+ 
+ void
+@@ -146,6 +147,7 @@
+    ht->max_entries = hash_sizes[ht->size_index].max_entries;
+    ht->key_hash_function = key_hash_function;
+    ht->key_equals_function = key_equals_function;
++   ht->deleted_key = &deleted_key_value;
+    assert(ht->size == ARRAY_SIZE(ht->_initial_storage));
+    ht->table = ht->_initial_storage;
+    memset(ht->table, 0, sizeof(ht->_initial_storage));
+@@ -304,7 +306,7 @@
+ 
+    if (delete_function) {
+       for (entry = set->table; entry != set->table + set->size; entry++) {
+-         if (entry_is_present(entry))
++         if (entry_is_present(set, entry))
+             delete_function(entry);
+ 
+          entry->key = NULL;
+@@ -323,7 +325,7 @@
+ static struct set_entry *
+ set_search(const struct set *ht, uint32_t hash, const void *key)
+ {
+-   assert(!key_pointer_is_reserved(key));
++   assert(!key_pointer_is_reserved(ht, key));
+ 
+    uint32_t size = ht->size;
+    uint32_t start_address = util_fast_urem32(hash, size, ht->size_magic);
+@@ -335,7 +337,7 @@
+ 
+       if (entry_is_free(entry)) {
+          return NULL;
+-      } else if (entry_is_present(entry) && entry->hash == hash) {
++      } else if (entry_is_present(ht, entry) && entry->hash == hash) {
+          if (ht->key_equals_function(key, entry->key)) {
+             return entry;
+          }
+@@ -462,7 +464,7 @@
+ {
+    struct set_entry *available_entry = NULL;
+ 
+-   assert(!key_pointer_is_reserved(key));
++   assert(!key_pointer_is_reserved(ht, key));
+ 
+    if (ht->entries >= ht->max_entries) {
+       set_rehash(ht, ht->size_index + 1);
+@@ -478,7 +480,7 @@
+    do {
+       struct set_entry *entry = ht->table + hash_address;
+ 
+-      if (!entry_is_present(entry)) {
++      if (!entry_is_present(ht, entry)) {
+          /* Stash the first available entry we find */
+          if (available_entry == NULL)
+             available_entry = entry;
+@@ -486,7 +488,7 @@
+             break;
+       }
+ 
+-      if (!entry_is_deleted(entry) &&
++      if (!entry_is_deleted(ht, entry) &&
+           entry->hash == hash &&
+           ht->key_equals_function(key, entry->key)) {
+          if (found)
+@@ -501,7 +503,7 @@
+ 
+    if (available_entry) {
+       /* There is no matching entry, create it. */
+-      if (entry_is_deleted(available_entry))
++      if (entry_is_deleted(ht, available_entry))
+          ht->deleted_entries--;
+       available_entry->hash = hash;
+       available_entry->key = key;
+@@ -614,7 +616,7 @@
+    if (!entry)
+       return;
+ 
+-   entry->key = deleted_key;
++   entry->key = ht->deleted_key;
+    ht->entries--;
+    ht->deleted_entries++;
+ }
+@@ -664,7 +666,7 @@
+       entry = entry + 1;
+ 
+    for (; entry != ht->table + ht->size; entry++) {
+-      if (entry_is_present(entry)) {
++      if (entry_is_present(ht, entry)) {
+          return entry;
+       }
+    }
+--- mesa-26.0.0/src/util/set.h	2025-02-11 12:07:00.000000000 +0000
++++ mesa-26.0.0.aros/src/util/set.h	2026-09-09 00:00:00.000000000 +0000
+@@ -45,6 +45,7 @@
+    struct set_entry *table;
+    uint32_t (*key_hash_function)(const void *key);
+    bool (*key_equals_function)(const void *a, const void *b);
++   const void *deleted_key;
+    uint32_t size;
+    uint32_t rehash;
+    uint64_t size_magic;
 diff -ruN mesa-26.0.0/src/util/u_endian.h mesa-26.0.0.aros/src/util/u_endian.h
 --- mesa-26.0.0/src/util/u_endian.h	2025-02-11 12:07:00.000000000 +0000
 +++ mesa-26.0.0.aros/src/util/u_endian.h	2026-02-18 00:00:00.000000000 +0000
