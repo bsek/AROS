@@ -71,7 +71,7 @@ SEE ALSO
     rctx->clipping_enabled = TRUE;
   } else {
     /* Combine with existing region */
-    return !OrRegionRegion(region, rctx->clip_region);
+    return OrRegionRegion(region, rctx->clip_region) ? TRUE : FALSE;
   }
 
   D(bug("ZuneGfx: Combined region with RenderContext clipping\n"));

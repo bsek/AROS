@@ -24,7 +24,15 @@
 
 static OpenGLBatchState *get_batch(struct RenderContext *rctx)
 {
-    return (OpenGLBatchState *)rctx->batch_state;
+    (void)rctx;
+    return g_opengl_priv ? g_opengl_priv->gl_batch : NULL;
+}
+
+/* TRUE while a batch session is open and the buffer exists */
+BOOL OpenGL_BatchIsActive(struct RenderContext *rctx)
+{
+    return rctx && rctx->batching_enabled &&
+           g_opengl_priv && g_opengl_priv->gl_batch;
 }
 
 static inline void batch_vertex(OpenGLBatchState *batch,
@@ -62,7 +70,7 @@ void OpenGL_BatchInit(struct RenderContext *rctx)
 {
     OpenGLBatchState *batch;
 
-    if (!rctx || rctx->batch_state)
+    if (!rctx || !g_opengl_priv || g_opengl_priv->gl_batch)
         return;
 
     batch = (OpenGLBatchState *)AllocVec(sizeof(OpenGLBatchState), MEMF_ANY | MEMF_CLEAR);
@@ -90,14 +98,14 @@ void OpenGL_BatchInit(struct RenderContext *rctx)
         }
     }
 
-    rctx->batch_state = batch;
+    g_opengl_priv->gl_batch = batch;
 }
 
 void OpenGL_BatchCleanup(struct RenderContext *rctx)
 {
     OpenGLBatchState *batch;
 
-    if (!rctx || !rctx->batch_state)
+    if (!rctx || !g_opengl_priv || !g_opengl_priv->gl_batch)
         return;
 
     batch = get_batch(rctx);
@@ -106,7 +114,7 @@ void OpenGL_BatchCleanup(struct RenderContext *rctx)
         glDeleteBuffers_ptr(1, &batch->vbo_id);
 
     FreeVec(batch);
-    rctx->batch_state = NULL;
+    g_opengl_priv->gl_batch = NULL;
 }
 
 /*****************************************************************************/

@@ -670,8 +670,7 @@ static void OpenGLBeginBatch(struct RenderContext *rctx)
     rctx->batching_enabled = TRUE;
 
     /* Initialize geometry batch buffer on first use */
-    if (!rctx->batch_state)
-        OpenGL_BatchInit(rctx);
+    OpenGL_BatchInit(rctx);
 }
 
 static void OpenGLEndBatch(struct RenderContext *rctx)

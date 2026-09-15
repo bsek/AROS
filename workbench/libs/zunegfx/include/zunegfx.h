@@ -500,6 +500,7 @@ struct RenderContext {
   struct Region *clip_region; /* Clipping region */
   struct Region *saved_clip_region; /* Previous Layer clip region (restored on clear) */
   BOOL clipping_enabled;      /* Clipping active */
+  BOOL clipping_installed;    /* We installed a region on the Layer */
 
   /* Text rendering */
   struct TextFont *font;      /* Current font for text operations */
@@ -846,8 +847,7 @@ BOOL ZuneIsTextureValid(struct ZuneTexture *texture);
 
 BOOL ZuneSetClipRegion(struct RenderContext *rctx, struct Region *region);
 void ZuneClearClipRegion(struct RenderContext *rctx);
-struct Region *ZuneCombineRegions(struct Region *r1, struct Region *r2,
-                                  UBYTE operation);
+BOOL ZuneCombineRegions(struct RenderContext *rctx, struct Region *region);
 struct Region *ZuneCreateCircleRegion(struct ZunePoint *center, WORD radius);
 struct Region *ZuneCreateRoundedRectRegion(struct ZuneRect *rect,
                                            WORD corner_radius);

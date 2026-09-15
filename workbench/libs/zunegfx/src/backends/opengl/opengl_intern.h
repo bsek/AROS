@@ -254,6 +254,7 @@ BOOL OpenGL_SyncRegionFBOToBitmap(struct RenderContext *rctx,
 void OpenGL_SyncFromRastPort(struct RenderContext *rctx);
 /* Geometry batching */
 void OpenGL_BatchInit(struct RenderContext *rctx);
+BOOL OpenGL_BatchIsActive(struct RenderContext *rctx);
 void OpenGL_BatchCleanup(struct RenderContext *rctx);
 void OpenGL_BatchFlush(struct RenderContext *rctx);
 BOOL OpenGL_BatchAddQuad(struct RenderContext *rctx,

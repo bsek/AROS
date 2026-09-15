@@ -159,8 +159,9 @@ BOOL CybergfxInitTexture(struct ZuneTexture *texture) {
     texture->pitch = texture->width * bytes_per_pixel;
     texture->data_size = texture->pitch * texture->height;
 
+    /* Must match FreeTextureData(), which uses FreeVec() */
     texture->pixel_data =
-        AllocMem(texture->data_size, MEMF_PUBLIC | MEMF_CLEAR);
+        AllocVec(texture->data_size, MEMF_PUBLIC | MEMF_CLEAR);
     if (!texture->pixel_data) {
       D(bug("CybergfxInitTexture: Failed to allocate pixel data\n"));
       return FALSE;
@@ -503,13 +504,25 @@ void CybergfxDrawTextureToDrawingBoard(
 
       /* Fast path: ARGB32 copy/tint with unity scale */
       if (unity_scale && bytes_per_pixel == 4) {
-        for (UWORD dy = 0; dy < dest_height; dy++) {
-          const UBYTE *src_row =
-              src_pixels + ((src_y + dy) * texture->pitch) + src_x * 4;
-          ULONG *dst_row =
-              dest_pixels + ((dest_y + dy) * pitch_pixels) + dest_x;
+        /* Clip against the board; the fast path writes whole rows, so it
+         * cannot rely on the per-pixel bounds check further down. */
+        LONG cx = dest_x, cy = dest_y;
+        LONG cw = (LONG)dest_width, ch = (LONG)dest_height;
+        LONG sx = src_x, sy = src_y;
 
-          cybergfx_blit_argb32_unity(src_row, dst_row, dest_width, tint);
+        if (cx < 0) { cw += cx; sx -= cx; cx = 0; }
+        if (cy < 0) { ch += cy; sy -= cy; cy = 0; }
+        if (cx + cw > board->width)  cw = board->width - cx;
+        if (cy + ch > board->height) ch = board->height - cy;
+
+        if (cw > 0 && ch > 0) {
+          for (LONG dy = 0; dy < ch; dy++) {
+            const UBYTE *src_row =
+                src_pixels + ((sy + dy) * texture->pitch) + sx * 4;
+            ULONG *dst_row = dest_pixels + ((cy + dy) * pitch_pixels) + cx;
+
+            cybergfx_blit_argb32_unity(src_row, dst_row, cw, tint);
+          }
         }
         return;
       }
@@ -759,7 +772,7 @@ void CybergfxSetTexturePixel(struct ZuneTexture *texture, WORD x, WORD y,
   /* Convert color to texture format */
   switch (texture->format) {
   case ZUNE_TEXTURE_FORMAT_ARGB32:
-    pixel = (color->a << 24) | (color->r << 16) | (color->g << 8) | color->b;
+    pixel = pack_argb32(color->a, color->r, color->g, color->b);
     *(ULONG *)pixel_ptr = pixel;
     break;
   case ZUNE_TEXTURE_FORMAT_RGB24:
@@ -1277,14 +1290,22 @@ static BOOL CybergfxDrawTextureTiledToDrawingBoard(struct RenderContext *rctx,
   D(bug("CybergfxDrawTextureTiledToDrawingBoard: Tiling %dx%d to %dx%d, needs_alpha=%d (flags=0x%x)\n",
         tex_width, tex_height, dest_width, dest_height, needs_alpha_blend, texture->flags));
 
-  /* Clip destination to board bounds */
-  if (dest_x < 0) { dest_width += dest_x; dest_x = 0; }
-  if (dest_y < 0) { dest_height += dest_y; dest_y = 0; }
-  if (dest_x + dest_width > board->width) dest_width = board->width - dest_x;
-  if (dest_y + dest_height > board->height) dest_height = board->height - dest_y;
+  /* Clip destination to board bounds. Done in LONG: dest_width/height are
+   * UWORD, so clamping in place wraps instead of going negative. */
+  {
+    LONG cw = (LONG)dest_width, ch = (LONG)dest_height;
 
-  if (dest_width <= 0 || dest_height <= 0)
-    return TRUE; /* Nothing to draw, but not an error */
+    if (dest_x < 0) { cw += dest_x; dest_x = 0; }
+    if (dest_y < 0) { ch += dest_y; dest_y = 0; }
+    if (dest_x >= board->width || dest_y >= board->height)
+      return TRUE; /* Nothing to draw, but not an error */
+    if (dest_x + cw > board->width)  cw = board->width - dest_x;
+    if (dest_y + ch > board->height) ch = board->height - dest_y;
+    if (cw <= 0 || ch <= 0)
+      return TRUE;
+    dest_width = (UWORD)cw;
+    dest_height = (UWORD)ch;
+  }
 
   /* Process each destination row */
   for (UWORD dy = 0; dy < dest_height; dy++) {

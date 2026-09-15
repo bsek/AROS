@@ -21,7 +21,7 @@
 /*****************************************************************************
 
     NAME */
-AROS_LH2(void, ZuneSetClipRegion,
+AROS_LH2(BOOL, ZuneSetClipRegion,
 
          /*  SYNOPSIS */
          AROS_LHA(struct RenderContext *, rctx, A0),
@@ -56,13 +56,13 @@ SEE ALSO
   if (!ValidateRenderContext(rctx)) {
     D(bug("ZuneGfx: Invalid RenderContext\n"));
     EXIT_FUNCTION("ZuneSetClipRegion");
-    return;
+    return FALSE;
   }
 
   if (!region) {
     D(bug("ZuneGfx: Invalid region\n"));
     EXIT_FUNCTION("ZuneSetClipRegion");
-    return;
+    return FALSE;
   }
 
   /* Clear existing region if any */
@@ -77,7 +77,7 @@ SEE ALSO
     D(bug("ZuneGfx: Failed to allocate new region\n"));
     rctx->clipping_enabled = FALSE;
     EXIT_FUNCTION("ZuneSetClipRegion");
-    return;
+    return FALSE;
   }
 
   if (OrRegionRegion(region, rctx->clip_region)) {
@@ -92,6 +92,8 @@ SEE ALSO
     }
 
     D(bug("ZuneGfx: Clipping region installed successfully\n"));
+    EXIT_FUNCTION("ZuneSetClipRegion");
+    return TRUE;
   } else {
     D(bug("ZuneGfx: Failed to copy region\n"));
     DisposeRegion(rctx->clip_region);
@@ -100,6 +102,8 @@ SEE ALSO
   }
 
   EXIT_FUNCTION("ZuneSetClipRegion");
+
+  return FALSE;
 
   AROS_LIBFUNC_EXIT
 }

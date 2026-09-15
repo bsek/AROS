@@ -52,6 +52,8 @@ static void CybergfxDrawAACircleRastPort(struct RenderContext *rctx, UWORD x, UW
  *****************************************************************************/
 void CybergfxDrawCircle(struct RenderContext *rctx, WORD center_x, WORD center_y, UWORD radius, UBYTE border_width, struct ZuneBrush *fill_brush,
                         struct InternalColor *border_color, BOOL filled, BOOL antialias) {
+    ULONG fill_color_argb = 0;
+
     ENTER_FUNCTION("CybergfxDrawCircle");
 
     if (!rctx) {
@@ -92,6 +94,17 @@ void CybergfxDrawCircle(struct RenderContext *rctx, WORD center_x, WORD center_y
             return;
         }
 
+        /* data is a union -- only SOLID actually holds a colour here. The
+         * non-AA circle has no gradient/texture rasteriser, so rather than
+         * reinterpret another union member as a colour, skip the fill. */
+        if (fill_brush->type != ZUNE_BRUSH_TYPE_SOLID) {
+            D(bug("CybergfxDrawCircle: brush type %ld unsupported for non-AA "
+                  "fill, skipping\n", (LONG)fill_brush->type));
+            EXIT_FUNCTION("CybergfxDrawCircle");
+            return;
+        }
+        fill_color_argb = fill_brush->data.solid.color;
+
         UWORD board_width = rctx->target_board ? rctx->target_board->width : 640;
         UWORD board_height = rctx->target_board ? rctx->target_board->height : 480;
 
@@ -111,7 +124,7 @@ void CybergfxDrawCircle(struct RenderContext *rctx, WORD center_x, WORD center_y
             if (board->pixel_format == PIXFMT_ARGB32 || board->pixel_format == PIXFMT_RGBA32) {
                 ULONG *pixels = (ULONG *)board->pixels;
                 ULONG pitch_pixels = board->pitch / 4;
-                ULONG converted_color = argb32_logical_to_native(fill_brush->data.solid.color);
+                ULONG converted_color = argb32_logical_to_native(fill_color_argb);
 
                 if (pitch_pixels == 0) {
                     EXIT_FUNCTION("CybergfxDrawCircle");
@@ -163,7 +176,7 @@ void CybergfxDrawCircle(struct RenderContext *rctx, WORD center_x, WORD center_y
                     end_x = max_x;
 
                 if (start_x <= end_x) {
-                    CybergfxClipFillPixelArray(rctx, rastport, start_x, py, end_x - start_x + 1, 1, fill_brush->data.solid.color);
+                    CybergfxClipFillPixelArray(rctx, rastport, start_x, py, end_x - start_x + 1, 1, fill_color_argb);
                 }
             }
         }

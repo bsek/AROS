@@ -75,7 +75,7 @@ void OpenGLDrawPixel(struct RenderContext *rctx, WORD x, WORD y,
     OpenGL_SyncIfNeeded(rctx);
 
     /* Try geometry batch path */
-    if (rctx->batch_state &&
+    if (OpenGL_BatchIsActive(rctx) &&
         OpenGL_BatchAddPoint(rctx, x, y, color->r, color->g, color->b, color->a))
         return;
 
@@ -104,13 +104,13 @@ void OpenGLDrawLine(struct RenderContext *rctx, WORD startX, WORD startY,
     OpenGL_SyncIfNeeded(rctx);
 
     /* Batch simple 1px non-AA lines */
-    if (width <= 1 && !antialias && rctx->batch_state &&
+    if (width <= 1 && !antialias && OpenGL_BatchIsActive(rctx) &&
         OpenGL_BatchAddLine(rctx, startX, startY, endX, endY,
                             color->r, color->g, color->b, color->a))
         return;
 
     /* Non-batchable: thick or AA lines need GL state changes */
-    if (rctx->batch_state)
+    if (OpenGL_BatchIsActive(rctx))
         OpenGL_BatchFlush(rctx);
 
     OpenGL_SetColor(color);
@@ -174,14 +174,14 @@ void OpenGLDrawRectangle(struct RenderContext *rctx, WORD x, WORD y,
                 UBYTE ca = (color >> 24) & 0xFF;
 
                 /* Try geometry batch — most common UI path */
-                if (rctx->batch_state && border_width == 0 &&
+                if (OpenGL_BatchIsActive(rctx) && border_width == 0 &&
                     OpenGL_BatchAddQuad(rctx, x, y, width, height, cr, cg, cb, ca))
                 {
                     goto done;
                 }
 
                 /* Non-batched: flush any pending batch first */
-                if (rctx->batch_state)
+                if (OpenGL_BatchIsActive(rctx))
                     OpenGL_BatchFlush(rctx);
 
                 glColor4ub(cr, cg, cb, ca);

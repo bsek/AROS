@@ -14,6 +14,13 @@
 #include "../zunegfx_intern.h"
 #include "texture_intern.h"
 
+#if AROS_BIG_ENDIAN
+#define ZUNEGFX_ARGB32_SWAP(p) (p)
+#else
+#define ZUNEGFX_ARGB32_SWAP(p) __builtin_bswap32(p)
+#endif
+
+
 AROS_LH4(void, ZuneSetTexturePixel,
          AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(struct ZuneTexture *, texture, A1),
@@ -62,7 +69,8 @@ AROS_LH4(void, ZuneSetTexturePixel,
 
     switch (texture->format) {
     case ZUNE_TEXTURE_FORMAT_ARGB32:
-        *(ULONG *)pixel_ptr = color;
+        /* color is logical 0xAARRGGBB, texture storage is native */
+        *(ULONG *)pixel_ptr = ZUNEGFX_ARGB32_SWAP(color);
         break;
     case ZUNE_TEXTURE_FORMAT_RGB24:
         pixel_ptr[0] = (color >> 16) & 0xFF;

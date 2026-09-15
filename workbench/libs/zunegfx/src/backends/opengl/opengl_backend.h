@@ -82,6 +82,8 @@ typedef struct OpenGLFBOData {
  * - Each DrawingBoard gets its own FBO within that context
  * - Switching between DrawingBoards only requires glBindFramebuffer() (fast)
  */
+struct OpenGLBatchState;
+
 typedef struct OpenGLPrivateData {
     struct Library *GLBase;         /* gl.library base */
     BOOL        initialized;        /* Backend initialized successfully */
@@ -94,6 +96,10 @@ typedef struct OpenGLPrivateData {
     /* Global GL context */
     APTR        gl_context;         /* GLAContext - the single global context */
     BOOL        context_created;    /* Global context has been created */
+
+    /* Geometry batch. Kept here, not in RenderContext->batch_state, which
+     * belongs to the core batcher and is a different struct entirely. */
+    struct OpenGLBatchState *gl_batch;
 
     /* Current target tracking */
     OpenGLTargetType current_target_type;   /* Type of current target */

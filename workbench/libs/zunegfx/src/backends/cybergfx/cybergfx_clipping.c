@@ -52,6 +52,7 @@ BOOL CybergfxSetupClipping(struct RenderContext *rctx, struct Region *region) {
             OrRegionRegion(region, install_region);
             rctx->saved_clip_region = InstallClipRegion(
                 rctx->target_rastport->Layer, install_region);
+            rctx->clipping_installed = TRUE;
             D(bug("CybergfxSetupClipping: Installed clip region on Layer %p\n",
                   rctx->target_rastport->Layer));
         }
@@ -159,9 +160,17 @@ void CybergfxClearClipping(struct RenderContext *rctx) {
         rctx->target_rastport->Layer) {
         struct Region *removed;
 
+        /* Only touch the Layer if we installed something. Otherwise the
+         * region currently on it belongs to the application. */
+        if (!rctx->clipping_installed) {
+            EXIT_FUNCTION("CybergfxClearClipping");
+            return;
+        }
+
         removed = InstallClipRegion(
             rctx->target_rastport->Layer, rctx->saved_clip_region);
         rctx->saved_clip_region = NULL;
+        rctx->clipping_installed = FALSE;
 
         /* Dispose the region we installed (it was our copy) */
         if (removed) {

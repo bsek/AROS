@@ -713,25 +713,28 @@ static void CybergfxCopyFromRastPort(struct RenderContext *rctx, struct RastPort
         return;
     }
 
-    /* Clamp to DrawingBoard bounds */
-    if (dst_x < 0) {
-        width += dst_x;
-        src_x -= dst_x;
-        dst_x = 0;
-    }
-    if (dst_y < 0) {
-        height += dst_y;
-        src_y -= dst_y;
-        dst_y = 0;
-    }
-    if (dst_x + width > board->width) {
-        width = board->width - dst_x;
-    }
-    if (dst_y + height > board->height) {
-        height = board->height - dst_y;
+    /* Clamp to DrawingBoard bounds. Done in LONG: width/height are UWORD,
+     * so clamping in place wraps instead of going negative. */
+    {
+        LONG cw = (LONG)width, ch = (LONG)height;
+
+        if (dst_x < 0) { cw += dst_x; src_x -= dst_x; dst_x = 0; }
+        if (dst_y < 0) { ch += dst_y; src_y -= dst_y; dst_y = 0; }
+        if (dst_x >= board->width || dst_y >= board->height) {
+            EXIT_FUNCTION("CybergfxCopyFromRastPort");
+            return;
+        }
+        if (dst_x + cw > board->width)  cw = board->width - dst_x;
+        if (dst_y + ch > board->height) ch = board->height - dst_y;
+        if (cw <= 0 || ch <= 0) {
+            EXIT_FUNCTION("CybergfxCopyFromRastPort");
+            return;
+        }
+        width = (UWORD)cw;
+        height = (UWORD)ch;
     }
 
-    if (width <= 0 || height <= 0) {
+    if (width == 0 || height == 0) {
         EXIT_FUNCTION("CybergfxCopyFromRastPort");
         return;
     }

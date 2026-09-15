@@ -632,10 +632,18 @@ void FastBlitInternal(struct DrawingBoard *src, struct DrawingBoard *dst,
       }
 
       if (overlapping) {
-        /* Use memmove for overlapping regions */
-        for (UWORD y = 0; y < height; y++) {
-          memmove(dst_ptr + (y * dst->pitch), src_ptr + (y * src->pitch),
-                  copy_width);
+        /* memmove only protects within a row. When shifting down, rows must
+         * be copied bottom-up or each row clobbers a later source row. */
+        if (dst_y > src_y) {
+          for (WORD y = (WORD)height - 1; y >= 0; y--) {
+            memmove(dst_ptr + (y * dst->pitch), src_ptr + (y * src->pitch),
+                    copy_width);
+          }
+        } else {
+          for (UWORD y = 0; y < height; y++) {
+            memmove(dst_ptr + (y * dst->pitch), src_ptr + (y * src->pitch),
+                    copy_width);
+          }
         }
       } else {
         /* Use memcpy for non-overlapping regions */
@@ -656,12 +664,13 @@ void FastBlitInternal(struct DrawingBoard *src, struct DrawingBoard *dst,
     D(bug("FastBlitInternal: Format conversion required (src=%ld, dst=%ld)\n",
           src->pixel_format, dst->pixel_format));
 
-    for (UWORD y = 0; y < height; y++) {
-      for (UWORD x = 0; x < width; x++) {
-        //        ULONG pixel = GetPixelInternal(src, src_x + x, src_y + y);
-        //  SetPixelInternal(dst, dst_x + x, dst_y + y, pixel);
-      }
-    }
+    /* NOT IMPLEMENTED. The per-pixel converter this needs does not exist at
+     * DrawingBoard level (GetPixelInternal/SetPixelInternal take a
+     * RenderContext). Leaving the destination untouched, but say so rather
+     * than reporting a successful blit. */
+    bug("[ZuneGfx] FastBlitInternal: cross-format blit %ld->%ld not implemented, "
+        "destination left unchanged\n",
+        (LONG)src->pixel_format, (LONG)dst->pixel_format);
   }
 
   EXIT_FUNCTION("FastBlitInternal");
