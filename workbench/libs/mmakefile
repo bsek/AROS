@@ -120,8 +120,8 @@ include $(SRCDIR)/config/aros.cfg
 #MM     workbench-libs-vhi-includes \
 #MM     workbench-libs-workbench-includes \
 #MM     workbench-libs-z-includes \
-#MM     workbench-libs-zstd-includes
-#MM     workbench-libs-zunerenderer-includes
+#MM     workbench-libs-zstd-includes \
+#MM     workbench-libs-zunegfx-includes
 
 ##MM- includes-generate : \
 ##MM     workbench-libs-fd-includes
