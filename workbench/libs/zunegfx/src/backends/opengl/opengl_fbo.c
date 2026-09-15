@@ -181,7 +181,7 @@ void OpenGL_DestroyFBO(OpenGLFBOData *fbo)
 {
     if (!fbo) return;
 
-    if (fbo->texture_id && glDeleteTextures) {
+    if (fbo->texture_id) {
         glDeleteTextures(1, (GLuint*)&fbo->texture_id);
     }
 
