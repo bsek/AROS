@@ -117,7 +117,6 @@ OpenGLPrivateData *g_opengl_priv = NULL;
 /* Pre-init resources */
 struct Screen *g_preinit_screen = NULL;
 struct Window *g_preinit_window = NULL;
-BOOL g_using_compositor_context = FALSE;
 
 /* Availability cache */
 BOOL g_opengl_available_cached = FALSE;

@@ -45,30 +45,6 @@ typedef enum {
 } OpenGLTargetType;
 
 /*****************************************************************************/
-/* Per-Window GL Context                                                     */
-/*****************************************************************************/
-
-/*
- * OpenGLWindowContext - GL context data for a specific window
- *
- * Each window that uses OpenGL rendering gets its own GL context.
- * This allows multiple windows to render independently without
- * the overhead of glASetRast() calls between them.
- */
-typedef struct OpenGLWindowContext {
-    struct Window *window;          /* The window this context belongs to */
-    APTR        gl_context;         /* GLAContext for this window */
-    BOOL        context_valid;      /* Context is valid and usable */
-    BOOL        shaders_initialized; /* Shaders compiled for this context */
-    BOOL        uses_shared_context; /* TRUE if created with GLA_ShareContext */
-    UWORD       width;              /* Current framebuffer width */
-    UWORD       height;             /* Current framebuffer height */
-
-    /* Linked list for tracking all window contexts */
-    struct OpenGLWindowContext *next;
-} OpenGLWindowContext;
-
-/*****************************************************************************/
 /* FBO Data for DrawingBoards                                                */
 /*****************************************************************************/
 
@@ -76,7 +52,7 @@ typedef struct OpenGLWindowContext {
  * OpenGLFBOData - FBO (Framebuffer Object) data for a DrawingBoard
  *
  * Each DrawingBoard gets its own FBO for off-screen rendering.
- * The FBO is attached to the parent window's GL context.
+ * The FBO lives in the global GL context.
  * Switching between DrawingBoards is done via glBindFramebuffer (fast).
  */
 typedef struct OpenGLFBOData {
@@ -91,9 +67,6 @@ typedef struct OpenGLFBOData {
     /* Zero-copy compositing support */
     APTR        pipe_resource;      /* Gallium pipe_resource for zero-copy access */
     BOOL        resource_valid;     /* pipe_resource is valid for texture use */
-
-    /* Parent context - the window context this FBO belongs to */
-    OpenGLWindowContext *parent_context;
 } OpenGLFBOData;
 
 /*****************************************************************************/
@@ -105,31 +78,22 @@ typedef struct OpenGLFBOData {
  * Stored in ZuneBackendContext->private_data
  *
  * ARCHITECTURE:
- * - Each Window gets its own GL context (via glACreateContext with GLA_Window)
- * - Each DrawingBoard gets its own FBO within the active window's context
- * - Switching between windows requires glAMakeCurrent()
+ * - One global GL context, retargeted between windows with glASetRast()
+ * - Each DrawingBoard gets its own FBO within that context
  * - Switching between DrawingBoards only requires glBindFramebuffer() (fast)
- *
- * This avoids the glASetRast() crashes when switching between targets
- * with different dimensions.
  */
 typedef struct OpenGLPrivateData {
     struct Library *GLBase;         /* gl.library base */
     BOOL        initialized;        /* Backend initialized successfully */
     BOOL        gl_available;       /* GL library available and working */
 
-    /* Master GL context for shared resource management */
-    APTR        master_context;     /* Master GL context - all others share with this */
+    /* Master GL context - published via ZuneGetMasterGLContext() */
+    APTR        master_context;     /* Master GL context */
     BOOL        master_context_created; /* Master context has been created */
-    BOOL        shared_contexts_supported; /* GLA_ShareContext is working */
 
-    /* Global GL context (for single-context fallback mode) */
+    /* Global GL context */
     APTR        gl_context;         /* GLAContext - the single global context */
     BOOL        context_created;    /* Global context has been created */
-
-    /* Window context management (for multi-context FBO mode) */
-    OpenGLWindowContext *window_contexts;   /* Linked list of window contexts */
-    OpenGLWindowContext *current_context;   /* Currently active window context */
 
     /* Current target tracking */
     OpenGLTargetType current_target_type;   /* Type of current target */
@@ -184,11 +148,7 @@ BOOL OpenGL_PreInitializeShaders(void);
 void OpenGL_CleanupPreInit(void);
 
 /*
- * OpenGL_GetMasterContext - Get the master GL context for sharing
- *
- * Returns the master GL context that can be passed to other components
- * (like LayerCompositor) via GLA_ShareContext to enable resource sharing
- * between contexts.
+ * OpenGL_GetMasterContext - Get the master GL context
  *
  * Returns NULL if no master context has been created yet.
  */

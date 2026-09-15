@@ -188,7 +188,6 @@ extern OpenGLPrivateData *g_opengl_priv;
 /* Pre-init resources */
 extern struct Screen *g_preinit_screen;
 extern struct Window *g_preinit_window;
-extern BOOL g_using_compositor_context;
 
 /* Availability cache */
 extern BOOL g_opengl_available_cached;
@@ -230,15 +229,10 @@ void OpenGL_BlitFBOToFBO(struct DrawingBoard *src, struct DrawingBoard *dst,
 /*****************************************************************************/
 
 BOOL OpenGL_CreateMasterContext(struct Window *window);
-GLAContext TryHeadlessContext(void);
 BOOL OpenGL_PreInitializeShaders(void);
 void OpenGL_CleanupPreInit(void);
 APTR OpenGL_GetMasterContext(void);
 APTR OpenGL_EnsureMasterContext(struct Window *window);
-OpenGLWindowContext *OpenGL_CreateWindowContext(struct Window *window);
-void OpenGL_DestroyWindowContext(OpenGLWindowContext *ctx);
-OpenGLWindowContext *OpenGL_FindWindowContext(struct Window *window);
-BOOL OpenGL_MakeContextCurrent(OpenGLWindowContext *ctx);
 BOOL OpenGL_EnsureGlobalContext(struct Window *window);
 void OpenGL_SwapBuffers(void);
 
@@ -272,10 +266,6 @@ BOOL OpenGL_BatchAddPoint(struct RenderContext *rctx,
                           WORD x, WORD y,
                           UBYTE r, UBYTE g, UBYTE b, UBYTE a);
 
-BOOL OpenGL_PresentDrawingBoard(struct RenderContext *rctx,
-                                WORD src_x, WORD src_y,
-                                WORD dst_x, WORD dst_y,
-                                UWORD width, UWORD height);
 void OpenGL_SyncIfNeeded(struct RenderContext *rctx);
 void OpenGL_FlushIfNotBatching(struct RenderContext *rctx);
 

@@ -166,7 +166,6 @@ OpenGLFBOData *OpenGL_CreateFBO(UWORD width, UWORD height)
     fbo->height = height;
     fbo->valid = TRUE;
     fbo->dirty = FALSE;
-    fbo->parent_context = NULL;
 
     if (g_opengl_priv) {
         g_opengl_priv->fbos_created++;
@@ -259,7 +258,6 @@ void OpenGL_UnbindFBO(void)
  * Prerequisites:
  * - DrawingBoard must have been rendered to via OpenGL
  * - Caller should call glFlush() on the source context before using texture
- * - For cross-context use, contexts must share resources (GLA_ShareContext)
  *
  * Returns texture ID, or 0 if not available.
  */
