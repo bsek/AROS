@@ -297,6 +297,8 @@ APTR OpenGL_EnsureMasterContext(struct Window *window)
  */
 BOOL OpenGL_EnsureGlobalContext(struct Window *window)
 {
+    struct TagItem setrast_tags[6];
+
     if (!g_opengl_priv || !GLBase) {
         return FALSE;
     }
@@ -320,13 +322,33 @@ BOOL OpenGL_EnsureGlobalContext(struct Window *window)
 
     g_opengl_priv->gl_context = g_opengl_priv->master_context;
     g_opengl_priv->context_created = TRUE;
+
+    glAMakeCurrent((GLAContext)g_opengl_priv->gl_context);
+
+    /* The master context may have been created against a different window
+     * (PreInitializeShaders builds it against its own backdrop), so retarget
+     * it before recording this window as the current target. */
+    setrast_tags[0].ti_Tag = GLA_Window;
+    setrast_tags[0].ti_Data = (IPTR)window;
+    setrast_tags[1].ti_Tag = GLA_Left;
+    setrast_tags[1].ti_Data = window->BorderLeft;
+    setrast_tags[2].ti_Tag = GLA_Top;
+    setrast_tags[2].ti_Data = window->BorderTop;
+    setrast_tags[3].ti_Tag = GLA_Right;
+    setrast_tags[3].ti_Data = window->BorderRight;
+    setrast_tags[4].ti_Tag = GLA_Bottom;
+    setrast_tags[4].ti_Data = window->BorderBottom;
+    setrast_tags[5].ti_Tag = TAG_DONE;
+    setrast_tags[5].ti_Data = 0;
+
+    glASetRast((GLAContext)g_opengl_priv->gl_context, setrast_tags);
+    g_opengl_priv->setrast_calls++;
+
     g_opengl_priv->current_target_type = OPENGL_TARGET_WINDOW;
     g_opengl_priv->current_window = window;
     g_opengl_priv->current_board = NULL;
     g_opengl_priv->current_width = window->Width - window->BorderLeft - window->BorderRight;
     g_opengl_priv->current_height = window->Height - window->BorderTop - window->BorderBottom;
-
-    glAMakeCurrent((GLAContext)g_opengl_priv->gl_context);
 
     D(bug("[ZuneGfx:OpenGL] EnsureGlobalContext: Global context = master %p\n",
           g_opengl_priv->gl_context));
