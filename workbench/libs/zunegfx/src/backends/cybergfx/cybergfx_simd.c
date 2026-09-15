@@ -9,6 +9,7 @@
 #include <aros/debug.h>
 
 #include "cybergfx_antialiasing.h"
+#include "cybergfx_pixel_format.h"
 #include "cybergfx_simd.h"
 #include <math.h>
 #include <string.h>
@@ -230,24 +231,9 @@ static inline __m128i cybergfx_tint_argb32_sse2(__m128i pixels,
   hi = _mm_mullo_epi16(hi, tint16);
   lo = _mm_srli_epi16(lo, 8);
   hi = _mm_srli_epi16(hi, 8);
-  __m128i packed = _mm_packus_epi16(lo, hi);
-#if defined(__SSSE3__)
-  const __m128i shuffle =
-      _mm_setr_epi8(3, 2, 1, 0, 7, 6, 5, 4, 11, 10, 9, 8, 15, 14, 13, 12);
-  packed = _mm_shuffle_epi8(packed, shuffle);
-#else
-  __m128i b = _mm_and_si128(packed, _mm_set1_epi32(0x000000FF));
-  __m128i g =
-      _mm_and_si128(_mm_srli_epi32(packed, 8), _mm_set1_epi32(0x000000FF));
-  __m128i r =
-      _mm_and_si128(_mm_srli_epi32(packed, 16), _mm_set1_epi32(0x000000FF));
-  __m128i a =
-      _mm_and_si128(_mm_srli_epi32(packed, 24), _mm_set1_epi32(0x000000FF));
-  packed = _mm_or_si128(_mm_slli_epi32(b, 24),
-                        _mm_or_si128(_mm_slli_epi32(g, 16),
-                                     _mm_or_si128(_mm_slli_epi32(r, 8), a)));
-#endif
-  return packed;
+  /* tint16 is laid out {a,r,g,b}, matching the native byte order of the
+   * unpacked pixel, so the result is already native -- no swap on store. */
+  return _mm_packus_epi16(lo, hi);
 }
 #endif
 
@@ -469,11 +455,8 @@ cybergfx_tint_argb32_avx2(__m256i pixels, __m256i tint16) {
   hi = _mm256_mullo_epi16(hi, tint16);
   lo = _mm256_srli_epi16(lo, 8);
   hi = _mm256_srli_epi16(hi, 8);
-  __m256i packed = _mm256_packus_epi16(lo, hi);
-  const __m256i shuffle = _mm256_setr_epi8(
-      3, 2, 1, 0, 7, 6, 5, 4, 11, 10, 9, 8, 15, 14, 13, 12, 19, 18, 17, 16, 23,
-      22, 21, 20, 27, 26, 25, 24, 31, 30, 29, 28);
-  return _mm256_shuffle_epi8(packed, shuffle);
+  /* Already native -- see cybergfx_tint_argb32_sse2() */
+  return _mm256_packus_epi16(lo, hi);
 }
 
 static inline __m256 CYBERGFX_TARGET_AVX2 cybergfx_clamp_ps256(__m256 v,
@@ -1132,22 +1115,16 @@ cybergfx_blit_argb32_unity_scalar(const UBYTE *src, ULONG *dst, LONG width,
   UBYTE tr = tint->r, tg = tint->g, tb = tint->b, ta = tint->a;
 
   for (LONG i = 0; i < width; i++) {
-    ULONG pixel = *(const ULONG *)(src + i * 4);
-    UBYTE a = (pixel >> 24) & 0xFF;
-    UBYTE r = (pixel >> 16) & 0xFF;
-    UBYTE g = (pixel >> 8) & 0xFF;
-    UBYTE b = pixel & 0xFF;
+    UBYTE a, r, g, b;
+
+    unpack_argb32(*(const ULONG *)(src + i * 4), &a, &r, &g, &b);
 
     a = (a * ta) >> 8;
     r = (r * tr) >> 8;
     g = (g * tg) >> 8;
     b = (b * tb) >> 8;
 
-#if AROS_BIG_ENDIAN
-    dst[i] = (a << 24) | (r << 16) | (g << 8) | b;
-#else
-    dst[i] = (b << 24) | (g << 16) | (r << 8) | a;
-#endif
+    dst[i] = pack_argb32(a, r, g, b);
   }
 }
 
@@ -1365,8 +1342,10 @@ void cybergfx_make_argb32_batch4(const UBYTE a[4], const UBYTE r[4],
 /* Scalar implementation of Porter-Duff "source over" blending */
 static void cybergfx_blend_argb32_batch4_scalar(ULONG dst[4], const ULONG src[4]) {
   for (WORD i = 0; i < 4; i++) {
-    ULONG s = src[i];
-    UBYTE sa = (s >> 24) & 0xFF;
+    UBYTE sa, sr, sg, sb, da, dr, dg, db;
+
+    /* Buffers are native ARGB32 (memory bytes A,R,G,B) */
+    unpack_argb32(src[i], &sa, &sr, &sg, &sb);
 
     /* Fast path: fully transparent source */
     if (sa == 0)
@@ -1374,30 +1353,21 @@ static void cybergfx_blend_argb32_batch4_scalar(ULONG dst[4], const ULONG src[4]
 
     /* Fast path: fully opaque source */
     if (sa == 255) {
-      dst[i] = s;
+      dst[i] = src[i];
       continue;
     }
 
-    /* Extract source components */
-    UBYTE sr = (s >> 16) & 0xFF;
-    UBYTE sg = (s >> 8) & 0xFF;
-    UBYTE sb = s & 0xFF;
-
-    /* Extract destination components */
-    ULONG d = dst[i];
-    UBYTE dr = (d >> 16) & 0xFF;
-    UBYTE dg = (d >> 8) & 0xFF;
-    UBYTE db = d & 0xFF;
+    unpack_argb32(dst[i], &da, &dr, &dg, &db);
+    (void)da;
 
     /* Fixed-point blending: alpha in 1-256 range */
     ULONG alpha = sa + 1;
     ULONG inv_alpha = 257 - alpha;
 
-    UBYTE or = (UBYTE)((alpha * sr + inv_alpha * dr) >> 8);
-    UBYTE og = (UBYTE)((alpha * sg + inv_alpha * dg) >> 8);
-    UBYTE ob = (UBYTE)((alpha * sb + inv_alpha * db) >> 8);
-
-    dst[i] = (0xFF << 24) | (or << 16) | (og << 8) | ob;
+    dst[i] = pack_argb32(0xFF,
+                         (UBYTE)((alpha * sr + inv_alpha * dr) >> 8),
+                         (UBYTE)((alpha * sg + inv_alpha * dg) >> 8),
+                         (UBYTE)((alpha * sb + inv_alpha * db) >> 8));
   }
 }
 
@@ -1409,7 +1379,7 @@ static void cybergfx_blend_argb32_batch4_scalar(ULONG dst[4], const ULONG src[4]
  */
 static void cybergfx_blend_argb32_batch4_sse2(ULONG dst[4], const ULONG src[4]) {
   const __m128i zero = _mm_setzero_si128();
-  const __m128i alpha_mask = _mm_set1_epi32(0xFF000000);
+  const __m128i alpha_mask = _mm_set1_epi32(0x000000FF);
   const __m128i const_256 = _mm_set1_epi16(256);
   const __m128i const_ff = _mm_set1_epi32(0xFF);
 
@@ -1417,9 +1387,8 @@ static void cybergfx_blend_argb32_batch4_sse2(ULONG dst[4], const ULONG src[4]) 
   __m128i vsrc = _mm_loadu_si128((const __m128i *)src);
   __m128i vdst = _mm_loadu_si128((const __m128i *)dst);
 
-  /* Extract alpha channel from source: shift right 24, mask to get alpha in low byte of each 32-bit word */
-  __m128i valpha32 = _mm_srli_epi32(vsrc, 24);
-  valpha32 = _mm_and_si128(valpha32, const_ff);
+  /* Native ARGB32: alpha is the low byte of each 32-bit word */
+  __m128i valpha32 = _mm_and_si128(vsrc, const_ff);
 
   /* Check for fully transparent (alpha == 0) or fully opaque (alpha == 255) */
   __m128i alpha_zero = _mm_cmpeq_epi32(valpha32, zero);
@@ -1444,12 +1413,12 @@ static void cybergfx_blend_argb32_batch4_sse2(ULONG dst[4], const ULONG src[4]) 
 
   /* Create alpha vectors for each pixel pair (broadcast alpha to all channels) */
   /* For pixels 0,1: extract alpha and broadcast */
-  __m128i alpha_lo = _mm_shufflelo_epi16(src_lo, _MM_SHUFFLE(3, 3, 3, 3));
-  alpha_lo = _mm_shufflehi_epi16(alpha_lo, _MM_SHUFFLE(3, 3, 3, 3));
+  __m128i alpha_lo = _mm_shufflelo_epi16(src_lo, _MM_SHUFFLE(0, 0, 0, 0));
+  alpha_lo = _mm_shufflehi_epi16(alpha_lo, _MM_SHUFFLE(0, 0, 0, 0));
 
   /* For pixels 2,3 */
-  __m128i alpha_hi = _mm_shufflelo_epi16(src_hi, _MM_SHUFFLE(3, 3, 3, 3));
-  alpha_hi = _mm_shufflehi_epi16(alpha_hi, _MM_SHUFFLE(3, 3, 3, 3));
+  __m128i alpha_hi = _mm_shufflelo_epi16(src_hi, _MM_SHUFFLE(0, 0, 0, 0));
+  alpha_hi = _mm_shufflehi_epi16(alpha_hi, _MM_SHUFFLE(0, 0, 0, 0));
 
   /* Calculate inverse alpha (256 - alpha) */
   __m128i inv_alpha_lo = _mm_sub_epi16(const_256, alpha_lo);
@@ -1488,7 +1457,7 @@ static void cybergfx_blend_argb32_batch4_sse2(ULONG dst[4], const ULONG src[4]) 
 /* AVX2 implementation - blend 8 ARGB32 pixels in parallel */
 static void CYBERGFX_TARGET_AVX2 cybergfx_blend_argb32_batch8_avx2(ULONG dst[8], const ULONG src[8]) {
   const __m256i zero = _mm256_setzero_si256();
-  const __m256i alpha_mask = _mm256_set1_epi32(0xFF000000);
+  const __m256i alpha_mask = _mm256_set1_epi32(0x000000FF);
   const __m256i const_256 = _mm256_set1_epi16(256);
   const __m256i const_ff = _mm256_set1_epi32(0xFF);
 
@@ -1496,9 +1465,8 @@ static void CYBERGFX_TARGET_AVX2 cybergfx_blend_argb32_batch8_avx2(ULONG dst[8],
   __m256i vsrc = _mm256_loadu_si256((const __m256i *)src);
   __m256i vdst = _mm256_loadu_si256((const __m256i *)dst);
 
-  /* Extract alpha channel */
-  __m256i valpha32 = _mm256_srli_epi32(vsrc, 24);
-  valpha32 = _mm256_and_si256(valpha32, const_ff);
+  /* Native ARGB32: alpha is the low byte of each 32-bit word */
+  __m256i valpha32 = _mm256_and_si256(vsrc, const_ff);
 
   /* Check for fully transparent or fully opaque */
   __m256i alpha_zero = _mm256_cmpeq_epi32(valpha32, zero);
@@ -1520,10 +1488,10 @@ static void CYBERGFX_TARGET_AVX2 cybergfx_blend_argb32_batch8_avx2(ULONG dst[8],
   __m256i dst_hi = _mm256_unpackhi_epi8(vdst, zero);
 
   /* Broadcast alpha */
-  __m256i alpha_lo = _mm256_shufflelo_epi16(src_lo, _MM_SHUFFLE(3, 3, 3, 3));
-  alpha_lo = _mm256_shufflehi_epi16(alpha_lo, _MM_SHUFFLE(3, 3, 3, 3));
-  __m256i alpha_hi = _mm256_shufflelo_epi16(src_hi, _MM_SHUFFLE(3, 3, 3, 3));
-  alpha_hi = _mm256_shufflehi_epi16(alpha_hi, _MM_SHUFFLE(3, 3, 3, 3));
+  __m256i alpha_lo = _mm256_shufflelo_epi16(src_lo, _MM_SHUFFLE(0, 0, 0, 0));
+  alpha_lo = _mm256_shufflehi_epi16(alpha_lo, _MM_SHUFFLE(0, 0, 0, 0));
+  __m256i alpha_hi = _mm256_shufflelo_epi16(src_hi, _MM_SHUFFLE(0, 0, 0, 0));
+  alpha_hi = _mm256_shufflehi_epi16(alpha_hi, _MM_SHUFFLE(0, 0, 0, 0));
 
   /* Inverse alpha */
   __m256i inv_alpha_lo = _mm256_sub_epi16(const_256, alpha_lo);
@@ -1561,9 +1529,9 @@ static void cybergfx_blend_argb32_batch4_neon(ULONG dst[4], const ULONG src[4]) 
   uint8x16_t vsrc = vld1q_u8((const uint8_t *)src);
   uint8x16_t vdst = vld1q_u8((const uint8_t *)dst);
 
-  /* Extract alpha bytes (every 4th byte starting at offset 3 for ARGB) */
-  /* ARGB layout: [A0 R0 G0 B0 A1 R1 G1 B1 A2 R2 G2 B2 A3 R3 G3 B3] */
-  uint8x16_t alpha_shuffle = {3, 3, 3, 3, 7, 7, 7, 7, 11, 11, 11, 11, 15, 15, 15, 15};
+  /* Native ARGB32 memory layout is [A0 R0 G0 B0 A1 R1 G1 B1 ...], so the
+   * alpha of each pixel is byte 0, 4, 8, 12 -- not byte 3. */
+  uint8x16_t alpha_shuffle = {0, 0, 0, 0, 4, 4, 4, 4, 8, 8, 8, 8, 12, 12, 12, 12};
   uint8x16_t valpha = vqtbl1q_u8(vsrc, alpha_shuffle);
 
   /* Compute inverse alpha (255 - alpha) */
@@ -1586,9 +1554,13 @@ static void cybergfx_blend_argb32_batch4_neon(ULONG dst[4], const ULONG src[4]) 
   uint16x8_t blend_lo = vmlal_u8(vmull_u8(src_lo, alpha_lo), dst_lo, inv_alpha_lo);
   uint16x8_t blend_hi = vmlal_u8(vmull_u8(src_hi, alpha_hi), dst_hi, inv_alpha_hi);
 
-  /* Add 128 for rounding and shift right by 8 */
+  /* Divide by 255, not 256: t += 128; t += t >> 8; t >>= 8. Plain
+   * (t + 128) >> 8 loses a step per composite, so repeatedly blending a
+   * transparent source over the same pixel would slowly darken it. */
   blend_lo = vaddq_u16(blend_lo, vdupq_n_u16(128));
   blend_hi = vaddq_u16(blend_hi, vdupq_n_u16(128));
+  blend_lo = vaddq_u16(blend_lo, vshrq_n_u16(blend_lo, 8));
+  blend_hi = vaddq_u16(blend_hi, vshrq_n_u16(blend_hi, 8));
 
   /* Narrow back to 8-bit */
   uint8x8_t result_lo = vshrn_n_u16(blend_lo, 8);
@@ -1598,6 +1570,11 @@ static void cybergfx_blend_argb32_batch4_neon(ULONG dst[4], const ULONG src[4]) 
   /* Set alpha to 255 */
   uint8x16_t alpha_mask = {255, 0, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0};
   result = vorrq_u8(result, alpha_mask);
+
+  /* Leave the destination untouched where the source is fully transparent,
+   * matching the scalar and SSE2 paths (which skip those pixels entirely). */
+  uint8x16_t zero_mask = vceqq_u8(valpha, vdupq_n_u8(0));
+  result = vbslq_u8(zero_mask, vdst, result);
 
   vst1q_u8((uint8_t *)dst, result);
 }

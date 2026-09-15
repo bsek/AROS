@@ -43,7 +43,7 @@ BOOL DetectLibraries(void) {
   CyberGfxBase = OpenLibrary("cybergraphics.library", 0);
   if (CyberGfxBase) {
     D(bug("ZuneGfx: CyberGraphics library v%ld.%ld available\n",
-          (LONG)CyberGfxBase->lib_Version, (LONG)CyberGfxBase->lib_Revision));
+          (long)CyberGfxBase->lib_Version, (long)CyberGfxBase->lib_Revision));
   } else {
     D(bug("ZuneGfx: CyberGraphics library not available, using "
           "graphics.library\n"));
@@ -53,7 +53,7 @@ BOOL DetectLibraries(void) {
   GLBase = OpenLibrary("gl.library", 20);
   if (GLBase) {
     D(bug("ZuneGfx: GL library v%ld.%ld available\n",
-          (LONG)GLBase->lib_Version, (LONG)GLBase->lib_Revision));
+          (long)GLBase->lib_Version, (long)GLBase->lib_Revision));
   } else {
     D(bug("ZuneGfx: GL library not available, OpenGL backend disabled\n"));
   }
