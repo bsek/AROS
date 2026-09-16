@@ -553,11 +553,16 @@ APTR CybergfxLockPixels(struct DrawingBoard *board, ULONG *pitch_out) {
 
                     reported_fmt = lockfmt;
                     bug("[ZuneGfx] locked pixfmt=%lu bpp=%lu direct=%s alpha=%s"
+                        " boardflags=0x%lx screenpixfmt=%ld"
                         " shifts a/r/g/b=%u/%u/%u/%u"
                         " A11R22G33B44 -> bytes %02x %02x %02x %02x\n",
                         (unsigned long)lockfmt, (unsigned long)lockbpp,
                         pl->valid ? "yes" : "NO-rastport-fallback",
                         pl->has_alpha ? "yes" : "no",
+                        (unsigned long)board->flags,
+                        (long)(board->rastport && board->rastport->BitMap
+                               ? GetCyberMapAttr(board->rastport->BitMap, CYBRMATTR_PIXFMT)
+                               : -1),
                         pl->a_shift, pl->r_shift, pl->g_shift, pl->b_shift,
                         (unsigned)(probe & 0xFF), (unsigned)((probe >> 8) & 0xFF),
                         (unsigned)((probe >> 16) & 0xFF), (unsigned)((probe >> 24) & 0xFF));
