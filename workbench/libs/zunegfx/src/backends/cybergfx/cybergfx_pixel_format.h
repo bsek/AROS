@@ -337,4 +337,31 @@ static inline ULONG argb32_to_layout(const struct ZunePixelLayout *l, ULONG pixe
             ? GetCyberMapAttr((rctx)->window->RPort->BitMap, CYBRMATTR_PIXFMT)\
             : -1))
 
+
+/**
+ * cgx_pixfmt_to_rectfmt
+ *
+ * The RECTFMT_* a Read/WritePixelArray needs in order to move pixels in the
+ * same component order a bitmap of the given PIXFMT_* uses. Both naming
+ * schemes describe memory byte order, so the pairs line up by name.
+ *
+ * Returns 0xFFFFFFFF when there is no equivalent, in which case the caller must not
+ * treat the buffer as that format.
+ */
+static inline ULONG cgx_pixfmt_to_rectfmt(ULONG pixfmt)
+{
+    switch (pixfmt)
+    {
+    case PIXFMT_ARGB32: return RECTFMT_ARGB32;
+    case PIXFMT_BGRA32: return RECTFMT_BGRA32;
+    case PIXFMT_RGBA32: return RECTFMT_RGBA32;
+    case PIXFMT_ABGR32: return RECTFMT_ABGR32;
+    case PIXFMT_0RGB32: return RECTFMT_0RGB32;
+    case PIXFMT_BGR032: return RECTFMT_BGR032;
+    case PIXFMT_RGB032: return RECTFMT_RGB032;
+    case PIXFMT_0BGR32: return RECTFMT_0BGR32;
+    default:            return 0xFFFFFFFFUL;
+    }
+}
+
 #endif /* CYBERGFX_PIXEL_FORMAT_H */

@@ -798,28 +798,45 @@ static void CybergfxCopyFromRastPort(struct RenderContext *rctx, struct RastPort
      * Otherwise, use the bitmap's RastPort.
      */
     if (board->pixels_locked && board->pixels) {
-        /* Direct pixel buffer access */
+        /* Direct pixel buffer access. The board is not necessarily ARGB32, so
+         * ask for the component order it actually uses. */
         UBYTE *dst_pixels = (UBYTE *)board->pixels;
-        ULONG dst_offset = dst_y * board->pitch + dst_x * 4; /* Assuming 32-bit ARGB */
+        ULONG dst_offset = dst_y * board->pitch + dst_x * 4;
+        ULONG rectfmt = cgx_pixfmt_to_rectfmt(board->pixel_format);
+
+        if (rectfmt == 0xFFFFFFFFUL) {
+            D(bug("CybergfxCopyFromRastPort: no RECTFMT for pixfmt %lu\n",
+                  (unsigned long)board->pixel_format));
+            EXIT_FUNCTION("CybergfxCopyFromRastPort");
+            return;
+        }
 
         ReadPixelArray(dst_pixels + dst_offset, 0, 0, board->pitch,
-                       src_rp, src_x, src_y, width, height, RECTFMT_ARGB);
+                       src_rp, src_x, src_y, width, height, rectfmt);
     } else if (board->rastport && board->bitmap) {
         /* Use bitmap - need to lock temporarily */
         APTR lock_handle;
         APTR pixels;
         ULONG pitch;
 
+        ULONG lockfmt = 0;
+
         lock_handle = LockBitMapTags(board->bitmap,
                                      LBMI_BASEADDRESS, &pixels,
                                      LBMI_BYTESPERROW, &pitch,
+                                     LBMI_PIXFMT, &lockfmt,
                                      TAG_DONE);
         if (lock_handle) {
             UBYTE *dst_pixels = (UBYTE *)pixels;
             ULONG dst_offset = dst_y * pitch + dst_x * 4;
+            ULONG rectfmt = cgx_pixfmt_to_rectfmt(lockfmt);
 
-            ReadPixelArray(dst_pixels + dst_offset, 0, 0, pitch,
-                           src_rp, src_x, src_y, width, height, RECTFMT_ARGB);
+            if (rectfmt != 0xFFFFFFFFUL)
+                ReadPixelArray(dst_pixels + dst_offset, 0, 0, pitch,
+                               src_rp, src_x, src_y, width, height, rectfmt);
+            else
+                D(bug("CybergfxCopyFromRastPort: no RECTFMT for pixfmt %lu\n",
+                      (unsigned long)lockfmt));
 
             UnLockBitMap(lock_handle);
         } else {
