@@ -258,6 +258,25 @@ void zune_penspec_drawdirect(struct MUI_PenSpec_intern *psi,
                 psi, psi->p_pen, left, top, right, bottom));
     }
 
+    {
+        static struct RastPort *last_rp = (struct RastPort *)-1;
+        static struct RastPort *last_tgt = (struct RastPort *)-1;
+
+        if (rp != last_rp || (mri->mri_RenderContext
+                              ? mri->mri_RenderContext->target_rastport : NULL) != last_tgt) {
+            last_rp = rp;
+            last_tgt = mri->mri_RenderContext
+                       ? mri->mri_RenderContext->target_rastport : NULL;
+            bug("[Zune] penspec: pen=%ld rp=%p rpbm=%p tgtrp=%p tgtboard=%p"
+                " mrirp=%p dbuf=%p -> %s\n",
+                (long)psi->p_pen, rp, rp ? rp->BitMap : NULL,
+                last_tgt,
+                mri->mri_RenderContext ? mri->mri_RenderContext->target_board : NULL,
+                mri->mri_RastPort, mri->mri_DrawingBoard,
+                (mri->mri_RenderContext && rp == last_tgt) ? "zunegfx" : "legacy-pen");
+        }
+    }
+
     if (mri->mri_RenderContext && rp == mri->mri_RenderContext->target_rastport) {
       struct ZuneRect rect = {
           .x = (WORD)left,
