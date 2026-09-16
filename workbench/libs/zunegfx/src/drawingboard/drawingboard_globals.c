@@ -84,7 +84,12 @@ static ULONG SelectLinearBoardFormat(struct BitMap *friend_bitmap) {
 
 BOOL AllocateDrawingBoardBitmap(struct DrawingBoard *board,
                                 ZuneBackendType backend_type,
-                                struct BitMap *friend_bitmap) {
+                                struct BitMap *window_bitmap) {
+  /* Only a non-LINEARMEM board may take the window bitmap as a friend */
+  struct BitMap *friend_bitmap =
+      (board && (board->flags & ZUNE_DRAWINGBOARD_LINEARMEM)) ? NULL
+                                                              : window_bitmap;
+
   if (!board)
     return FALSE;
 
@@ -128,7 +133,7 @@ BOOL AllocateDrawingBoardBitmap(struct DrawingBoard *board,
         /* LINEARMEM or ALPHA flag: a 32-bit linear surface we can lock. No
          * friend bitmap, so no colormap inheritance, but we still match the
          * screen's component order to keep the present a plain copy. */
-        ULONG linearfmt = SelectLinearBoardFormat(friend_bitmap);
+        ULONG linearfmt = SelectLinearBoardFormat(window_bitmap);
 
         D(bug("ZuneGfx: Allocating linear surface, pixfmt %lu (LINEARMEM or ALPHA flag)\n",
               (unsigned long)linearfmt));
@@ -431,18 +436,16 @@ struct DrawingBoard *CreateDrawingBoardForRenderContextInternal(
   InitDrawingBoard(board);
 
   /*
-   * Allocate BitMap. If LINEARMEM flag is set, we skip friend_bitmap
-   * to get a bitmap with linear memory access. Otherwise, we use
-   * friend_bitmap for colormap inheritance.
+   * Always hand the window's bitmap down. A LINEARMEM board must not use it
+   * as a friend -- that is what would cost us linear memory -- but the
+   * allocator still needs it to read the screen's component order.
    */
-  struct BitMap *friend_bitmap = NULL;
-  if (!(flags & ZUNE_DRAWINGBOARD_LINEARMEM)) {
-    if (rctx->window && rctx->window->RPort && rctx->window->RPort->BitMap) {
-      friend_bitmap = rctx->window->RPort->BitMap;
-    }
+  struct BitMap *window_bitmap = NULL;
+  if (rctx->window && rctx->window->RPort && rctx->window->RPort->BitMap) {
+    window_bitmap = rctx->window->RPort->BitMap;
   }
 
-  if (!AllocateDrawingBoardBitmap(board, rctx->backend_type, friend_bitmap)) {
+  if (!AllocateDrawingBoardBitmap(board, rctx->backend_type, window_bitmap)) {
     D(bug("ZuneGfx: Failed to allocate DrawingBoard bitmap\n"));
     FreeVec(board);
     EXIT_FUNCTION("CreateDrawingBoardForRenderContextInternal");

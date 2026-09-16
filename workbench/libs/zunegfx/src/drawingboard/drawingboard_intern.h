@@ -22,7 +22,7 @@ ULONG GetPixelInternal(struct RenderContext *rctx, WORD x, WORD y);
 
 BOOL AllocateDrawingBoardBitmap(struct DrawingBoard *board,
                                 UWORD backend_type,
-                                struct BitMap *friend_bitmap);
+                                struct BitMap *window_bitmap);
 void FreeDrawingBoardBitmap(struct DrawingBoard *board);
 void InitDrawingBoard(struct DrawingBoard *board);
 void CleanupDrawingBoard(struct RenderContext *rctx, struct DrawingBoard *board);
