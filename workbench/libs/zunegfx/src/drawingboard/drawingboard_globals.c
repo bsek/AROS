@@ -48,6 +48,40 @@ ULONG GetPixelInternal(struct RenderContext *rctx, WORD x, WORD y) {
   return ZuneFallback_GetPixel(rctx->target_board, x, y);
 }
 
+/*
+ * Pick the format for a lockable DrawingBoard.
+ *
+ * Matching the screen's component order keeps ZunePresent a straight row copy
+ * instead of a per-pixel conversion in copybox_impl(). Where the screen has no
+ * alpha byte we take the alpha-carrying sibling with the same order, so the
+ * blit stays a copy and the display just ignores the extra byte.
+ */
+static ULONG SelectLinearBoardFormat(struct BitMap *friend_bitmap) {
+  ULONG screenfmt;
+
+  if (!friend_bitmap || !GetCyberMapAttr(friend_bitmap, CYBRMATTR_ISCYBERGFX))
+    return PIXFMT_ARGB32;
+
+  screenfmt = (ULONG)GetCyberMapAttr(friend_bitmap, CYBRMATTR_PIXFMT);
+
+  switch (screenfmt) {
+  case PIXFMT_ARGB32:
+  case PIXFMT_BGRA32:
+  case PIXFMT_RGBA32:
+    return screenfmt;
+  case PIXFMT_0RGB32:
+    return PIXFMT_ARGB32;
+  case PIXFMT_BGR032:
+    return PIXFMT_BGRA32;
+  case PIXFMT_RGB032:
+    return PIXFMT_RGBA32;
+  default:
+    /* 16/24-bit or something exotic: keep a known 32-bit format and accept
+     * the conversion at present time. */
+    return PIXFMT_ARGB32;
+  }
+}
+
 BOOL AllocateDrawingBoardBitmap(struct DrawingBoard *board,
                                 ZuneBackendType backend_type,
                                 struct BitMap *friend_bitmap) {
@@ -91,14 +125,17 @@ BOOL AllocateDrawingBoardBitmap(struct DrawingBoard *board,
     /* Software surface fallback */
     if (!board->bitmap) {
       if ((board->flags & ZUNE_DRAWINGBOARD_LINEARMEM) || (board->flags & ZUNE_DRAWINGBOARD_ALPHA)) {
-        /* LINEARMEM or ALPHA flag: Force ARGB32 format for direct pixel access
-         * or alpha channel support. This gives us linear memory that can be
-         * locked, but loses colormap inheritance from friend_bitmap. */
-        D(bug("ZuneGfx: Allocating ARGB32 surface (LINEARMEM or ALPHA flag)\n"));
+        /* LINEARMEM or ALPHA flag: a 32-bit linear surface we can lock. No
+         * friend bitmap, so no colormap inheritance, but we still match the
+         * screen's component order to keep the present a plain copy. */
+        ULONG linearfmt = SelectLinearBoardFormat(friend_bitmap);
+
+        D(bug("ZuneGfx: Allocating linear surface, pixfmt %lu (LINEARMEM or ALPHA flag)\n",
+              (unsigned long)linearfmt));
         board->bitmap = AllocBitMap(board->width, board->height, 32,
-                                    BMF_CLEAR | BMF_SPECIALFMT | SHIFT_PIXFMT(PIXFMT_ARGB32),
+                                    BMF_CLEAR | BMF_SPECIALFMT | SHIFT_PIXFMT(linearfmt),
                                     NULL);
-        board->pixel_format = PIXFMT_ARGB32;
+        board->pixel_format = linearfmt;
       } else {
         /* Default: Use friend_bitmap to inherit colormap for legacy pen drawing.
          * The bitmap may not support linear memory access (can't be locked),
