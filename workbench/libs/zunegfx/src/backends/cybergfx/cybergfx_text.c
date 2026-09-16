@@ -23,6 +23,7 @@
 
 #define DEBUG 0
 #include <aros/debug.h>
+#include "cybergfx_pixel_format.h"
 
 extern struct GfxBase *GfxBase;
 
@@ -64,6 +65,11 @@ void CybergfxDrawText(struct RenderContext *rctx, WORD x, WORD y,
                       struct InternalColor *fg_color,
                       struct InternalColor *bg_color)
 {
+    ZUNEGFX_ONCE("[ZuneGfx] text: board=%p locked=%d winpixfmt=%ld\n",
+                 rctx ? rctx->target_board : NULL,
+                 (rctx && rctx->target_board) ? rctx->target_board->pixels_locked : 0,
+                 ZUNEGFX_WINPIXFMT(rctx));
+
     struct RastPort *rp;
     struct ColorMap *cm;
     LONG fg_pen, bg_pen = -1;

@@ -142,6 +142,9 @@ void CybergfxAARectangleDrawingBoard(struct DrawingBoard *board, UWORD x, UWORD 
     }
 
     cybergfx_fill_state fill_state;
+    ZUNEGFX_ONCE("[ZuneGfx] aa-rect->board: boardpixfmt=%lu layoutok=%d\n",
+                 (unsigned long)board->pixel_format, board->pixel_layout.valid);
+
     cybergfx_init_fill_state(fill_brush, drawFill, &fill_state);
     BOOL hasFill = fill_state.enabled;
     BOOL hasBorder = draw_border && line_width > 0.0f && outline_color && outline_tint;

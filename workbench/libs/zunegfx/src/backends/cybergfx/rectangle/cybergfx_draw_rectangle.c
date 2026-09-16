@@ -74,6 +74,15 @@ void CybergfxDrawRectangle(struct RenderContext *rctx, WORD x, WORD y, UWORD wid
         PrepareBrushForRendering(rctx, fill_brush, x, y, width, height);
     }
 
+    ZUNEGFX_ONCE("[ZuneGfx] rect: board=%p locked=%d layoutok=%d radius=%u aa=%d"
+                 " brushtype=%d winpixfmt=%ld\n",
+                 rctx->target_board,
+                 rctx->target_board ? rctx->target_board->pixels_locked : 0,
+                 rctx->target_board ? rctx->target_board->pixel_layout.valid : 0,
+                 (unsigned)border_radius, (int)antialias,
+                 fill_brush ? (int)fill_brush->type : -1,
+                 ZUNEGFX_WINPIXFMT(rctx));
+
     /* Direct writes need a 32-bit layout we understand; otherwise fall through
      * to the RastPort path below. */
     if (rctx->target_board && rctx->target_board->pixels_locked &&

@@ -491,6 +491,10 @@ void CybergfxDrawTextureToDrawingBoard(
 
   if (board->pixels_locked) {
     /* Use direct pixel manipulation for locked DrawingBoard */
+    ZUNEGFX_ONCE("[ZuneGfx] texture->board: layoutok=%d texfmt=%lu"
+                 " boardpixfmt=%lu winpixfmt=%ld\n",
+                 board->pixel_layout.valid, (unsigned long)texture->format,
+                 (unsigned long)board->pixel_format, ZUNEGFX_WINPIXFMT(rctx));
     D(bug("CybergfxDrawTexture: Locked board detected, pixel_format = %u\n",
           board->pixel_format));
 

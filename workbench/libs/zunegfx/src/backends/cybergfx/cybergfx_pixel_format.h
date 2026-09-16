@@ -322,4 +322,19 @@ static inline ULONG argb32_to_layout(const struct ZunePixelLayout *l, ULONG pixe
     return pack_pixel(l, a, r, g, b);
 }
 
+
+/* One-shot diagnostic: fires the first time a given site is reached. */
+#define ZUNEGFX_ONCE(...)                                                     \
+    do {                                                                      \
+        static BOOL _zg_once = FALSE;                                         \
+        if (!_zg_once) { _zg_once = TRUE; bug(__VA_ARGS__); }                 \
+    } while (0)
+
+/* Pixel format of whatever a RenderContext ultimately presents to */
+#define ZUNEGFX_WINPIXFMT(rctx)                                               \
+    ((long)(((rctx) && (rctx)->window && (rctx)->window->RPort &&             \
+             (rctx)->window->RPort->BitMap)                                   \
+            ? GetCyberMapAttr((rctx)->window->RPort->BitMap, CYBRMATTR_PIXFMT)\
+            : -1))
+
 #endif /* CYBERGFX_PIXEL_FORMAT_H */

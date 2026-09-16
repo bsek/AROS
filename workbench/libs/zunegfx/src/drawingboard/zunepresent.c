@@ -122,6 +122,19 @@ SEE ALSO
     }
 
     if (!presented) {
+      static BOOL reported = FALSE;
+
+      if (!reported) {
+        reported = TRUE;
+        bug("[ZuneGfx] present: BltBitMapRastPort boardpixfmt=%ld"
+            " winpixfmt=%ld stilllocked=%d\n",
+            (long)(rctx->target_board->bitmap
+                   ? GetCyberMapAttr(rctx->target_board->bitmap, CYBRMATTR_PIXFMT) : -1),
+            (long)(rctx->window->RPort->BitMap
+                   ? GetCyberMapAttr(rctx->window->RPort->BitMap, CYBRMATTR_PIXFMT) : -1),
+            rctx->target_board->pixels_locked);
+      }
+
       /* Blit from DrawingBoard bitmap to window's RastPort */
       BltBitMapRastPort(rctx->target_board->bitmap, src_x, src_y,
                         rctx->window->RPort, dst_x, dst_y,
