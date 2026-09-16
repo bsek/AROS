@@ -74,10 +74,12 @@ void CybergfxDrawRectangle(struct RenderContext *rctx, WORD x, WORD y, UWORD wid
         PrepareBrushForRendering(rctx, fill_brush, x, y, width, height);
     }
 
-    if (rctx->target_board && rctx->target_board->pixels_locked) {
-        /* Use direct pixel manipulation for locked DrawingBoard */
-        /* Use pack_argb32 for correct format when writing directly to memory */
-        ULONG border_pixel = border_color ? pack_argb32(border_color->a, border_color->r, border_color->g, border_color->b) : 0;
+    /* Direct writes need a 32-bit layout we understand; otherwise fall through
+     * to the RastPort path below. */
+    if (rctx->target_board && rctx->target_board->pixels_locked &&
+        rctx->target_board->pixel_layout.valid) {
+        const struct ZunePixelLayout *pl = &rctx->target_board->pixel_layout;
+        ULONG border_pixel = border_color ? pack_pixel(pl, border_color->a, border_color->r, border_color->g, border_color->b) : 0;
         if (border_radius) {
             if (antialias) {
                 CybergfxAARectangleDrawingBoard(rctx->target_board, x, y, width, height, border_radius, border_width, fill_brush, border_color,

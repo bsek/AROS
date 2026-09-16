@@ -121,10 +121,14 @@ void CybergfxDrawCircle(struct RenderContext *rctx, WORD center_x, WORD center_y
         if (rctx->target_board && rctx->target_board->pixels_locked && rctx->target_board->pixels) {
             /* Direct pixel manipulation for locked DrawingBoard */
             struct DrawingBoard *board = rctx->target_board;
-            if (board->pixel_format == PIXFMT_ARGB32 || board->pixel_format == PIXFMT_RGBA32) {
+            if (board->pixel_layout.valid) {
                 ULONG *pixels = (ULONG *)board->pixels;
                 ULONG pitch_pixels = board->pitch / 4;
-                ULONG converted_color = argb32_logical_to_native(fill_color_argb);
+                ULONG converted_color = pack_pixel(&board->pixel_layout,
+                                                   ZUNE_GET_ALPHA(fill_color_argb),
+                                                   ZUNE_GET_RED(fill_color_argb),
+                                                   ZUNE_GET_GREEN(fill_color_argb),
+                                                   ZUNE_GET_BLUE(fill_color_argb));
 
                 if (pitch_pixels == 0) {
                     EXIT_FUNCTION("CybergfxDrawCircle");
@@ -207,11 +211,10 @@ void CybergfxDrawCircle(struct RenderContext *rctx, WORD center_x, WORD center_y
         if (rctx->target_board && rctx->target_board->pixels_locked && rctx->target_board->pixels) {
             /* Direct pixel manipulation for locked DrawingBoard */
             struct DrawingBoard *board = rctx->target_board;
-            if (board->pixel_format == PIXFMT_ARGB32 || board->pixel_format == PIXFMT_RGBA32) {
+            if (board->pixel_layout.valid) {
                 ULONG *pixels = (ULONG *)board->pixels;
                 ULONG pitch_pixels = board->pitch / 4;
-                /* Use pack_argb32 for correct format when writing directly to memory */
-                ULONG color = pack_argb32(border_color->a, border_color->r, border_color->g, border_color->b);
+                ULONG color = pack_pixel(&board->pixel_layout, border_color->a, border_color->r, border_color->g, border_color->b);
 
                 for (WORD py = min_y; py <= max_y; py++) {
                     for (WORD px = min_x; px <= max_x; px++) {
@@ -347,6 +350,14 @@ static void CybergfxDrawAACircleDrawingBoard(struct RenderContext *rctx, UWORD x
         return;
     }
 
+    /* Writes 32-bit words straight into the locked buffer */
+    if (!board->pixel_layout.valid) {
+        D(bug("CybergfxDrawAACircleDrawingBoard: no direct layout for pixfmt %lu\n",
+              (unsigned long)board->pixel_format));
+        EXIT_FUNCTION("CybergfxDrawAACircleDrawingBoard");
+        return;
+    }
+
     if (fill_brush == NULL && border_color == NULL) {
         EXIT_FUNCTION("CybergfxDrawAACircleDrawingBoard");
         return;
@@ -401,7 +412,7 @@ static void CybergfxDrawAACircleDrawingBoard(struct RenderContext *rctx, UWORD x
             ULONG bg_pixels[4];
             ULONG *src = row_buffer ? (row_buffer + px) : (pixels + row_base + px);
             for (WORD i = 0; i < 4; i++)
-                bg_pixels[i] = argb32_native_to_logical(src[i]);
+                bg_pixels[i] = layout_to_logical(&board->pixel_layout, src[i]);
 
             ULONG result_pixels[4];
             ULONG changed_mask;
@@ -420,7 +431,7 @@ static void CybergfxDrawAACircleDrawingBoard(struct RenderContext *rctx, UWORD x
             if (changed_mask) {
                 for (WORD i = 0; i < 4; i++) {
                     if (changed_mask & (1u << i)) {
-                        ULONG final_color = argb32_logical_to_native(result_pixels[i]);
+                        ULONG final_color = logical_to_layout(&board->pixel_layout, result_pixels[i]);
                         CybergfxWritePixelClamped(pixels, pitch_pixels, board->width, board->height,
                                                   min_x + px + i, py, final_color);
                         if (row_buffer) row_buffer[px + i] = final_color;

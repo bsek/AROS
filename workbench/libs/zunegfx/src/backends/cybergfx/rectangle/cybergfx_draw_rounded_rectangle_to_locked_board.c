@@ -40,7 +40,7 @@ void CybergfxDrawRoundedRectangleToLockedDrawingBoard(struct RenderContext *rctx
     BOOL solid_fill = FALSE;
     if (filled && fill_brush && (fill_brush->type == ZUNE_BRUSH_TYPE_SOLID || fill_brush->type == ZUNE_BRUSH_TYPE_PEN)) {
         /* Use pack_argb32 for correct format when writing directly to memory */
-        fill_color = pack_argb32(255, fill_brush->internal.color.r,
+        fill_color = pack_pixel(&board->pixel_layout, 255, fill_brush->internal.color.r,
                                  fill_brush->internal.color.g,
                                  fill_brush->internal.color.b);
         solid_fill = TRUE;
@@ -131,7 +131,7 @@ void CybergfxDrawRoundedRectangleToLockedDrawingBoard(struct RenderContext *rctx
                     /* Sample brush for gradient/pattern */
                     UBYTE fc_r, fc_g, fc_b, fc_a;
                     SampleBrush(fill_brush, x, y, width, height, px, py, &fc_r, &fc_g, &fc_b, &fc_a);
-                    ULONG packed_pixel = pack_argb32(0xFF, fc_r, fc_g, fc_b);
+                    ULONG packed_pixel = pack_pixel(&board->pixel_layout, 0xFF, fc_r, fc_g, fc_b);
                     CybergfxWritePixelClamped(pixels, pitch_pixels, board->width, board->height, px, py, packed_pixel);
                 }
             }

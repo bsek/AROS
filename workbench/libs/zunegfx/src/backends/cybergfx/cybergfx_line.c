@@ -61,10 +61,12 @@ static void draw_line_bresenham(struct RenderContext *rctx, UWORD start_x, UWORD
     /* Used for direct pixel manipulation for locked DrawingBoard */
     ULONG *pixels = NULL;
     ULONG pitch_pixels = 0;
+    const struct ZunePixelLayout *pl = NULL;
 
     if (use_direct_pixels) {
         pixels = (ULONG *)rctx->target_board->pixels;
         pitch_pixels = rctx->target_board->pitch / 4;
+        pl = &rctx->target_board->pixel_layout;
     }
 
     /* Calculate perpendicular direction for line width */
@@ -89,8 +91,7 @@ static void draw_line_bresenham(struct RenderContext *rctx, UWORD start_x, UWORD
         if (line_width <= 1) {
             /* Single pixel line */
             if (use_direct_pixels) {
-                /* Use pack_argb32 for correct format when writing directly to memory */
-                ULONG pixel = pack_argb32(color->a, color->r, color->g, color->b);
+                ULONG pixel = pack_pixel(pl, color->a, color->r, color->g, color->b);
                 CybergfxWritePixelClamped(pixels, pitch_pixels,
                                           rctx->target_board->width,
                                           rctx->target_board->height, x, y,
@@ -110,8 +111,7 @@ static void draw_line_bresenham(struct RenderContext *rctx, UWORD start_x, UWORD
                 WORD py = y + w * perp_dy;
 
                 if (use_direct_pixels) {
-                    /* Use pack_argb32 for correct format when writing directly to memory */
-                    ULONG pixel = pack_argb32(color->a, color->r, color->g, color->b);
+                    ULONG pixel = pack_pixel(pl, color->a, color->r, color->g, color->b);
                     CybergfxWritePixelClamped(pixels, pitch_pixels,
                                               rctx->target_board->width,
                                               rctx->target_board->height, px, py,
@@ -190,12 +190,11 @@ static void draw_straight_line(struct RenderContext *rctx, UWORD start_x, UWORD 
         /* Rendering to DrawingBoard */
         struct DrawingBoard *board = rctx->target_board;
 
-        if (board->pixels_locked && (board->pixel_format == PIXFMT_ARGB32 || board->pixel_format == PIXFMT_RGBA32)) {
+        if (board->pixels_locked && board->pixel_layout.valid) {
             /* Direct pixel manipulation for locked DrawingBoard */
             ULONG *pixels = (ULONG *)board->pixels;
             ULONG pitch_pixels = board->pitch / 4;
-            /* Use pack_argb32 for correct format when writing directly to memory */
-            ULONG pixel = pack_argb32(color->a, color->r, color->g, color->b);
+            ULONG pixel = pack_pixel(&board->pixel_layout, color->a, color->r, color->g, color->b);
 
             if (start_x == end_x) {
                 /* Vertical line */
@@ -302,7 +301,7 @@ void CybergfxDrawLine(struct RenderContext *rctx, WORD start_x, WORD start_y, WO
     if (rctx->target_board) {
         /* Rendering to DrawingBoard */
         struct DrawingBoard *board = rctx->target_board;
-        if (board->pixels_locked && (board->pixel_format == PIXFMT_ARGB32 || board->pixel_format == PIXFMT_RGBA32)) {
+        if (board->pixels_locked && board->pixel_layout.valid) {
             /* Use direct pixel manipulation for locked DrawingBoard */
             draw_line_bresenham(rctx, start_x, start_y, end_x, end_y, color, TRUE, line_width);
         } else {
@@ -322,24 +321,26 @@ void CybergfxDrawLine(struct RenderContext *rctx, WORD start_x, WORD start_y, WO
 
 static inline void write_wu_pixels(struct RastPort *rp, ULONG *pixels, ULONG pitch_pixels,
                                    ULONG x, ULONG y, float alpha, struct InternalColor *color,
-                                   ULONG bitmap_width, ULONG bitmap_height) {
+                                   ULONG bitmap_width, ULONG bitmap_height,
+                                   const struct ZunePixelLayout *pl) {
     /* Bounds check */
     if (x >= bitmap_width || y >= bitmap_height)
         return;
 
     if (rp != NULL) {
+        /* Read/WriteRGBPixel take logical 0xAARRGGBB, not the native order */
         ULONG bg = ReadRGBPixel(rp, x, y);
         UBYTE bg_a, bg_r, bg_g, bg_b;
-        unpack_argb32(bg, &bg_a, &bg_r, &bg_g, &bg_b);
+        unpack_argb32_logical(bg, &bg_a, &bg_r, &bg_g, &bg_b);
         blend_over(&bg_r, &bg_g, &bg_b, color->r, color->g, color->b, alpha);
-        WriteRGBPixel(rp, x, y, pack_argb32(bg_a, bg_r, bg_g, bg_b));
+        WriteRGBPixel(rp, x, y, pack_argb32_logical(bg_a, bg_r, bg_g, bg_b));
     } else {
         ULONG *pixel_ptr = &pixels[y * pitch_pixels + x];
         ULONG bg = *pixel_ptr;
         UBYTE bg_a, bg_r, bg_g, bg_b;
-        extract_pixel_value(bg, &bg_a, &bg_r, &bg_g, &bg_b);
+        unpack_pixel(pl, bg, &bg_a, &bg_r, &bg_g, &bg_b);
         blend_over(&bg_r, &bg_g, &bg_b, color->r, color->g, color->b, alpha);
-        *pixel_ptr = pack_argb32(bg_a, bg_r, bg_g, bg_b);
+        *pixel_ptr = pack_pixel(pl, bg_a, bg_r, bg_g, bg_b);
     }
 }
 
@@ -358,10 +359,13 @@ void CybergfxDrawLineAA(struct RenderContext *rctx, WORD x1, WORD y1, WORD x2, W
     /* Set up direct pixel access */
     ULONG *pixels = NULL;
     ULONG pitch_pixels = 0;
-    /* Ensure pixels are locked and we support the pixel format */
-    if (rctx->target_board && rctx->target_board->pixels_locked) {
+    const struct ZunePixelLayout *pl = NULL;
+    /* Ensure pixels are locked and we understand the pixel layout */
+    if (rctx->target_board && rctx->target_board->pixels_locked &&
+        rctx->target_board->pixel_layout.valid) {
         pixels = (ULONG *)rctx->target_board->pixels;
         pitch_pixels = rctx->target_board->pitch / 4;
+        pl = &rctx->target_board->pixel_layout;
         bitmap_width = rctx->target_board->width;
         bitmap_height = rctx->target_board->height;
     } else if (rctx->target_board) {
@@ -413,11 +417,11 @@ void CybergfxDrawLineAA(struct RenderContext *rctx, WORD x1, WORD y1, WORD x2, W
 
     /* Draw first endpoint pixels */
     if (steep) {
-        write_wu_pixels(rastport, pixels, pitch_pixels, ypxl1, xpxl1, rfpart(yend) * xgap, color, bitmap_width, bitmap_height);
-        write_wu_pixels(rastport, pixels, pitch_pixels, ypxl1 + 1, xpxl1, fpart(yend) * xgap, color, bitmap_width, bitmap_height);
+        write_wu_pixels(rastport, pixels, pitch_pixels, ypxl1, xpxl1, rfpart(yend) * xgap, color, bitmap_width, bitmap_height, pl);
+        write_wu_pixels(rastport, pixels, pitch_pixels, ypxl1 + 1, xpxl1, fpart(yend) * xgap, color, bitmap_width, bitmap_height, pl);
     } else {
-        write_wu_pixels(rastport, pixels, pitch_pixels, xpxl1, ypxl1, rfpart(yend) * xgap, color, bitmap_width, bitmap_height);
-        write_wu_pixels(rastport, pixels, pitch_pixels, xpxl1, ypxl1 + 1, fpart(yend) * xgap, color, bitmap_width, bitmap_height);
+        write_wu_pixels(rastport, pixels, pitch_pixels, xpxl1, ypxl1, rfpart(yend) * xgap, color, bitmap_width, bitmap_height, pl);
+        write_wu_pixels(rastport, pixels, pitch_pixels, xpxl1, ypxl1 + 1, fpart(yend) * xgap, color, bitmap_width, bitmap_height, pl);
     }
 
     float intery = yend + gradient;
@@ -431,22 +435,22 @@ void CybergfxDrawLineAA(struct RenderContext *rctx, WORD x1, WORD y1, WORD x2, W
 
     /* Draw second endpoint pixels */
     if (steep) {
-        write_wu_pixels(rastport, pixels, pitch_pixels, ypxl2, xpxl2, rfpart(yend) * xgap, color, bitmap_width, bitmap_height);
-        write_wu_pixels(rastport, pixels, pitch_pixels, ypxl2 + 1, xpxl2, fpart(yend) * xgap, color, bitmap_width, bitmap_height);
+        write_wu_pixels(rastport, pixels, pitch_pixels, ypxl2, xpxl2, rfpart(yend) * xgap, color, bitmap_width, bitmap_height, pl);
+        write_wu_pixels(rastport, pixels, pitch_pixels, ypxl2 + 1, xpxl2, fpart(yend) * xgap, color, bitmap_width, bitmap_height, pl);
     } else {
-        write_wu_pixels(rastport, pixels, pitch_pixels, xpxl2, ypxl2, rfpart(yend) * xgap, color, bitmap_width, bitmap_height);
-        write_wu_pixels(rastport, pixels, pitch_pixels, xpxl2, ypxl2 + 1, fpart(yend) * xgap, color, bitmap_width, bitmap_height);
+        write_wu_pixels(rastport, pixels, pitch_pixels, xpxl2, ypxl2, rfpart(yend) * xgap, color, bitmap_width, bitmap_height, pl);
+        write_wu_pixels(rastport, pixels, pitch_pixels, xpxl2, ypxl2 + 1, fpart(yend) * xgap, color, bitmap_width, bitmap_height, pl);
     }
 
     /* Main loop - draw antialiased pixels between endpoints */
     for (WORD x = xpxl1 + 1; x < xpxl2; x++) {
         WORD py = cybergfx_fast_ftoi(intery);
         if (steep) {
-            write_wu_pixels(rastport, pixels, pitch_pixels, py, x, rfpart(intery), color, bitmap_width, bitmap_height);
-            write_wu_pixels(rastport, pixels, pitch_pixels, py + 1, x, fpart(intery), color, bitmap_width, bitmap_height);
+            write_wu_pixels(rastport, pixels, pitch_pixels, py, x, rfpart(intery), color, bitmap_width, bitmap_height, pl);
+            write_wu_pixels(rastport, pixels, pitch_pixels, py + 1, x, fpart(intery), color, bitmap_width, bitmap_height, pl);
         } else {
-            write_wu_pixels(rastport, pixels, pitch_pixels, x, py, rfpart(intery), color, bitmap_width, bitmap_height);
-            write_wu_pixels(rastport, pixels, pitch_pixels, x, py + 1, fpart(intery), color, bitmap_width, bitmap_height);
+            write_wu_pixels(rastport, pixels, pitch_pixels, x, py, rfpart(intery), color, bitmap_width, bitmap_height, pl);
+            write_wu_pixels(rastport, pixels, pitch_pixels, x, py + 1, fpart(intery), color, bitmap_width, bitmap_height, pl);
         }
         intery += gradient;
     }

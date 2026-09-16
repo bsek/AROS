@@ -670,7 +670,7 @@ void FastBlitInternal(struct DrawingBoard *src, struct DrawingBoard *dst,
      * than reporting a successful blit. */
     bug("[ZuneGfx] FastBlitInternal: cross-format blit %ld->%ld not implemented, "
         "destination left unchanged\n",
-        (LONG)src->pixel_format, (LONG)dst->pixel_format);
+        (long)src->pixel_format, (long)dst->pixel_format);
   }
 
   EXIT_FUNCTION("FastBlitInternal");

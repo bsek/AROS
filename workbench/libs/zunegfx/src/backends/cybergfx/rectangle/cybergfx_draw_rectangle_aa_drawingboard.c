@@ -99,8 +99,7 @@ static BOOL cybergfx_prefill_solid_core_board(struct DrawingBoard *board, const 
     /* Debug the solid fill color values */
     D(bug("cybergfx_prefill_solid_core: solid rgb = (%d, %d, %d)\n", (WORD)state->solid_r, (WORD)state->solid_g, (WORD)state->solid_b));
 
-    /* Use pack_argb32 to create pixel in correct format for direct memory access */
-    ULONG solid_pixel = pack_argb32(255, state->solid_r, state->solid_g, state->solid_b);
+    ULONG solid_pixel = pack_pixel(&board->pixel_layout, 255, state->solid_r, state->solid_g, state->solid_b);
     ULONG *pixels = (ULONG *)board->pixels;
     ULONG pitch_pixels = board->pitch / 4;
 
@@ -132,6 +131,13 @@ void CybergfxAARectangleDrawingBoard(struct DrawingBoard *board, UWORD x, UWORD 
 
     if (!board || !board->pixels) {
         D(bug("CybergfxAARectangleDrawingBoard: Invalid board or pixels\n"));
+        return;
+    }
+
+    /* Everything below writes 32-bit words straight into the locked buffer */
+    if (!board->pixel_layout.valid) {
+        D(bug("CybergfxAARectangleDrawingBoard: no direct layout for pixfmt %lu\n",
+              (unsigned long)board->pixel_format));
         return;
     }
 
@@ -242,12 +248,12 @@ void CybergfxAARectangleDrawingBoard(struct DrawingBoard *board, UWORD x, UWORD 
 
                 /* Fast path for solid fill with no blending needed */
                 if (fill_state.solid && alphaFill[i] > 0.9999f && alphaLine[i] < CYBERGFX_AA_MIN_ALPHA_THRESHOLD) {
-                    *dst = pack_argb32(255, fill_state.solid_r, fill_state.solid_g, fill_state.solid_b);
+                    *dst = pack_pixel(&board->pixel_layout, 255, fill_state.solid_r, fill_state.solid_g, fill_state.solid_b);
                     continue;
                 }
 
                 UBYTE bg_a, bg_r, bg_g, bg_b;
-                unpack_argb32(*dst, &bg_a, &bg_r, &bg_g, &bg_b);
+                unpack_pixel(&board->pixel_layout, *dst, &bg_a, &bg_r, &bg_g, &bg_b);
                 BOOL pixel_changed = FALSE;
 
                 if (hasFill && alphaFill[i] > CYBERGFX_AA_MIN_ALPHA_THRESHOLD) {
@@ -273,7 +279,7 @@ void CybergfxAARectangleDrawingBoard(struct DrawingBoard *board, UWORD x, UWORD 
 
                 if (pixel_changed) {
                     bg_a = 255;
-                    *dst = pack_argb32(bg_a, bg_r, bg_g, bg_b);
+                    *dst = pack_pixel(&board->pixel_layout, bg_a, bg_r, bg_g, bg_b);
                 }
             }
         }

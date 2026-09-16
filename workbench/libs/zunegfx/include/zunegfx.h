@@ -441,6 +441,16 @@ struct PenColorCache;
 struct ZuneTexture;
 
 /* Drawing Board - Off-screen rendering surface */
+/* Where each component sits inside a locked pixel. Derived from the pixel
+ * format the driver reports at lock time, so direct writes land in the
+ * order that bitmap actually uses. */
+struct ZunePixelLayout {
+  UBYTE a_shift, r_shift, g_shift, b_shift; /* ULONG shifts */
+  UBYTE bytes_per_pixel;
+  BOOL has_alpha;
+  BOOL valid; /* FALSE = do not write this buffer directly */
+};
+
 struct DrawingBoard {
   struct Node node; /* For linking in lists */
 
@@ -458,6 +468,7 @@ struct DrawingBoard {
   ULONG pitch;        /* Bytes per row */
   ULONG pixel_format; /* Pixel format identifier */
   BOOL pixels_locked; /* Pixel buffer lock state */
+  struct ZunePixelLayout pixel_layout; /* Component order of the locked pixels */
 
   /* Backend information */
   BOOL hardware_surface; /* True if in video memory */

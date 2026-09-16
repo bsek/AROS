@@ -205,4 +205,121 @@ static inline ULONG argb32_native_to_logical(ULONG pixel) {
 #endif
 }
 
+
+/**
+ * Byte offset -> ULONG shift. The CGX PIXFMT constants name components in
+ * memory order (see the LockBitMapTagList() autodoc), so byte 0 is the
+ * low-order byte of a little-endian ULONG and the high-order one on BE.
+ */
+#if AROS_BIG_ENDIAN
+#define CGX_BYTE_SHIFT(off) ((UBYTE)((3 - (off)) * 8))
+#else
+#define CGX_BYTE_SHIFT(off) ((UBYTE)((off) * 8))
+#endif
+
+/**
+ * zunegfx_derive_pixel_layout
+ *
+ * Fills in a ZunePixelLayout for a CGX pixel format. Returns FALSE for
+ * anything that must not be written as 32-bit words, in which case the
+ * caller has to use the RastPort path instead.
+ */
+static inline BOOL zunegfx_derive_pixel_layout(ULONG cgxfmt,
+                                               ULONG bytes_per_pixel,
+                                               struct ZunePixelLayout *out)
+{
+    UBYTE a, r, g, b;
+    BOOL alpha = TRUE;
+
+    out->valid = FALSE;
+    out->bytes_per_pixel = (UBYTE)bytes_per_pixel;
+
+    if (bytes_per_pixel != 4)
+        return FALSE;
+
+    switch (cgxfmt)
+    {
+    case PIXFMT_ARGB32: a = 0; r = 1; g = 2; b = 3; break;
+    case PIXFMT_BGRA32: b = 0; g = 1; r = 2; a = 3; break;
+    case PIXFMT_RGBA32: r = 0; g = 1; b = 2; a = 3; break;
+    case PIXFMT_ABGR32: a = 0; b = 1; g = 2; r = 3; break;
+    /* The 0-variants have an unused byte where alpha would be. Point the
+     * alpha shift at it so writes stay in range, but flag it as opaque. */
+    case PIXFMT_0RGB32: a = 0; r = 1; g = 2; b = 3; alpha = FALSE; break;
+    case PIXFMT_BGR032: b = 0; g = 1; r = 2; a = 3; alpha = FALSE; break;
+    case PIXFMT_RGB032: r = 0; g = 1; b = 2; a = 3; alpha = FALSE; break;
+    case PIXFMT_0BGR32: a = 0; b = 1; g = 2; r = 3; alpha = FALSE; break;
+    default:
+        return FALSE;
+    }
+
+    out->a_shift = CGX_BYTE_SHIFT(a);
+    out->r_shift = CGX_BYTE_SHIFT(r);
+    out->g_shift = CGX_BYTE_SHIFT(g);
+    out->b_shift = CGX_BYTE_SHIFT(b);
+    out->has_alpha = alpha;
+    out->valid = TRUE;
+    return TRUE;
+}
+
+/* Pack/unpack in whatever order the locked bitmap actually uses. */
+static inline ULONG pack_pixel(const struct ZunePixelLayout *l,
+                               UBYTE a, UBYTE r, UBYTE g, UBYTE b)
+{
+    return (((ULONG)a) << l->a_shift) | (((ULONG)r) << l->r_shift) |
+           (((ULONG)g) << l->g_shift) | (((ULONG)b) << l->b_shift);
+}
+
+static inline void unpack_pixel(const struct ZunePixelLayout *l, ULONG pixel,
+                                UBYTE *a, UBYTE *r, UBYTE *g, UBYTE *b)
+{
+    *a = l->has_alpha ? (UBYTE)((pixel >> l->a_shift) & 0xFF) : 0xFF;
+    *r = (UBYTE)((pixel >> l->r_shift) & 0xFF);
+    *g = (UBYTE)((pixel >> l->g_shift) & 0xFF);
+    *b = (UBYTE)((pixel >> l->b_shift) & 0xFF);
+}
+
+/* TRUE when the layout is exactly native ARGB32, i.e. the order the SIMD
+ * helpers and pack_argb32() assume. */
+static inline BOOL zunegfx_layout_is_argb32(const struct ZunePixelLayout *l)
+{
+    return l->valid && l->has_alpha &&
+           l->a_shift == CGX_BYTE_SHIFT(0) && l->r_shift == CGX_BYTE_SHIFT(1) &&
+           l->g_shift == CGX_BYTE_SHIFT(2) && l->b_shift == CGX_BYTE_SHIFT(3);
+}
+
+
+/* Convert between the locked bitmap's order and logical 0xAARRGGBB, which is
+ * what the AA blend helpers and the public API speak. */
+static inline ULONG layout_to_logical(const struct ZunePixelLayout *l, ULONG pixel)
+{
+    UBYTE a, r, g, b;
+    unpack_pixel(l, pixel, &a, &r, &g, &b);
+    return pack_argb32_logical(a, r, g, b);
+}
+
+static inline ULONG logical_to_layout(const struct ZunePixelLayout *l, ULONG pixel)
+{
+    UBYTE a, r, g, b;
+    unpack_argb32_logical(pixel, &a, &r, &g, &b);
+    return pack_pixel(l, a, r, g, b);
+}
+
+
+/* Convert between the locked bitmap's order and native ARGB32, which is the
+ * space blend_argb32()/blend_argb32_alpha() and the SIMD helpers work in. */
+static inline ULONG layout_to_argb32(const struct ZunePixelLayout *l, ULONG pixel)
+{
+    UBYTE a, r, g, b;
+    unpack_pixel(l, pixel, &a, &r, &g, &b);
+    return pack_argb32(a, r, g, b);
+}
+
+static inline ULONG argb32_to_layout(const struct ZunePixelLayout *l, ULONG pixel)
+{
+    UBYTE a, r, g, b;
+    unpack_argb32(pixel, &a, &r, &g, &b);
+    return pack_pixel(l, a, r, g, b);
+}
+
 #endif /* CYBERGFX_PIXEL_FORMAT_H */

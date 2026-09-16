@@ -101,7 +101,7 @@ static void FillSpanBrushLocked(struct RenderContext *rctx, ULONG *pixels,
                           px_coords, y, fc_r, fc_g, fc_b, fc_a);
 
         for (k = 0; k < 4; k++)
-            dest_row[px + k] = pack_argb32(0xFF, fc_r[k], fc_g[k], fc_b[k]);
+            dest_row[px + k] = pack_pixel(&board->pixel_layout, 0xFF, fc_r[k], fc_g[k], fc_b[k]);
     }
 
     /* Remaining pixels */
@@ -109,7 +109,7 @@ static void FillSpanBrushLocked(struct RenderContext *rctx, ULONG *pixels,
         UBYTE fc_r, fc_g, fc_b, fc_a;
         SampleBrush(brush, bbox_x, bbox_y, bbox_w, bbox_h,
                     x_start + px, y, &fc_r, &fc_g, &fc_b, &fc_a);
-        dest_row[px] = pack_argb32(0xFF, fc_r, fc_g, fc_b);
+        dest_row[px] = pack_pixel(&board->pixel_layout, 0xFF, fc_r, fc_g, fc_b);
     }
 }
 
@@ -183,6 +183,7 @@ void CybergfxFillPolygon(struct RenderContext *rctx, struct ZunePoint *points,
 
     ULONG *pixels = NULL;
     ULONG pitch_pixels = 0;
+    const struct ZunePixelLayout *pl = NULL;
     struct RastPort *rp = NULL;
     ULONG *span_buffer = NULL;
 
@@ -194,13 +195,12 @@ void CybergfxFillPolygon(struct RenderContext *rctx, struct ZunePoint *points,
     if (rctx->target_board) {
         struct DrawingBoard *board = rctx->target_board;
 
-        if (board->pixels_locked && board->pixels &&
-            (board->pixel_format == PIXFMT_ARGB32 ||
-             board->pixel_format == PIXFMT_RGBA32)) {
+        if (board->pixels_locked && board->pixels && board->pixel_layout.valid) {
             /* Locked DrawingBoard: direct pixel access */
             use_locked = TRUE;
             pixels = (ULONG *)board->pixels;
             pitch_pixels = board->pitch / 4;
+            pl = &board->pixel_layout;
         } else {
             /* Unlocked DrawingBoard: use its RastPort */
             rp = board->rastport;
@@ -236,7 +236,7 @@ void CybergfxFillPolygon(struct RenderContext *rctx, struct ZunePoint *points,
     if (brush->type == ZUNE_BRUSH_TYPE_SOLID || brush->type == ZUNE_BRUSH_TYPE_PEN) {
         use_simple_solid = TRUE;
         if (use_locked) {
-            solid_pixel = pack_argb32(255, brush->internal.color.r,
+            solid_pixel = pack_pixel(pl, 255, brush->internal.color.r,
                                       brush->internal.color.g,
                                       brush->internal.color.b);
         } else {

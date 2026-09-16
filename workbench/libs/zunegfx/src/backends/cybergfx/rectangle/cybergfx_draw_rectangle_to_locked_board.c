@@ -52,8 +52,7 @@ void CybergfxDrawRectangleToLockedDrawingBoard(struct RenderContext *renderport,
 
     /* Fast path for solid color brushes */
     if (fill_brush->type == ZUNE_BRUSH_TYPE_SOLID || fill_brush->type == ZUNE_BRUSH_TYPE_PEN) {
-      /* Use pack_argb32 for correct format when writing directly to memory */
-      ULONG fill_pixel = pack_argb32(255, fill_brush->internal.color.r,
+      ULONG fill_pixel = pack_pixel(&board->pixel_layout, 255, fill_brush->internal.color.r,
                                      fill_brush->internal.color.g,
                                      fill_brush->internal.color.b);
 
@@ -89,7 +88,7 @@ void CybergfxDrawRectangleToLockedDrawingBoard(struct RenderContext *renderport,
            * blending) */
           UBYTE alpha[4] = {0xFF, 0xFF, 0xFF, 0xFF};
           for (WORD i = 0; i < 4; ++i) {
-            row_buffer[px + i] = pack_argb32(alpha[i], fc_r[i], fc_g[i], fc_b[i]);
+            row_buffer[px + i] = pack_pixel(&board->pixel_layout, alpha[i], fc_r[i], fc_g[i], fc_b[i]);
           }
         }
 
@@ -101,7 +100,7 @@ void CybergfxDrawRectangleToLockedDrawingBoard(struct RenderContext *renderport,
                       &fc_g, &fc_b, &fc_a);
 
           /* Write opaque pixel directly (no alpha blending) */
-          row_buffer[px] = pack_argb32(0xFF, fc_r, fc_g, fc_b);
+          row_buffer[px] = pack_pixel(&board->pixel_layout, 0xFF, fc_r, fc_g, fc_b);
         }
 
         /* Write the entire row directly to the pixel buffer */

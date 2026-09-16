@@ -27,6 +27,7 @@
 #include "clib/cybergraphics_protos.h"
 #include "cybergfx_antialiasing.h"
 #include "cybergfx_backend.h"
+#include "cybergfx_pixel_format.h"
 #include "inline/cybergraphics.h"
 
 /*****************************************************************************/
@@ -279,7 +280,9 @@ static BOOL CybergfxInitBackend(ZuneBackendContext *ctx) {
 
     /* Check hardware capabilities */
     priv->hardware_available = TRUE;
-    priv->supported_formats = PIXFMT_ARGB32 | PIXFMT_RGB24 | PIXFMT_RGB16;
+    /* PIXFMT_* are enumerated values, not bit flags -- the layout derived at
+     * lock time decides what we can write directly. */
+    priv->supported_formats = 0;
     priv->max_width = 4096;
     priv->max_height = 4096;
 
@@ -452,12 +455,11 @@ void CybergfxDrawPixel(struct RenderContext *rctx, WORD x, WORD y, struct Intern
     if (rctx->target_board) {
         /* Rendering to DrawingBoard */
         struct DrawingBoard *board = rctx->target_board;
-        if (board->pixels_locked) {
+        if (board->pixels_locked && board->pixel_layout.valid) {
             /* Direct pixel access for locked boards */
             ULONG *pixels = (ULONG *)board->pixels;
             if (pixels) {
-                /* Use pack_argb32 for correct format when writing directly to memory */
-                ULONG pixel = pack_argb32(color->a, color->r, color->g, color->b);
+                ULONG pixel = pack_pixel(&board->pixel_layout, color->a, color->r, color->g, color->b);
                 CybergfxWritePixelClamped(pixels, board->pitch / 4, board->width, board->height, x, y, pixel);
             }
         } else {
@@ -522,15 +524,27 @@ APTR CybergfxLockPixels(struct DrawingBoard *board, ULONG *pitch_out) {
     }
 
     if (board) {
-        /* Lock bitmap for direct pixel access */
-        board->lock_handle = LockBitMapTags(board->bitmap, LBMI_BASEADDRESS, &board->pixels, LBMI_BYTESPERROW, &board->pitch, TAG_DONE);
+        ULONG lockfmt = 0, lockbpp = 0;
+
+        /* Ask the lock for the format of the memory we are getting. The
+         * board's creation-time format can describe a different bitmap. */
+        board->lock_handle = LockBitMapTags(board->bitmap,
+                                            LBMI_BASEADDRESS, &board->pixels,
+                                            LBMI_BYTESPERROW, &board->pitch,
+                                            LBMI_PIXFMT, &lockfmt,
+                                            LBMI_BYTESPERPIX, &lockbpp,
+                                            TAG_DONE);
 
         if (board->lock_handle) {
             board->pixels_locked = TRUE;
+            board->pixel_format = lockfmt;
+            zunegfx_derive_pixel_layout(lockfmt, lockbpp, &board->pixel_layout);
             if (pitch_out)
                 *pitch_out = board->pitch;
 
-            D(bug("ZuneGfx: Pixels locked - address: %p, pitch: %u\n", board->pixels, board->pitch));
+            D(bug("ZuneGfx: Pixels locked - address: %p, pitch: %u, pixfmt %lu, bpp %lu, direct %d\n",
+                  board->pixels, board->pitch, (unsigned long)lockfmt,
+                  (unsigned long)lockbpp, board->pixel_layout.valid));
 
             EXIT_FUNCTION("CybergfxLockPixels");
             return board->pixels;
@@ -558,6 +572,7 @@ void CybergfxUnlockPixels(struct DrawingBoard *board) {
         board->lock_handle = NULL;
         board->pixels_locked = FALSE;
         board->pixels = NULL;
+        board->pixel_layout.valid = FALSE;
     }
 
     EXIT_FUNCTION("CybergfxUnlockPixels");
@@ -578,10 +593,14 @@ ULONG CybergfxGetPixel(struct DrawingBoard *board, WORD x, WORD y) {
         return 0;
     }
 
-    if (board->pixel_format == PIXFMT_ARGB32 || board->pixel_format == PIXFMT_RGBA32) {
+    if (board->pixel_layout.valid) {
         ULONG *pixels = (ULONG *)board->pixels;
         ULONG pitch_pixels = board->pitch / 4;
-        return pixels[y * pitch_pixels + x];
+        UBYTE a, r, g, b;
+
+        unpack_pixel(&board->pixel_layout, pixels[y * pitch_pixels + x],
+                     &a, &r, &g, &b);
+        return pack_argb32_logical(a, r, g, b);
     }
 
     D(bug("CybergfxGetPixel: Unsupported pixel format: %d\n", board->pixel_format));
@@ -602,11 +621,10 @@ void CybergfxSetPixel(struct DrawingBoard *board, WORD x, WORD y, struct Interna
         return;
     }
 
-    if (board->pixel_format == PIXFMT_ARGB32 || board->pixel_format == PIXFMT_RGBA32) {
+    if (board->pixel_layout.valid) {
         ULONG *pixels = (ULONG *)board->pixels;
         ULONG pitch_pixels = board->pitch / 4;
-        /* Use pack_argb32 for correct format when writing directly to memory */
-        ULONG pixel = pack_argb32(color->a, color->r, color->g, color->b);
+        ULONG pixel = pack_pixel(&board->pixel_layout, color->a, color->r, color->g, color->b);
         CybergfxWritePixelClamped(pixels, pitch_pixels, board->width, board->height, x, y, pixel);
         return;
     }
