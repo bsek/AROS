@@ -542,14 +542,42 @@ APTR CybergfxLockPixels(struct DrawingBoard *board, ULONG *pitch_out) {
             if (pitch_out)
                 *pitch_out = board->pitch;
 
-            D(bug("ZuneGfx: Pixels locked - address: %p, pitch: %u, pixfmt %lu, bpp %lu, direct %d\n",
-                  board->pixels, board->pitch, (unsigned long)lockfmt,
-                  (unsigned long)lockbpp, board->pixel_layout.valid));
+            /* Report each distinct locked format once -- serial output is
+             * expensive here, so this must not fire on every lock. */
+            {
+                static ULONG reported_fmt = 0xFFFFFFFFUL;
+
+                if (lockfmt != reported_fmt) {
+                    struct ZunePixelLayout *pl = &board->pixel_layout;
+                    ULONG probe = pl->valid ? pack_pixel(pl, 0x11, 0x22, 0x33, 0x44) : 0;
+
+                    reported_fmt = lockfmt;
+                    bug("[ZuneGfx] locked pixfmt=%lu bpp=%lu direct=%s alpha=%s"
+                        " shifts a/r/g/b=%u/%u/%u/%u"
+                        " A11R22G33B44 -> bytes %02x %02x %02x %02x\n",
+                        (unsigned long)lockfmt, (unsigned long)lockbpp,
+                        pl->valid ? "yes" : "NO-rastport-fallback",
+                        pl->has_alpha ? "yes" : "no",
+                        pl->a_shift, pl->r_shift, pl->g_shift, pl->b_shift,
+                        (unsigned)(probe & 0xFF), (unsigned)((probe >> 8) & 0xFF),
+                        (unsigned)((probe >> 16) & 0xFF), (unsigned)((probe >> 24) & 0xFF));
+                }
+            }
+
+            D(bug("ZuneGfx: Pixels locked - address: %p, pitch: %u\n",
+                  board->pixels, board->pitch));
 
             EXIT_FUNCTION("CybergfxLockPixels");
             return board->pixels;
         } else {
-            D(bug("ZuneGfx: Pixel lock failed\n"));
+            /* The driver decides whether it hands out direct access at all */
+            static BOOL reported_fail = FALSE;
+
+            if (!reported_fail) {
+                reported_fail = TRUE;
+                bug("[ZuneGfx] LockBitMapTags refused this bitmap:"
+                    " no direct access, using RastPort\n");
+            }
             EXIT_FUNCTION("CybergfxLockPixels");
             return NULL;
         }
