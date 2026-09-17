@@ -191,8 +191,6 @@ enum ZuneBrushFilterMode {
   ZUNE_BRUSH_FILTER_LINEAR
 };
 
-
-
 struct ZuneGradientStop {
   float position; /* 0.0 - 1.0 */
   ULONG color;
@@ -280,35 +278,6 @@ struct ZuneBrush {
 #define ZUNE_POINT_PTR(x, y) (&(struct ZunePoint){(WORD)(x), (WORD)(y)})
 
 /* Convenience macros for coordinate-based calls */
-#define ZuneDrawRectangleXYWH(rctx, x, y, w, h, brush)                           \
-  ZuneFillRectangle((rctx), ZUNE_RECT_PTR((x), (y), (w), (h)), (brush))
-#define ZuneDrawRectangleRoundedXYWH(rctx, x, y, w, h, radius, brush)            \
-  ZuneFillRectangleRounded((rctx), ZUNE_RECT_PTR((x), (y), (w), (h)), (radius),  \
-                           (brush))
-#define ZuneDrawRectangleOutlineXYWH(rctx, x, y, w, h, color)                    \
-  ZuneDrawRectangleOutline((rctx), ZUNE_RECT_PTR((x), (y), (w), (h)), (color))
-#define ZuneDrawRectangleRoundedOutlineXYWH(rctx, x, y, w, h, radius, color)     \
-  ZuneDrawRectangleRoundedOutline((rctx), ZUNE_RECT_PTR((x), (y), (w), (h)),     \
-                                  (radius), (color))
-#define ZuneDrawRectangleOutlineStyledXYWH(rctx, x, y, w, h, lineWidth, color)   \
-  ZuneDrawRectangleOutlineStyled((rctx), ZUNE_RECT_PTR((x), (y), (w), (h)),      \
-                                 (lineWidth), (color))
-#define ZuneDrawRectangleRoundedOutlineStyledXYWH(rctx, x, y, w, h, radius,      \
-                                                  lineWidth, color)            \
-  ZuneDrawRectangleRoundedOutlineStyled(                                       \
-      (rctx), ZUNE_RECT_PTR((x), (y), (w), (h)), (radius), (lineWidth), (color))
-#define ZuneDrawRectangleRoundedStyledXYWH(rctx, x, y, w, h, radius, borderWidth,\
-                                           fillBrush, borderColor)             \
-  ZuneDrawRectangleRoundedStyled((rctx), ZUNE_RECT_PTR((x), (y), (w), (h)),      \
-                                 (radius), (borderWidth), (fillBrush),         \
-                                 (borderColor))
-#define ZuneDrawCircleAt(rctx, cx, cy, radius, brush)                            \
-  ZuneFillCircle((rctx), ZUNE_POINT_PTR((cx), (cy)), (radius), (brush))
-#define ZuneDrawCircleOutlineAt(rctx, cx, cy, radius, color)                     \
-  ZuneDrawCircleOutline((rctx), ZUNE_POINT_PTR((cx), (cy)), (radius), (color))
-#define ZuneDrawCircleOutlineStyledAt(rctx, cx, cy, radius, lineWidth, color)    \
-  ZuneDrawCircleOutlineStyled((rctx), ZUNE_POINT_PTR((cx), (cy)), (radius),      \
-                              (lineWidth), (color))
 #define ZuneDrawLinePoints(rctx, startX, startY, endX, endY, color)              \
   ZuneDrawLine((rctx), ZUNE_POINT_PTR((startX), (startY)),                       \
                ZUNE_POINT_PTR((endX), (endY)), (color))
@@ -317,33 +286,6 @@ struct ZuneBrush {
                      ZUNE_POINT_PTR((endX), (endY)), (width), (color))
 #define ZuneDrawPixelAt(rctx, x, y, color)                                       \
   ZuneDrawPixel((rctx), ZUNE_POINT_PTR((x), (y)), (color))
-#define ZuneDrawCircleAAAt(rctx, cx, cy, radius, color)                          \
-  ZuneDrawCircleAA((rctx), ZUNE_POINT_PTR((cx), (cy)), (radius), (color))
-#define ZuneFillCircleAAAt(rctx, cx, cy, radius, brush)                          \
-  ZuneFillCircleAA((rctx), ZUNE_POINT_PTR((cx), (cy)), (radius), (brush))
-#define ZuneDrawCircleOutlineStyledAAAt(rctx, cx, cy, radius, borderWidth,       \
-                                        color)                                 \
-  ZuneDrawCircleOutlineStyledAA((rctx), ZUNE_POINT_PTR((cx), (cy)), (radius),    \
-                                (borderWidth), (color))
-#define ZuneFillCircleStyledAAAt(rctx, cx, cy, radius, borderWidth, brush,       \
-                                 borderColor)                                  \
-  ZuneFillCircleStyledAA((rctx), ZUNE_POINT_PTR((cx), (cy)), (radius),           \
-                         (borderWidth), (brush), (borderColor))
-#define ZuneFillRectangleRoundedAAXYWH(rctx, x, y, w, h, radius, brush)          \
-  ZuneFillRectangleRoundedAA((rctx), ZUNE_RECT_PTR((x), (y), (w), (h)),          \
-                             (radius), (brush))
-#define ZuneFillRectangleRoundedStyledAAXYWH(                                  \
-    rctx, x, y, w, h, radius, borderWidth, fillBrush, borderColor)               \
-  ZuneFillRectangleRoundedStyledAA((rctx), ZUNE_RECT_PTR((x), (y), (w), (h)),    \
-                                   (radius), (borderWidth), (fillBrush),       \
-                                   (borderColor))
-#define ZuneDrawRectangleRoundedOutlineStyledAAXYWH(rctx, x, y, w, h, radius,    \
-                                                    lineWidth, color)          \
-  ZuneDrawRectangleRoundedOutlineStyledAA(                                     \
-      (rctx), ZUNE_RECT_PTR((x), (y), (w), (h)), (radius), (lineWidth), (color))
-#define ZuneDrawRectangleRoundedOutlineAAXYWH(rctx, x, y, w, h, radius, color)   \
-  ZuneDrawRectangleRoundedOutlineAA((rctx), ZUNE_RECT_PTR((x), (y), (w), (h)),   \
-                                    (radius), (color))
 #define ZuneDrawLineAAPoints(rctx, startX, startY, endX, endY, color)            \
   ZuneDrawLineAA((rctx), ZUNE_POINT_PTR((startX), (startY)),                     \
                  ZUNE_POINT_PTR((endX), (endY)), (color))
@@ -514,43 +456,14 @@ void ZuneClearDrawingBoard(struct RenderContext *rctx, ULONG color);
 /*****************************************************************************/
 
 /* Basic filled shapes */
-void ZuneFillRectangle(struct RenderContext *rctx, struct ZuneRect *rect,
-                       const struct ZuneBrush *brush);
-void ZuneFillCircle(struct RenderContext *rctx, struct ZunePoint *center,
-                    UBYTE radius, const struct ZuneBrush *brush);
 
 /* Shape outlines */
-void ZuneDrawRectangleOutline(struct RenderContext *rctx, struct ZuneRect *rect,
-                              ULONG color);
-void ZuneDrawCircleOutline(struct RenderContext *rctx, struct ZunePoint *center,
-                           UBYTE radius, ULONG color);
 
 /* Styled versions - with line width control */
-void ZuneDrawRectangleOutlineStyled(struct RenderContext *rctx,
-                                    struct ZuneRect *rect, UBYTE lineWidth,
-                                    ULONG color);
-void ZuneDrawCircleOutlineStyled(struct RenderContext *rctx,
-                                 struct ZunePoint *center, UBYTE radius,
-                                 UBYTE lineWidth, ULONG color);
 
 /* Rounded rectangles */
-void ZuneFillRectangleRounded(struct RenderContext *rctx,
-                              struct ZuneRect *rect, UBYTE cornerRadius,
-                              const struct ZuneBrush *brush);
-void ZuneDrawRectangleRoundedOutline(struct RenderContext *rctx,
-                                     struct ZuneRect *rect, UBYTE cornerRadius,
-                                     ULONG color);
-void ZuneDrawRectangleRoundedOutlineStyled(struct RenderContext *rctx,
-                                           struct ZuneRect *rect,
-                                           UBYTE cornerRadius, UBYTE lineWidth,
-                                           ULONG color);
 
 /* Rounded rectangles with fill and border combined */
-void ZuneDrawRectangleRoundedStyled(struct RenderContext *rctx,
-                                    struct ZuneRect *rect, UBYTE cornerRadius,
-                                    UBYTE borderWidth,
-                                    const struct ZuneBrush *fillBrush,
-                                    ULONG borderColor);
 
 /* Lines */
 void ZuneDrawLine(struct RenderContext *rctx, struct ZunePoint *start,
@@ -566,16 +479,6 @@ void ZuneDrawPixel(struct RenderContext *rctx, struct ZunePoint *point, ULONG co
 /*****************************************************************************/
 
 /* Circle AA */
-void ZuneDrawCircleAA(struct RenderContext *rctx, struct ZunePoint *center,
-                      UBYTE radius, ULONG color);
-void ZuneFillCircleAA(struct RenderContext *rctx, struct ZunePoint *center,
-                      UWORD radius, const struct ZuneBrush *brush);
-void ZuneFillCircleStyledAA(struct RenderContext *rctx, struct ZunePoint *center,
-                            UWORD radius, UBYTE borderWidth,
-                            const struct ZuneBrush *brush, ULONG borderColor);
-void ZuneDrawCircleOutlineStyledAA(struct RenderContext *rctx,
-                                   struct ZunePoint *center, UWORD radius,
-                                   UBYTE borderWidth, ULONG color);
 
 /* AA Quality */
 
@@ -583,21 +486,6 @@ void ZuneSetAntialiasingQuality(struct RenderContext *rctx, UBYTE quality);
 UBYTE ZuneGetAntialiasingQuality(struct RenderContext *rctx);
 
 /* Rounded rectangles AA */
-void ZuneFillRectangleRoundedAA(struct RenderContext *rctx, struct ZuneRect *rect,
-                                UBYTE cornerRadius,
-                                const struct ZuneBrush *brush);
-void ZuneFillRectangleRoundedStyledAA(struct RenderContext *rctx,
-                                      struct ZuneRect *rect, UBYTE cornerRadius,
-                                      UBYTE borderWidth,
-                                      const struct ZuneBrush *fillBrush,
-                                      ULONG borderColor);
-void ZuneDrawRectangleRoundedOutlineStyledAA(struct RenderContext *rctx,
-                                             struct ZuneRect *rect,
-                                             UBYTE cornerRadius,
-                                             UBYTE lineWidth, ULONG color);
-void ZuneDrawRectangleRoundedOutlineAA(struct RenderContext *rctx,
-                                       struct ZuneRect *rect,
-                                       UBYTE cornerRadius, ULONG color);
 
 /* Lines AA */
 void ZuneDrawLineAA(struct RenderContext *rctx, struct ZunePoint *start,
@@ -727,24 +615,6 @@ void ZuneSetTexturePixel(struct RenderContext *rctx, struct ZuneTexture *texture
 /* Texture Rendering */
 /*****************************************************************************/
 
-void ZuneDrawTexture(struct RenderContext *rctx, struct ZuneTexture *texture,
-                     struct ZunePoint *position);
-void ZuneDrawTextureScaled(struct RenderContext *rctx, struct ZuneTexture *texture,
-                           struct ZuneRect *dest_rect);
-void ZuneDrawTextureRegion(struct RenderContext *rctx, struct ZuneTexture *texture,
-                           struct ZuneRect *src_rect,
-                           struct ZuneRect *dest_rect);
-void ZuneDrawTextureTinted(struct RenderContext *rctx, struct ZuneTexture *texture,
-                           struct ZunePoint *position, ULONG tint_color);
-void ZuneDrawTextureScaledTinted(struct RenderContext *rctx,
-                                 struct ZuneTexture *texture,
-                                 struct ZuneRect *dest_rect, ULONG tint_color);
-void ZuneDrawTextureRegionTinted(struct RenderContext *rctx,
-                                 struct ZuneTexture *texture,
-                                 struct ZuneRect *src_rect,
-                                 struct ZuneRect *dest_rect, ULONG tint_color);
-void ZuneDrawTextureTiled(struct RenderContext *rctx, struct ZuneTexture *texture,
-                          struct ZuneRect *dest_rect);
 BOOL ZuneIsTextureValid(struct ZuneTexture *texture);
 
 /*****************************************************************************/

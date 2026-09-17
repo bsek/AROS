@@ -286,7 +286,8 @@ void zune_penspec_drawdirect(struct MUI_PenSpec_intern *psi,
       };
 
       D(bug("Calling DrawRectangle with rect: [%d,%d,%d,%d]\n", rect.x, rect.y, rect.width, rect.height));
-      ZuneFillRectangle(mri->mri_RenderContext, &rect, ZUNE_BRUSH_PEN(psi->p_pen));
+      ZuneDrawRect(mri->mri_RenderContext, &rect,
+                   ZUNE_STYLE(.fill = ZUNE_BRUSH_PEN(psi->p_pen)));
       return;
     }
 

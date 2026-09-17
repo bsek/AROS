@@ -34,13 +34,6 @@ TEXTURE_FILES := \
         src/texture/zuneunlocktexturepixels             \
         src/texture/zunegettexturepixel                 \
         src/texture/zunesettexturepixel                 \
-        src/texture/zunedrawtexture                     \
-        src/texture/zunedrawtexturescaled               \
-        src/texture/zunedrawtextureregion               \
-        src/texture/zunedrawtexturetinted               \
-        src/texture/zunedrawtexturescaledtinted         \
-        src/texture/zunedrawtextureregiontinted         \
-        src/texture/zunedrawtexturetiled                \
         src/texture/zuneistexturevalid                  \
         src/texture/zunecreatetexturea
 
@@ -76,10 +69,7 @@ BATCHING_FILES := \
         src/batching/zunegetbatchcount
 
 DRAWING_FILES := \
-        src/drawing/zunefillcircle              \
-        src/drawing/zunedrawcircleoutline       \
         src/drawing/zunedrawline                \
-        src/drawing/zunedrawcircleoutlinestyled \
         src/drawing/zunedrawlinestyled          \
         src/drawing/zunedrawpixel               \
         src/drawing/zunedrawpolyline            \
@@ -94,26 +84,11 @@ TEXT_FILES := \
         src/text/zunedrawtextbg
 
 RECTANGLE_FILES := \
-        src/rectangle/zunefillrectangle                      \
-        src/rectangle/zunefillrectanglerounded               \
-        src/rectangle/zunedrawrectangleoutline                \
-        src/rectangle/zunedrawrectangleroundedoutline         \
-        src/rectangle/zunedrawrectangleoutlinestyled          \
-        src/rectangle/zunedrawrectangleroundedoutlinestyled   \
-        src/rectangle/zunedrawrectangleroundedstyled
 
 ANTIALIASING_FILES := \
         src/antialiasing/antialiasing_globals                   \
-        src/antialiasing/zunedrawcircleaa                       \
-        src/antialiasing/zunefillcircleaa                       \
-        src/antialiasing/zunedrawcircleoutlinestyledaa          \
-        src/antialiasing/zunefillcirclestyledaa                 \
         src/antialiasing/zunesetantialiasingquality             \
         src/antialiasing/zunegetantialiasingquality             \
-        src/antialiasing/zunefillrectangleroundedaa             \
-        src/antialiasing/zunefillrectangleroundedstyledaa       \
-        src/antialiasing/zunedrawrectangleroundedoutlinestyledaa \
-        src/antialiasing/zunedrawrectangleroundedoutlineaa      \
         src/antialiasing/zunedrawlineaa                         \
         src/antialiasing/zunedrawlinestyledaa
 

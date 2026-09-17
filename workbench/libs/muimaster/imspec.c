@@ -849,7 +849,8 @@ void zune_imspec_drawbuffered(struct MUI_ImageSpec_intern *spec,
                     .x = left - dx,
                     .y = top - dy
                 };
-                ZuneDrawTexture(mri->mri_RenderContext, tex, &pos);
+                ZuneDrawTextureStyled(mri->mri_RenderContext, tex,
+                                      ZUNE_RECT_PTR(pos.x, pos.y, 0, 0), NULL);
             }
             else
             {
@@ -888,7 +889,8 @@ void zune_imspec_drawbuffered(struct MUI_ImageSpec_intern *spec,
                     .width = right - left + 1,
                     .height = bottom - top + 1
                 };
-                ZuneDrawTextureTiled(mri->mri_RenderContext, tex, &dest);
+                ZuneDrawTextureStyled(mri->mri_RenderContext, tex, &dest,
+                                      ZUNE_TEXSTYLE(.flags = ZUNE_TEXTURE_TILE));
             }
             else
             {

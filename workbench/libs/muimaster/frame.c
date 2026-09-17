@@ -414,9 +414,17 @@ BOOL zune_frame_try_renderer(Object *obj, struct MUI_AreaData *data, const struc
             }
 
             if (border_width == 0) {
-                ZuneFillRectangleRoundedAA(buffer_port, &buffer_rect, radius, fill_brush);
+                ZuneDrawRect(buffer_port, &buffer_rect,
+                             ZUNE_STYLE(.fill = fill_brush,
+                                        .corner_radius = radius,
+                                        .flags = ZUNE_SHAPE_ANTIALIAS));
             } else {
-                ZuneFillRectangleRoundedStyledAA(buffer_port, &buffer_rect, radius, border_width, fill_brush, border_color);
+                ZuneDrawRect(buffer_port, &buffer_rect,
+                             ZUNE_STYLE(.fill = fill_brush,
+                                        .border_color = border_color,
+                                        .border_width = border_width,
+                                        .corner_radius = radius,
+                                        .flags = ZUNE_SHAPE_ANTIALIAS));
             }
 
             if (lock) {
@@ -439,10 +447,18 @@ BOOL zune_frame_try_renderer(Object *obj, struct MUI_AreaData *data, const struc
         if (window_has_buffer) {
             /* Window has buffer: draw filled rectangle with optional border */
             if (border_width == 0) {
-                if (use_aa) ZuneFillRectangleRoundedAA(port, &rect, radius, fill_brush); else ZuneFillRectangleRounded(port, &rect, radius, fill_brush);
+                ZuneDrawRect(port, &rect,
+                             ZUNE_STYLE(.fill = fill_brush,
+                                        .corner_radius = radius,
+                                        .flags = use_aa ? ZUNE_SHAPE_ANTIALIAS : 0));
             } else {
                 D(bug("Drawing frame with outline width: %d and radius: %d\n", border_width, radius));
-                if (use_aa) ZuneFillRectangleRoundedStyledAA(port, &rect, radius, border_width, fill_brush, border_color); else ZuneDrawRectangleRoundedStyled(port, &rect, radius, border_width, fill_brush, border_color);
+                ZuneDrawRect(port, &rect,
+                             ZUNE_STYLE(.fill = fill_brush,
+                                        .border_color = border_color,
+                                        .border_width = border_width,
+                                        .corner_radius = radius,
+                                        .flags = use_aa ? ZUNE_SHAPE_ANTIALIAS : 0));
             }
             data->mad_Flags2 |= MADF2_ZUNE_RENDERER_BG | MADF2_ZUNE_FRAME_RENDERED;
         } else {
@@ -564,7 +580,11 @@ void zune_frame_draw_deferred_outline(Object *obj, struct MUI_AreaData *data,
                 .height = bgh - inset * 2,
             };
 
-            ZuneDrawRectangleRoundedOutlineStyledAA(buffer_port, &buffer_rect, radius, border_width, border_color);
+            ZuneDrawRect(buffer_port, &buffer_rect,
+                         ZUNE_STYLE(.border_color = border_color,
+                                    .border_width = border_width,
+                                    .corner_radius = radius,
+                                    .flags = ZUNE_SHAPE_ANTIALIAS));
 
             /* Blit result back to screen */
             ZuneBlit(buffer_port, port, 0, 0, bgleft, bgtop, bgw, bgh);
@@ -576,9 +596,16 @@ void zune_frame_draw_deferred_outline(Object *obj, struct MUI_AreaData *data,
 
     if (!use_drawbuffer) {
         if (use_aa)
-            ZuneDrawRectangleRoundedOutlineStyledAA(port, &rect, radius, border_width, border_color);
+            ZuneDrawRect(port, &rect,
+                         ZUNE_STYLE(.border_color = border_color,
+                                    .border_width = border_width,
+                                    .corner_radius = radius,
+                                    .flags = ZUNE_SHAPE_ANTIALIAS));
         else
-            ZuneDrawRectangleRoundedOutlineStyled(port, &rect, radius, border_width, border_color);
+            ZuneDrawRect(port, &rect,
+                         ZUNE_STYLE(.border_color = border_color,
+                                    .border_width = border_width,
+                                    .corner_radius = radius));
     }
 
     data->mad_Flags2 |= MADF2_ZUNE_FRAME_RENDERED;
@@ -1057,7 +1084,8 @@ static BOOL rect_draw_with_zunegfx(struct MUI_RenderInfo *mri, int left,
         .height = (UWORD)height,
     };
 
-    ZuneDrawRectangleOutline(mri->mri_RenderContext, &rect, border_color);
+    ZuneDrawRect(mri->mri_RenderContext, &rect,
+                 ZUNE_STYLE(.border_color = border_color, .border_width = 1));
 
     return TRUE;
 }

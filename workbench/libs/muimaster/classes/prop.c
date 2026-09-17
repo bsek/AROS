@@ -670,7 +670,7 @@ AROS_UFH3
             .height = prop_rect->MaxY - prop_rect->MinY + 1
         };
         struct ZuneBrush container_brush = ZUNE_BRUSH_LITERAL_SOLID(container_color);
-        ZuneFillRectangle(rctx, &container, &container_brush);
+        ZuneDrawRect(rctx, &container, ZUNE_STYLE(.fill = &container_brush));
 
         /* Draw knob with rounded corners and border */
         WORD knob_width = knob_rect->MaxX - knob_rect->MinX + 1;
@@ -696,7 +696,12 @@ AROS_UFH3
             }
 
             struct ZuneBrush knob_brush = ZUNE_BRUSH_LITERAL_SOLID(knob_color);
-            ZuneFillRectangleRoundedStyledAA(rctx, &knob, corner_radius, 1, &knob_brush, knob_border_color);
+            ZuneDrawRect(rctx, &knob,
+                         ZUNE_STYLE(.fill = &knob_brush,
+                                    .border_color = knob_border_color,
+                                    .border_width = 1,
+                                    .corner_radius = corner_radius,
+                                    .flags = ZUNE_SHAPE_ANTIALIAS));
         }
 
         /*
