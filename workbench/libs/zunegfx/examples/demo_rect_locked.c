@@ -55,7 +55,7 @@ static void DrawRectangles(struct DemoContext *ctx)
     };
     struct ZuneBrush gradient_brush = {
         .type = ZUNE_BRUSH_TYPE_LINEAR_GRADIENT,
-        .flags = 0, .internal = {0},
+        .flags = 0, .internal = NULL,
         .data = {.linear = {
             .start = ZUNE_POINT_LITERAL(0, 0),
             .end = ZUNE_POINT_LITERAL(180, 0),
@@ -74,7 +74,7 @@ static void DrawRectangles(struct DemoContext *ctx)
         if (ptex) {
             struct ZuneBrush tex_brush = {
                 .type = ZUNE_BRUSH_TYPE_TEXTURE,
-                .flags = 0, .internal = {0},
+                .flags = 0, .internal = NULL,
                 .data = {.texture = {
                     .texture = ptex,
                     .source = {0, 0, 64, 64},
@@ -98,7 +98,7 @@ static void DrawRectangles(struct DemoContext *ctx)
     };
     struct ZuneBrush styled_brush = {
         .type = ZUNE_BRUSH_TYPE_LINEAR_GRADIENT,
-        .flags = 0, .internal = {0},
+        .flags = 0, .internal = NULL,
         .data = {.linear = {
             .start = ZUNE_POINT_LITERAL(0, 0),
             .end = ZUNE_POINT_LITERAL(0, 80),

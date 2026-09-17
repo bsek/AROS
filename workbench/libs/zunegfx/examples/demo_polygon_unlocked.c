@@ -109,7 +109,7 @@ static void DrawPolygons(struct DemoContext *ctx)
         };
         struct ZuneBrush brush = {
             .type = ZUNE_BRUSH_TYPE_LINEAR_GRADIENT,
-            .flags = 0, .internal = {0},
+            .flags = 0, .internal = NULL,
             .data = {.linear = {
                 .start = ZUNE_POINT_LITERAL(30, 0),
                 .end = ZUNE_POINT_LITERAL(180, 0),
@@ -127,7 +127,7 @@ static void DrawPolygons(struct DemoContext *ctx)
         };
         struct ZuneBrush brush = {
             .type = ZUNE_BRUSH_TYPE_LINEAR_GRADIENT,
-            .flags = 0, .internal = {0},
+            .flags = 0, .internal = NULL,
             .data = {.linear = {
                 .start = ZUNE_POINT_LITERAL(0, 300),
                 .end = ZUNE_POINT_LITERAL(0, 400),
@@ -184,7 +184,7 @@ static void DrawPolygons(struct DemoContext *ctx)
         if (img_tex) {
             struct ZuneBrush tex_brush = {
                 .type = ZUNE_BRUSH_TYPE_TEXTURE,
-                .flags = 0, .internal = {0},
+                .flags = 0, .internal = NULL,
                 .data = {.texture = {
                     .texture = img_tex,
                     .source = {0, 0, 64, 64},
