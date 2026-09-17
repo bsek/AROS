@@ -364,4 +364,97 @@ static inline ULONG cgx_pixfmt_to_rectfmt(ULONG pixfmt)
     }
 }
 
+
+/**
+ * zunegfx_layout_byte_index
+ *
+ * Memory byte each component occupies, derived from its ULONG shift.
+ */
+#if AROS_BIG_ENDIAN
+#define ZUNEGFX_SHIFT_TO_BYTE(sh) ((UBYTE)(3 - ((sh) / 8)))
+#else
+#define ZUNEGFX_SHIFT_TO_BYTE(sh) ((UBYTE)((sh) / 8))
+#endif
+
+/**
+ * zunegfx_build_src_permute
+ *
+ * Fills a 16-byte table that reorders four native-ARGB32 source pixels into
+ * the destination layout's component order, for a NEON vqtbl1q_u8() or an
+ * SSSE3 _mm_shuffle_epi8(). Source bytes are A,R,G,B per pixel.
+ *
+ * Returns TRUE if the permutation is the identity, in which case callers can
+ * skip the shuffle entirely.
+ */
+static inline BOOL zunegfx_build_src_permute(const struct ZunePixelLayout *l,
+                                             UBYTE table[16])
+{
+    /* Which source byte carries each component */
+    const UBYTE src_of[4] = { 0, 1, 2, 3 };   /* a, r, g, b */
+    UBYTE dst_byte[4];
+    BOOL identity = TRUE;
+    WORD i, j;
+
+    dst_byte[0] = ZUNEGFX_SHIFT_TO_BYTE(l->a_shift);
+    dst_byte[1] = ZUNEGFX_SHIFT_TO_BYTE(l->r_shift);
+    dst_byte[2] = ZUNEGFX_SHIFT_TO_BYTE(l->g_shift);
+    dst_byte[3] = ZUNEGFX_SHIFT_TO_BYTE(l->b_shift);
+
+    for (i = 0; i < 4; i++)
+    {
+        for (j = 0; j < 4; j++)
+        {
+            /* Destination byte dst_byte[j] takes source byte src_of[j] */
+            table[i * 4 + dst_byte[j]] = (UBYTE)(i * 4 + src_of[j]);
+            if (dst_byte[j] != src_of[j])
+                identity = FALSE;
+        }
+    }
+
+    return identity;
+}
+
+/* Memory byte holding alpha in this layout */
+#define ZUNEGFX_ALPHA_BYTE(l) ZUNEGFX_SHIFT_TO_BYTE((l)->a_shift)
+
+
+/* Layout describing logical 0xAARRGGBB, for row buffers handed to
+ * Read/WritePixelArray rather than raw bitmap memory. */
+static const struct ZunePixelLayout zunegfx_logical_layout = {
+    24, 16, 8, 0, 4, TRUE, TRUE
+};
+
+
+/**
+ * blend_pixel_over
+ *
+ * Source-over blend of a native-ARGB32 source onto a destination pixel that
+ * uses the given layout. Saves converting the destination in and out around
+ * blend_argb32().
+ */
+static inline ULONG blend_pixel_over(const struct ZunePixelLayout *l,
+                                     ULONG dst_pixel, ULONG src_argb32)
+{
+    UBYTE sa, sr, sg, sb, da, dr, dg, db;
+    UWORD alpha, inv_alpha;
+
+    unpack_argb32(src_argb32, &sa, &sr, &sg, &sb);
+
+    if (sa == 0)
+        return dst_pixel;
+    if (sa == 255)
+        return pack_pixel(l, 0xFF, sr, sg, sb);
+
+    unpack_pixel(l, dst_pixel, &da, &dr, &dg, &db);
+    (void)da;
+
+    alpha = sa + 1;
+    inv_alpha = 257 - alpha;
+
+    return pack_pixel(l, 0xFF,
+                      (UBYTE)((alpha * sr + inv_alpha * dr) >> 8),
+                      (UBYTE)((alpha * sg + inv_alpha * dg) >> 8),
+                      (UBYTE)((alpha * sb + inv_alpha * db) >> 8));
+}
+
 #endif /* CYBERGFX_PIXEL_FORMAT_H */

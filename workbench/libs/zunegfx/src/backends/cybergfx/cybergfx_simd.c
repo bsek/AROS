@@ -660,13 +660,13 @@ static void cybergfx_blend_aa_pixels_batch4_neon(
     const float alphaLine[4], UBYTE fc_r, UBYTE fc_g, UBYTE fc_b,
     float fc_alpha_scale, UBYTE o_r, UBYTE o_g, UBYTE o_b, float o_alpha_scale,
     BOOL hasFill, BOOL hasBorder, ULONG result_pixels[4],
-    ULONG *changed_mask) {
+    ULONG *changed_mask, const struct ZunePixelLayout *dl) {
   *changed_mask = 0;
 
   /* Process each pixel (scalar for now) */
   for (WORD i = 0; i < 4; i++) {
     UBYTE bg_a, bg_r, bg_g, bg_b;
-    unpack_argb32_logical(bg_pixels[i], &bg_a, &bg_r, &bg_g, &bg_b);
+    unpack_pixel(dl, bg_pixels[i], &bg_a, &bg_r, &bg_g, &bg_b);
 
     float r = (float)bg_r;
     float g = (float)bg_g;
@@ -697,7 +697,7 @@ static void cybergfx_blend_aa_pixels_batch4_neon(
     }
 
     if (pixel_changed) {
-      result_pixels[i] = pack_argb32_logical(bg_a, (UBYTE)r, (UBYTE)g, (UBYTE)b);
+      result_pixels[i] = pack_pixel(dl, bg_a, (UBYTE)r, (UBYTE)g, (UBYTE)b);
       *changed_mask |= (1 << i);
     } else {
       result_pixels[i] = bg_pixels[i];
@@ -716,13 +716,13 @@ static void cybergfx_blend_aa_pixels_batch4_sse2(
     const float alphaLine[4], UBYTE fc_r, UBYTE fc_g, UBYTE fc_b,
     float fc_alpha_scale, UBYTE o_r, UBYTE o_g, UBYTE o_b, float o_alpha_scale,
     BOOL hasFill, BOOL hasBorder, ULONG result_pixels[4],
-    ULONG *changed_mask) {
+    ULONG *changed_mask, const struct ZunePixelLayout *dl) {
   *changed_mask = 0;
 
   /* Process each pixel (scalar for now - full SIMD unpack/pack is complex) */
   for (WORD i = 0; i < 4; i++) {
     UBYTE bg_a, bg_r, bg_g, bg_b;
-    unpack_argb32_logical(bg_pixels[i], &bg_a, &bg_r, &bg_g, &bg_b);
+    unpack_pixel(dl, bg_pixels[i], &bg_a, &bg_r, &bg_g, &bg_b);
 
     float r = (float)bg_r;
     float g = (float)bg_g;
@@ -753,7 +753,7 @@ static void cybergfx_blend_aa_pixels_batch4_sse2(
     }
 
     if (pixel_changed) {
-      result_pixels[i] = pack_argb32_logical(bg_a, (UBYTE)r, (UBYTE)g, (UBYTE)b);
+      result_pixels[i] = pack_pixel(dl, bg_a, (UBYTE)r, (UBYTE)g, (UBYTE)b);
       *changed_mask |= (1 << i);
     } else {
       result_pixels[i] = bg_pixels[i];
@@ -767,12 +767,12 @@ static void cybergfx_blend_aa_pixels_batch4_scalar(
     const float alphaLine[4], UBYTE fc_r, UBYTE fc_g, UBYTE fc_b,
     float fc_alpha_scale, UBYTE o_r, UBYTE o_g, UBYTE o_b, float o_alpha_scale,
     BOOL hasFill, BOOL hasBorder, ULONG result_pixels[4],
-    ULONG *changed_mask) {
+    ULONG *changed_mask, const struct ZunePixelLayout *dl) {
   *changed_mask = 0;
 
   for (WORD i = 0; i < 4; i++) {
     UBYTE bg_a, bg_r, bg_g, bg_b;
-    unpack_argb32_logical(bg_pixels[i], &bg_a, &bg_r, &bg_g, &bg_b);
+    unpack_pixel(dl, bg_pixels[i], &bg_a, &bg_r, &bg_g, &bg_b);
 
     float r = (float)bg_r;
     float g = (float)bg_g;
@@ -803,7 +803,7 @@ static void cybergfx_blend_aa_pixels_batch4_scalar(
     }
 
     if (pixel_changed) {
-      result_pixels[i] = pack_argb32_logical(bg_a, (UBYTE)r, (UBYTE)g, (UBYTE)b);
+      result_pixels[i] = pack_pixel(dl, bg_a, (UBYTE)r, (UBYTE)g, (UBYTE)b);
       *changed_mask |= (1 << i);
     } else {
       result_pixels[i] = bg_pixels[i];
@@ -816,18 +816,18 @@ static void cybergfx_blend_aa_pixels_batch8_fallback(
     const float alphaLine[8], UBYTE fc_r, UBYTE fc_g, UBYTE fc_b,
     float fc_alpha_scale, UBYTE o_r, UBYTE o_g, UBYTE o_b, float o_alpha_scale,
     BOOL hasFill, BOOL hasBorder, ULONG result_pixels[8],
-    ULONG *changed_mask) {
+    ULONG *changed_mask, const struct ZunePixelLayout *dl) {
   ULONG mask1 = 0, mask2 = 0;
 
   cybergfx_blend_aa_pixels_batch4(&bg_pixels[0], &alphaFill[0], &alphaLine[0],
                                   fc_r, fc_g, fc_b, fc_alpha_scale, o_r, o_g,
                                   o_b, o_alpha_scale, hasFill, hasBorder,
-                                  &result_pixels[0], &mask1);
+                                  &result_pixels[0], &mask1, dl);
 
   cybergfx_blend_aa_pixels_batch4(&bg_pixels[4], &alphaFill[4], &alphaLine[4],
                                   fc_r, fc_g, fc_b, fc_alpha_scale, o_r, o_g,
                                   o_b, o_alpha_scale, hasFill, hasBorder,
-                                  &result_pixels[4], &mask2);
+                                  &result_pixels[4], &mask2, dl);
 
   *changed_mask = mask1 | (mask2 << 4);
 }
@@ -947,10 +947,11 @@ void cybergfx_blend_aa_pixels_batch4(
     const float alphaLine[4], UBYTE fc_r, UBYTE fc_g, UBYTE fc_b,
     float fc_alpha_scale, UBYTE o_r, UBYTE o_g, UBYTE o_b, float o_alpha_scale,
     BOOL hasFill, BOOL hasBorder, ULONG result_pixels[4],
-    ULONG *changed_mask) {
+    ULONG *changed_mask, const struct ZunePixelLayout *dl) {
   static void (*impl)(const ULONG *, const float *, const float *, UBYTE, UBYTE,
                       UBYTE, float, UBYTE, UBYTE, UBYTE, float, BOOL, BOOL,
-                      ULONG *, ULONG *) = NULL;
+                      ULONG *, ULONG *,
+                      const struct ZunePixelLayout *) = NULL;
 
   if (!impl) {
     cybergfx_simd_level level = cybergfx_get_simd_level();
@@ -972,7 +973,7 @@ void cybergfx_blend_aa_pixels_batch4(
 
   impl(bg_pixels, alphaFill, alphaLine, fc_r, fc_g, fc_b, fc_alpha_scale, o_r,
        o_g, o_b, o_alpha_scale, hasFill, hasBorder, result_pixels,
-       changed_mask);
+       changed_mask, dl);
 }
 
 void cybergfx_blend_aa_pixels_batch8(
@@ -980,10 +981,11 @@ void cybergfx_blend_aa_pixels_batch8(
     const float alphaLine[8], UBYTE fc_r, UBYTE fc_g, UBYTE fc_b,
     float fc_alpha_scale, UBYTE o_r, UBYTE o_g, UBYTE o_b, float o_alpha_scale,
     BOOL hasFill, BOOL hasBorder, ULONG result_pixels[8],
-    ULONG *changed_mask) {
+    ULONG *changed_mask, const struct ZunePixelLayout *dl) {
   static void (*impl)(const ULONG *, const float *, const float *, UBYTE, UBYTE,
                       UBYTE, float, UBYTE, UBYTE, UBYTE, float, BOOL, BOOL,
-                      ULONG *, ULONG *) = NULL;
+                      ULONG *, ULONG *,
+                      const struct ZunePixelLayout *) = NULL;
 
   if (!impl) {
     cybergfx_simd_level level = cybergfx_get_simd_level();
@@ -1001,7 +1003,7 @@ void cybergfx_blend_aa_pixels_batch8(
 
   impl(bg_pixels, alphaFill, alphaLine, fc_r, fc_g, fc_b, fc_alpha_scale, o_r,
        o_g, o_b, o_alpha_scale, hasFill, hasBorder, result_pixels,
-       changed_mask);
+       changed_mask, dl);
 }
 
 void cybergfx_sdf_circle_batch4(const float rel_x[4], float rel_y, float radius,
@@ -1102,13 +1104,28 @@ void cybergfx_circle_alphas_batch8(const float dist[8], float border_width,
 
 static void
 cybergfx_blit_argb32_unity_scalar(const UBYTE *src, ULONG *dst, LONG width,
-                                  const struct InternalColor *tint) {
+                                  const struct InternalColor *tint,
+                                  const struct ZunePixelLayout *dl) {
   if (width <= 0) {
     return;
   }
 
   if (!tint) {
-    memcpy(dst, src, (ULONG)width * sizeof(ULONG));
+    UBYTE perm[16];
+
+    /* An untinted copy only needs the component reorder */
+    if (zunegfx_build_src_permute(dl, perm)) {
+      memcpy(dst, src, (ULONG)width * sizeof(ULONG));
+    } else {
+      LONG i;
+
+      for (i = 0; i < width; i++) {
+        UBYTE a, r, g, b;
+
+        unpack_argb32(*(const ULONG *)(src + i * 4), &a, &r, &g, &b);
+        dst[i] = pack_pixel(dl, a, r, g, b);
+      }
+    }
     return;
   }
 
@@ -1124,14 +1141,15 @@ cybergfx_blit_argb32_unity_scalar(const UBYTE *src, ULONG *dst, LONG width,
     g = (g * tg) >> 8;
     b = (b * tb) >> 8;
 
-    dst[i] = pack_argb32(a, r, g, b);
+    dst[i] = pack_pixel(dl, a, r, g, b);
   }
 }
 
 #if defined(__SSE2__)
 static void cybergfx_blit_argb32_unity_sse2(const UBYTE *src, ULONG *dst,
                                             LONG width,
-                                            const struct InternalColor *tint) {
+                                            const struct InternalColor *tint,
+                                            const struct ZunePixelLayout *dl) {
   if (width <= 0) {
     return;
   }
@@ -1152,14 +1170,15 @@ static void cybergfx_blit_argb32_unity_sse2(const UBYTE *src, ULONG *dst,
   }
 
   for (; i < width; i++) {
-    cybergfx_blit_argb32_unity_scalar(src + i * 4, dst + i, 1, tint);
+    cybergfx_blit_argb32_unity_scalar(src + i * 4, dst + i, 1, tint, dl);
   }
 }
 #endif
 
 #if CYBERGFX_CAN_BUILD_AVX2
 static void CYBERGFX_TARGET_AVX2 cybergfx_blit_argb32_unity_avx2(
-    const UBYTE *src, ULONG *dst, LONG width, const struct InternalColor *tint) {
+    const UBYTE *src, ULONG *dst, LONG width, const struct InternalColor *tint,
+    const struct ZunePixelLayout *dl) {
   if (width <= 0) {
     return;
   }
@@ -1181,34 +1200,40 @@ static void CYBERGFX_TARGET_AVX2 cybergfx_blit_argb32_unity_avx2(
   }
 
   for (; i < width; i++) {
-    cybergfx_blit_argb32_unity_scalar(src + i * 4, dst + i, 1, tint);
+    cybergfx_blit_argb32_unity_scalar(src + i * 4, dst + i, 1, tint, dl);
   }
 }
 #endif
 
+/*
+ * The vector tint paths emit native ARGB32, so they only serve a destination
+ * that orders its components that way. Anything else takes the scalar path,
+ * which packs through the layout.
+ */
 void cybergfx_blit_argb32_unity(const UBYTE *src, ULONG *dst, LONG width,
-                                const struct InternalColor *tint) {
-  static void (*impl)(const UBYTE *, ULONG *, LONG,
-                      const struct InternalColor *) = NULL;
+                                const struct InternalColor *tint,
+                                const struct ZunePixelLayout *dl) {
+  UBYTE perm[16];
 
-  if (!impl) {
+  if (zunegfx_build_src_permute(dl, perm)) {
     cybergfx_simd_level level = cybergfx_get_simd_level();
+
 #if CYBERGFX_CAN_BUILD_AVX2
     if (level == CYBERGFX_SIMD_AVX2) {
-      impl = cybergfx_blit_argb32_unity_avx2;
-    } else
+      cybergfx_blit_argb32_unity_avx2(src, dst, width, tint, dl);
+      return;
+    }
 #endif
 #if defined(__SSE2__)
-        if (level == CYBERGFX_SIMD_SSE2) {
-      impl = cybergfx_blit_argb32_unity_sse2;
-    } else
-#endif
-    {
-      impl = cybergfx_blit_argb32_unity_scalar;
+    if (level == CYBERGFX_SIMD_SSE2) {
+      cybergfx_blit_argb32_unity_sse2(src, dst, width, tint, dl);
+      return;
     }
+#endif
+    (void)level;
   }
 
-  impl(src, dst, width, tint);
+  cybergfx_blit_argb32_unity_scalar(src, dst, width, tint, dl);
 }
 
 /*****************************************************************************/
@@ -1340,11 +1365,12 @@ void cybergfx_make_argb32_batch4(const UBYTE a[4], const UBYTE r[4],
 /*****************************************************************************/
 
 /* Scalar implementation of Porter-Duff "source over" blending */
-static void cybergfx_blend_argb32_batch4_scalar(ULONG dst[4], const ULONG src[4]) {
+static void cybergfx_blend_argb32_batch4_scalar(ULONG dst[4], const ULONG src[4],
+                                               const struct ZunePixelLayout *dl) {
   for (WORD i = 0; i < 4; i++) {
     UBYTE sa, sr, sg, sb, da, dr, dg, db;
 
-    /* Buffers are native ARGB32 (memory bytes A,R,G,B) */
+    /* Source is always native ARGB32; the destination uses its own order */
     unpack_argb32(src[i], &sa, &sr, &sg, &sb);
 
     /* Fast path: fully transparent source */
@@ -1353,21 +1379,21 @@ static void cybergfx_blend_argb32_batch4_scalar(ULONG dst[4], const ULONG src[4]
 
     /* Fast path: fully opaque source */
     if (sa == 255) {
-      dst[i] = src[i];
+      dst[i] = pack_pixel(dl, 0xFF, sr, sg, sb);
       continue;
     }
 
-    unpack_argb32(dst[i], &da, &dr, &dg, &db);
+    unpack_pixel(dl, dst[i], &da, &dr, &dg, &db);
     (void)da;
 
     /* Fixed-point blending: alpha in 1-256 range */
     ULONG alpha = sa + 1;
     ULONG inv_alpha = 257 - alpha;
 
-    dst[i] = pack_argb32(0xFF,
-                         (UBYTE)((alpha * sr + inv_alpha * dr) >> 8),
-                         (UBYTE)((alpha * sg + inv_alpha * dg) >> 8),
-                         (UBYTE)((alpha * sb + inv_alpha * db) >> 8));
+    dst[i] = pack_pixel(dl, 0xFF,
+                        (UBYTE)((alpha * sr + inv_alpha * dr) >> 8),
+                        (UBYTE)((alpha * sg + inv_alpha * dg) >> 8),
+                        (UBYTE)((alpha * sb + inv_alpha * db) >> 8));
   }
 }
 
@@ -1524,15 +1550,31 @@ static void CYBERGFX_TARGET_AVX2 cybergfx_blend_argb32_batch8_avx2(ULONG dst[8],
 
 #if defined(__ARM_NEON) || defined(__ARM_NEON__)
 /* NEON implementation - blend 4 ARGB32 pixels in parallel */
-static void cybergfx_blend_argb32_batch4_neon(ULONG dst[4], const ULONG src[4]) {
-  /* Load source and destination */
+static void cybergfx_blend_argb32_batch4_neon(ULONG dst[4], const ULONG src[4],
+                                             const struct ZunePixelLayout *dl) {
+  UBYTE perm[16];
+  UBYTE abyte;
   uint8x16_t vsrc = vld1q_u8((const uint8_t *)src);
   uint8x16_t vdst = vld1q_u8((const uint8_t *)dst);
+  uint8x16_t valpha;
 
-  /* Native ARGB32 memory layout is [A0 R0 G0 B0 A1 R1 G1 B1 ...], so the
-   * alpha of each pixel is byte 0, 4, 8, 12 -- not byte 3. */
-  uint8x16_t alpha_shuffle = {0, 0, 0, 0, 4, 4, 4, 4, 8, 8, 8, 8, 12, 12, 12, 12};
-  uint8x16_t valpha = vqtbl1q_u8(vsrc, alpha_shuffle);
+  /* Reorder the native-ARGB32 source into the destination's component order.
+   * One table lookup per four pixels, so everything below can work in the
+   * destination's order with no further conversion. */
+  if (!zunegfx_build_src_permute(dl, perm))
+    vsrc = vqtbl1q_u8(vsrc, vld1q_u8(perm));
+
+  /* Broadcast each pixel's alpha, which now sits where the destination keeps it */
+  abyte = ZUNEGFX_ALPHA_BYTE(dl);
+  {
+    uint8x16_t alpha_shuffle = {
+      abyte,      abyte,      abyte,      abyte,
+      (UBYTE)(4  + abyte), (UBYTE)(4  + abyte), (UBYTE)(4  + abyte), (UBYTE)(4  + abyte),
+      (UBYTE)(8  + abyte), (UBYTE)(8  + abyte), (UBYTE)(8  + abyte), (UBYTE)(8  + abyte),
+      (UBYTE)(12 + abyte), (UBYTE)(12 + abyte), (UBYTE)(12 + abyte), (UBYTE)(12 + abyte)
+    };
+    valpha = vqtbl1q_u8(vsrc, alpha_shuffle);
+  }
 
   /* Compute inverse alpha (255 - alpha) */
   uint8x16_t vinv_alpha = vsubq_u8(vdupq_n_u8(255), valpha);
@@ -1567,9 +1609,15 @@ static void cybergfx_blend_argb32_batch4_neon(ULONG dst[4], const ULONG src[4]) 
   uint8x8_t result_hi = vshrn_n_u16(blend_hi, 8);
   uint8x16_t result = vcombine_u8(result_lo, result_hi);
 
-  /* Set alpha to 255 */
-  uint8x16_t alpha_mask = {255, 0, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0};
-  result = vorrq_u8(result, alpha_mask);
+  /* Set alpha to 255 in whichever byte the destination uses for it */
+  {
+    UBYTE m[16];
+    WORD k;
+
+    for (k = 0; k < 16; k++)
+      m[k] = ((k & 3) == abyte) ? 255 : 0;
+    result = vorrq_u8(result, vld1q_u8(m));
+  }
 
   /* Leave the destination untouched where the source is fully transparent,
    * matching the scalar and SSE2 paths (which skip those pixels entirely). */
@@ -1580,108 +1628,83 @@ static void cybergfx_blend_argb32_batch4_neon(ULONG dst[4], const ULONG src[4]) 
 }
 #endif
 
-/* Dispatcher for batch4 blending */
-void cybergfx_blend_argb32_batch4(ULONG dst[4], const ULONG src[4]) {
-  static void (*impl)(ULONG[4], const ULONG[4]) = NULL;
-
-  if (!impl) {
+/*
+ * Dispatchers. The vector paths work in the destination's component order;
+ * SSE2/AVX2 still assume alpha in the low byte, so a destination that orders
+ * its components differently takes the NEON path or the scalar one.
+ */
+void cybergfx_blend_argb32_batch4(ULONG dst[4], const ULONG src[4],
+                                  const struct ZunePixelLayout *dl) {
+    UBYTE perm[16];
+    BOOL identity = zunegfx_build_src_permute(dl, perm);
     cybergfx_simd_level level = cybergfx_get_simd_level();
 
-#if defined(__SSE2__)
-    if (level >= CYBERGFX_SIMD_SSE2) {
-      impl = cybergfx_blend_argb32_batch4_sse2;
-    } else
-#endif
 #if defined(__ARM_NEON) || defined(__ARM_NEON__)
     if (level == CYBERGFX_SIMD_NEON) {
-      impl = cybergfx_blend_argb32_batch4_neon;
-    } else
-#endif
-    {
-      impl = cybergfx_blend_argb32_batch4_scalar;
+        cybergfx_blend_argb32_batch4_neon(dst, src, dl);
+        return;
     }
-  }
-
-  impl(dst, src);
+#endif
+#if defined(__SSE2__)
+    if (identity && level >= CYBERGFX_SIMD_SSE2) {
+        cybergfx_blend_argb32_batch4_sse2(dst, src);
+        return;
+    }
+#endif
+    (void)identity;
+    (void)level;
+    cybergfx_blend_argb32_batch4_scalar(dst, src, dl);
 }
 
-/* Dispatcher for batch8 blending */
-void cybergfx_blend_argb32_batch8(ULONG dst[8], const ULONG src[8]) {
-  static void (*impl)(ULONG[8], const ULONG[8]) = NULL;
-
-  if (!impl) {
-    cybergfx_simd_level level = cybergfx_get_simd_level();
-
+void cybergfx_blend_argb32_batch8(ULONG dst[8], const ULONG src[8],
+                                  const struct ZunePixelLayout *dl) {
 #if CYBERGFX_CAN_BUILD_AVX2
-    if (level == CYBERGFX_SIMD_AVX2) {
-      impl = cybergfx_blend_argb32_batch8_avx2;
-    } else
-#endif
-    {
-      impl = NULL; /* Use fallback */
-    }
-  }
+    UBYTE perm[16];
 
-  if (impl) {
-    impl(dst, src);
-  } else {
-    /* Fallback to 2x batch4 */
-    cybergfx_blend_argb32_batch4(dst, src);
-    cybergfx_blend_argb32_batch4(dst + 4, src + 4);
-  }
+    if (zunegfx_build_src_permute(dl, perm)
+        && cybergfx_get_simd_level() == CYBERGFX_SIMD_AVX2) {
+        cybergfx_blend_argb32_batch8_avx2(dst, src);
+        return;
+    }
+#endif
+    cybergfx_blend_argb32_batch4(dst, src, dl);
+    cybergfx_blend_argb32_batch4(dst + 4, src + 4, dl);
 }
 
 /* Row blending - process entire scanlines efficiently */
-void cybergfx_blend_argb32_row(ULONG *dst, const ULONG *src, LONG count) {
-  if (count <= 0)
-    return;
+void cybergfx_blend_argb32_row(ULONG *dst, const ULONG *src, LONG count,
+                               const struct ZunePixelLayout *dl) {
+    LONG i = 0;
 
-  LONG i = 0;
+    if (count <= 0)
+        return;
 
-  /* Process 8 pixels at a time when possible */
 #if CYBERGFX_CAN_BUILD_AVX2
-  cybergfx_simd_level level = cybergfx_get_simd_level();
-  if (level == CYBERGFX_SIMD_AVX2) {
-    for (; i + 7 < count; i += 8) {
-      cybergfx_blend_argb32_batch8(dst + i, src + i);
+    if (cybergfx_get_simd_level() == CYBERGFX_SIMD_AVX2) {
+        for (; i + 7 < count; i += 8)
+            cybergfx_blend_argb32_batch8(dst + i, src + i, dl);
     }
-  }
 #endif
 
-  /* Process 4 pixels at a time */
-  for (; i + 3 < count; i += 4) {
-    cybergfx_blend_argb32_batch4(dst + i, src + i);
-  }
+    for (; i + 3 < count; i += 4)
+        cybergfx_blend_argb32_batch4(dst + i, src + i, dl);
 
-  /* Handle remaining pixels */
-  for (; i < count; i++) {
-    ULONG s = src[i];
-    UBYTE sa = (s >> 24) & 0xFF;
+    if (i < count) {
+        ULONG tail_dst[4], tail_src[4];
+        LONG rest = count - i, k;
 
-    if (sa == 0)
-      continue;
+        for (k = 0; k < rest; k++) {
+            tail_dst[k] = dst[i + k];
+            tail_src[k] = src[i + k];
+        }
+        for (; k < 4; k++) {
+            tail_dst[k] = 0;
+            tail_src[k] = 0;      /* alpha 0 -> destination left alone */
+        }
 
-    if (sa == 255) {
-      dst[i] = s;
-      continue;
+        cybergfx_blend_argb32_batch4_scalar(tail_dst, tail_src, dl);
+
+        for (k = 0; k < rest; k++)
+            dst[i + k] = tail_dst[k];
     }
-
-    UBYTE sr = (s >> 16) & 0xFF;
-    UBYTE sg = (s >> 8) & 0xFF;
-    UBYTE sb = s & 0xFF;
-
-    ULONG d = dst[i];
-    UBYTE dr = (d >> 16) & 0xFF;
-    UBYTE dg = (d >> 8) & 0xFF;
-    UBYTE db = d & 0xFF;
-
-    ULONG alpha = sa + 1;
-    ULONG inv_alpha = 257 - alpha;
-
-    UBYTE or = (UBYTE)((alpha * sr + inv_alpha * dr) >> 8);
-    UBYTE og = (UBYTE)((alpha * sg + inv_alpha * dg) >> 8);
-    UBYTE ob = (UBYTE)((alpha * sb + inv_alpha * db) >> 8);
-
-    dst[i] = (0xFF << 24) | (or << 16) | (og << 8) | ob;
-  }
 }

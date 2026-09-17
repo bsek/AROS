@@ -506,8 +506,7 @@ void CybergfxDrawTextureToDrawingBoard(
                           dest_width == src_width && dest_height == src_height);
 
       /* Fast path: the SIMD blit writes native ARGB32, so only for such boards */
-      if (unity_scale && bytes_per_pixel == 4 &&
-          zunegfx_layout_is_argb32(&board->pixel_layout)) {
+      if (unity_scale && bytes_per_pixel == 4) {
         /* Clip against the board; the fast path writes whole rows, so it
          * cannot rely on the per-pixel bounds check further down. */
         LONG cx = dest_x, cy = dest_y;
@@ -525,7 +524,7 @@ void CybergfxDrawTextureToDrawingBoard(
                 src_pixels + ((sy + dy) * texture->pitch) + sx * 4;
             ULONG *dst_row = dest_pixels + ((cy + dy) * pitch_pixels) + cx;
 
-            cybergfx_blit_argb32_unity(src_row, dst_row, cw, tint);
+            cybergfx_blit_argb32_unity(src_row, dst_row, cw, tint, &board->pixel_layout);
           }
         }
         return;
@@ -578,17 +577,15 @@ void CybergfxDrawTextureToDrawingBoard(
               pixel = ConvertPixelWithTint(pixel, texture->format, tint);
             }
 
-            /* Alpha blend source pixel over destination. The board may not
-             * be ARGB32, so go through its layout. */
-            ULONG dest_pixel = layout_to_argb32(&board->pixel_layout,
-                                                dest_pixels[py * pitch_pixels + px]);
-            ULONG blended = blend_argb32(dest_pixel, pixel);
+            /* Alpha blend the native-ARGB32 source straight onto the
+             * destination in its own component order. */
+            ULONG dest_pixel = dest_pixels[py * pitch_pixels + px];
+            ULONG blended = blend_pixel_over(&board->pixel_layout,
+                                             dest_pixel, pixel);
 
             /* Skip if pixel unchanged (fully transparent source) */
             if (blended == dest_pixel)
               continue;
-
-            blended = argb32_to_layout(&board->pixel_layout, blended);
 
             CybergfxWritePixelClamped(dest_pixels, pitch_pixels, board->width,
                                       board->height, px, py, blended);
@@ -1195,9 +1192,6 @@ static BOOL RenderTiledCacheToDrawingBoard(struct RenderContext *rctx,
     return FALSE;
   }
 
-  /* The cache and the SIMD row blend are native ARGB32 */
-  if (!zunegfx_layout_is_argb32(&board->pixel_layout))
-    return FALSE;
 
   /* Determine if we need alpha blending */
   BOOL needs_alpha_blend = (texture->flags & ZUNE_TEXTURE_ALPHA) != 0 &&
@@ -1231,7 +1225,8 @@ static BOOL RenderTiledCacheToDrawingBoard(struct RenderContext *rctx,
           copy_width = dest_width - dx;
 
         /* Use SIMD-accelerated blending for the cache segment */
-        cybergfx_blend_argb32_row(dest_row + dx, cache_row + cache_x, copy_width);
+        cybergfx_blend_argb32_row(dest_row + dx, cache_row + cache_x, copy_width,
+                                  &board->pixel_layout);
         dx += copy_width;
       }
     } else {
@@ -1276,8 +1271,6 @@ static BOOL CybergfxDrawTextureTiledToDrawingBoard(struct RenderContext *rctx,
     return FALSE;
 
   /* Only handle ARGB32 pixel formats */
-  if (!zunegfx_layout_is_argb32(&board->pixel_layout))
-    return FALSE;
 
   /* Only handle ARGB32 textures */
   if (texture->format != ZUNE_TEXTURE_FORMAT_ARGB32)
@@ -1334,7 +1327,8 @@ static BOOL CybergfxDrawTextureTiledToDrawingBoard(struct RenderContext *rctx,
           copy_width = dest_width - dx;
 
         /* Use SIMD-accelerated blending for the tile segment */
-        cybergfx_blend_argb32_row(dest_row + dx, src_row + src_x, copy_width);
+        cybergfx_blend_argb32_row(dest_row + dx, src_row + src_x, copy_width,
+                                  &board->pixel_layout);
         dx += copy_width;
       }
     } else {

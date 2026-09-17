@@ -10,6 +10,8 @@
 #ifndef CYBERGFX_SIMD_H
 #define CYBERGFX_SIMD_H
 
+struct ZunePixelLayout;
+
 #include "../../zunegfx_intern.h"
 #include <exec/types.h>
 
@@ -102,7 +104,7 @@ void cybergfx_blend_aa_pixels_batch4(
     const float alphaLine[4], UBYTE fc_r, UBYTE fc_g, UBYTE fc_b,
     float fc_alpha_scale, UBYTE o_r, UBYTE o_g, UBYTE o_b, float o_alpha_scale,
     BOOL hasFill, BOOL hasBorder, ULONG result_pixels[4],
-    ULONG *changed_mask);
+    ULONG *changed_mask, const struct ZunePixelLayout *dl);
 
 /* Batch pixel blending for 8 pixels (AVX2 optimized) */
 void cybergfx_blend_aa_pixels_batch8(
@@ -110,7 +112,7 @@ void cybergfx_blend_aa_pixels_batch8(
     const float alphaLine[8], UBYTE fc_r, UBYTE fc_g, UBYTE fc_b,
     float fc_alpha_scale, UBYTE o_r, UBYTE o_g, UBYTE o_b, float o_alpha_scale,
     BOOL hasFill, BOOL hasBorder, ULONG result_pixels[8],
-    ULONG *changed_mask);
+    ULONG *changed_mask, const struct ZunePixelLayout *dl);
 
 /* Pack RGBA components into ARGB32 format (batch of 4)
  *
@@ -130,7 +132,8 @@ void cybergfx_make_argb32_batch4(const UBYTE a[4], const UBYTE r[4],
 
 /* Texture helpers */
 void cybergfx_blit_argb32_unity(const UBYTE *src, ULONG *dst, LONG width,
-                                const struct InternalColor *tint);
+                                const struct InternalColor *tint,
+                                const struct ZunePixelLayout *dl);
 
 /* Circle helpers */
 void cybergfx_sdf_circle_batch4(const float rel_x[4], float rel_y, float radius,
@@ -158,8 +161,10 @@ void cybergfx_circle_alphas_batch8(const float dist[8], float border_width,
  *
  * Note: Pixels are expected in native ARGB32 format (0xAARRGGBB)
  */
-void cybergfx_blend_argb32_batch4(ULONG dst[4], const ULONG src[4]);
-void cybergfx_blend_argb32_batch8(ULONG dst[8], const ULONG src[8]);
+void cybergfx_blend_argb32_batch4(ULONG dst[4], const ULONG src[4],
+                                  const struct ZunePixelLayout *dl);
+void cybergfx_blend_argb32_batch8(ULONG dst[8], const ULONG src[8],
+                                  const struct ZunePixelLayout *dl);
 
 /* Texture alpha blending for scanlines
  *
@@ -171,6 +176,7 @@ void cybergfx_blend_argb32_batch8(ULONG dst[8], const ULONG src[8]);
  *   src: Source pixel buffer (ARGB32 format)
  *   count: Number of pixels to blend
  */
-void cybergfx_blend_argb32_row(ULONG *dst, const ULONG *src, LONG count);
+void cybergfx_blend_argb32_row(ULONG *dst, const ULONG *src, LONG count,
+                               const struct ZunePixelLayout *dl);
 
 #endif /* CYBERGFX_SIMD_H */

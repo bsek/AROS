@@ -412,7 +412,7 @@ static void CybergfxDrawAACircleDrawingBoard(struct RenderContext *rctx, UWORD x
             ULONG bg_pixels[4];
             ULONG *src = row_buffer ? (row_buffer + px) : (pixels + row_base + px);
             for (WORD i = 0; i < 4; i++)
-                bg_pixels[i] = layout_to_logical(&board->pixel_layout, src[i]);
+                bg_pixels[i] = src[i];
 
             ULONG result_pixels[4];
             ULONG changed_mask;
@@ -426,12 +426,12 @@ static void CybergfxDrawAACircleDrawingBoard(struct RenderContext *rctx, UWORD x
                                             border_color ? border_color->b : 0,
                                             border_color ? (border_color->a / 255.0f) : 0.0f,
                                             fill_color != NULL, border_color != NULL,
-                                            result_pixels, &changed_mask);
+                                            result_pixels, &changed_mask, &board->pixel_layout);
 
             if (changed_mask) {
                 for (WORD i = 0; i < 4; i++) {
                     if (changed_mask & (1u << i)) {
-                        ULONG final_color = logical_to_layout(&board->pixel_layout, result_pixels[i]);
+                        ULONG final_color = result_pixels[i];
                         CybergfxWritePixelClamped(pixels, pitch_pixels, board->width, board->height,
                                                   min_x + px + i, py, final_color);
                         if (row_buffer) row_buffer[px + i] = final_color;
@@ -600,7 +600,7 @@ static void CybergfxDrawAACircleRastPort(struct RenderContext *rctx, UWORD x, UW
                                                     border_color ? border_color->b : 0,
                                                     border_color ? (border_color->a / 255.0f) : 0.0f,
                                                     fill_color != NULL, border_color != NULL,
-                                                    result_pixels, &changed_mask);
+                                                    result_pixels, &changed_mask, &zunegfx_logical_layout);
 
                     if (changed_mask) {
                         for (WORD i = 0; i < 8; i++) {
@@ -636,7 +636,7 @@ static void CybergfxDrawAACircleRastPort(struct RenderContext *rctx, UWORD x, UW
                                                     border_color ? border_color->b : 0,
                                                     border_color ? (border_color->a / 255.0f) : 0.0f,
                                                     fill_color != NULL, border_color != NULL,
-                                                    result_pixels, &changed_mask);
+                                                    result_pixels, &changed_mask, &zunegfx_logical_layout);
 
                     if (changed_mask) {
                         for (WORD i = 0; i < 4; i++) {
