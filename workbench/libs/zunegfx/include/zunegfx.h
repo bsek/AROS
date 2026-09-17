@@ -409,8 +409,8 @@ void ZuneRetainTexture(struct ZuneTexture *texture);
  * ZuneCreateRenderContextForWindow - Create a RenderContext bound to a Window
  *
  * This is the primary way to create a RenderContext. The RenderContext is bound
- * to the window and automatically selects the best backend if backend_type is NULL
- * (OpenGL if available, otherwise CyberGraphics).
+ * to the window and picks the best backend when backend_type is
+ * BACKEND_BEST_AVAILABLE (OpenGL if present, otherwise CyberGraphics).
  *
  * The window reference is required for OpenGL to create a GL context.
  */
@@ -448,24 +448,12 @@ BOOL ZuneSetTarget(struct RenderContext *rctx, struct DrawingBoard *board);
 void ZuneDestroyDrawingBoard(struct RenderContext *rctx, struct DrawingBoard *board);
 void ZuneClearDrawingBoard(struct RenderContext *rctx, ULONG color);
 
-/* Note: SyncDrawingBoard has been removed. Use ZunePresent() or ZuneBlit()
- * instead - they automatically sync the backend buffer before blitting. */
-
 /*****************************************************************************/
-/* Core Drawing API - Clean and Simple */
+/* Lines and pixels */
 /*****************************************************************************/
 
-/* Basic filled shapes */
+/* Rectangles and circles go through ZuneDrawRect()/ZuneDrawCircle() above. */
 
-/* Shape outlines */
-
-/* Styled versions - with line width control */
-
-/* Rounded rectangles */
-
-/* Rounded rectangles with fill and border combined */
-
-/* Lines */
 void ZuneDrawLine(struct RenderContext *rctx, struct ZunePoint *start,
                   struct ZunePoint *end, ULONG color);
 void ZuneDrawLineStyled(struct RenderContext *rctx, struct ZunePoint *start,
@@ -475,19 +463,15 @@ void ZuneDrawLineStyled(struct RenderContext *rctx, struct ZunePoint *start,
 void ZuneDrawPixel(struct RenderContext *rctx, struct ZunePoint *point, ULONG color);
 
 /*****************************************************************************/
-/* Antialiased Versions - All shapes support AA */
+/* Antialiasing */
 /*****************************************************************************/
 
-/* Circle AA */
-
-/* AA Quality */
+/* Shapes take ZUNE_SHAPE_ANTIALIAS in their style; lines have their own
+ * entry points. Quality applies to both. */
 
 void ZuneSetAntialiasingQuality(struct RenderContext *rctx, UBYTE quality);
 UBYTE ZuneGetAntialiasingQuality(struct RenderContext *rctx);
 
-/* Rounded rectangles AA */
-
-/* Lines AA */
 void ZuneDrawLineAA(struct RenderContext *rctx, struct ZunePoint *start,
                     struct ZunePoint *end, ULONG color);
 void ZuneDrawLineStyledAA(struct RenderContext *rctx, struct ZunePoint *start,
@@ -612,8 +596,10 @@ void ZuneSetTexturePixel(struct RenderContext *rctx, struct ZuneTexture *texture
                      struct ZunePoint *point, ULONG color);
 
 /*****************************************************************************/
-/* Texture Rendering */
+/* Texture queries */
 /*****************************************************************************/
+
+/* Drawing goes through ZuneDrawTextureStyled() above. */
 
 BOOL ZuneIsTextureValid(struct ZuneTexture *texture);
 
@@ -735,6 +721,6 @@ APTR ZuneGetMasterGLContext(void);
 
 struct RenderContext *ZuneCreateRenderContextA(struct TagItem *tags);
 struct DrawingBoard *ZuneCreateDrawingBoardA(struct TagItem *tags);
-struct ZuneTexture *ZuneCreateTextureA(struct TagItem *tags);
+struct ZuneTexture *ZuneCreateTextureTagList(struct TagItem *tags);
 
 #endif /* LIBRARIES_ZUNEGFX_H */

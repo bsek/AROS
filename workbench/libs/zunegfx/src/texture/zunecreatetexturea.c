@@ -1,7 +1,7 @@
 /*
     Copyright (C) 2026, The AROS Development Team. All rights reserved.
 
-    ZuneGfx Library - ZuneCreateTextureA
+    ZuneGfx Library - ZuneCreateTextureTagList
 */
 
 #include "../backends/backend_interface.h"
@@ -22,7 +22,7 @@
 #include "../zunegfx_intern.h"
 #include "texture_intern.h"
 
-AROS_LH1(struct ZuneTexture *, ZuneCreateTextureA,
+AROS_LH1(struct ZuneTexture *, ZuneCreateTextureTagList,
          AROS_LHA(struct TagItem *, tags, A0),
          struct Library *, ZuneGfxBase, 108, zunegfx)
 {
@@ -40,11 +40,11 @@ AROS_LH1(struct ZuneTexture *, ZuneCreateTextureA,
     struct Screen *screen;
     BOOL from_board;
 
-    ENTER_FUNCTION("ZuneCreateTextureA");
+    ENTER_FUNCTION("ZuneCreateTextureTagList");
 
     if (!tags) {
-        D(bug("ZuneGfx: ZuneCreateTextureA - NULL tags\n"));
-        EXIT_FUNCTION("ZuneCreateTextureA");
+        D(bug("ZuneGfx: ZuneCreateTextureTagList - NULL tags\n"));
+        EXIT_FUNCTION("ZuneCreateTextureTagList");
         return NULL;
     }
 
@@ -64,7 +64,7 @@ AROS_LH1(struct ZuneTexture *, ZuneCreateTextureA,
     pitch      = (ULONG)LibGetTagData(ZUNE_Texture_Pitch, 0, tags);
     screen     = (struct Screen *)LibGetTagData(ZUNE_Texture_Screen, 0, tags);
 
-    D(bug("ZuneGfx: ZuneCreateTextureA(rctx=%p, %dx%d, depth=%d, fmt=0x%x, flags=0x%x)\n",
+    D(bug("ZuneGfx: ZuneCreateTextureTagList(rctx=%p, %dx%d, depth=%d, fmt=0x%x, flags=0x%x)\n",
           rctx, width, height, depth, format, flags));
 
     /* Determine source type and create texture */
@@ -74,7 +74,7 @@ AROS_LH1(struct ZuneTexture *, ZuneCreateTextureA,
         struct Process *myproc;
         APTR oldwindowptr;
 
-        D(bug("ZuneGfx: ZuneCreateTextureA - loading from file '%s'\n", filename));
+        D(bug("ZuneGfx: ZuneCreateTextureTagList - loading from file '%s'\n", filename));
 
         myproc = (struct Process *)FindTask(NULL);
         oldwindowptr = myproc->pr_WindowPtr;
@@ -90,8 +90,8 @@ AROS_LH1(struct ZuneTexture *, ZuneCreateTextureA,
         myproc->pr_WindowPtr = oldwindowptr;
 
         if (!dt_obj) {
-            D(bug("ZuneGfx: ZuneCreateTextureA - Failed to load '%s'\n", filename));
-            EXIT_FUNCTION("ZuneCreateTextureA");
+            D(bug("ZuneGfx: ZuneCreateTextureTagList - Failed to load '%s'\n", filename));
+            EXIT_FUNCTION("ZuneCreateTextureTagList");
             return NULL;
         }
 
@@ -100,32 +100,32 @@ AROS_LH1(struct ZuneTexture *, ZuneCreateTextureA,
 
     } else if (dt_object) {
         /* Extract from DataTypes object */
-        D(bug("ZuneGfx: ZuneCreateTextureA - from datatype object %p\n", dt_object));
+        D(bug("ZuneGfx: ZuneCreateTextureTagList - from datatype object %p\n", dt_object));
         texture = CreateTextureFromDatatypeInternal(dt_object, flags);
 
     } else if (from_board && rctx) {
         /* Capture from current DrawingBoard */
-        D(bug("ZuneGfx: ZuneCreateTextureA - from DrawingBoard\n"));
+        D(bug("ZuneGfx: ZuneCreateTextureTagList - from DrawingBoard\n"));
         texture = CreateTextureFromDrawingBoardInternal(base, rctx, flags);
-        EXIT_FUNCTION("ZuneCreateTextureA");
+        EXIT_FUNCTION("ZuneCreateTextureTagList");
         return texture;
 
     } else if (data) {
         /* Copy from pixel data */
-        D(bug("ZuneGfx: ZuneCreateTextureA - from pixel data %p\n", data));
+        D(bug("ZuneGfx: ZuneCreateTextureTagList - from pixel data %p\n", data));
         if (width == 0 || height == 0 || pitch == 0) {
-            D(bug("ZuneGfx: ZuneCreateTextureA - invalid data params\n"));
-            EXIT_FUNCTION("ZuneCreateTextureA");
+            D(bug("ZuneGfx: ZuneCreateTextureTagList - invalid data params\n"));
+            EXIT_FUNCTION("ZuneCreateTextureTagList");
             return NULL;
         }
         texture = CreateTextureFromDataInternal(data, width, height, depth, format, pitch, flags);
 
     } else {
         /* Create empty texture */
-        D(bug("ZuneGfx: ZuneCreateTextureA - creating empty texture\n"));
+        D(bug("ZuneGfx: ZuneCreateTextureTagList - creating empty texture\n"));
         if (width == 0 || height == 0) {
-            D(bug("ZuneGfx: ZuneCreateTextureA - invalid dimensions\n"));
-            EXIT_FUNCTION("ZuneCreateTextureA");
+            D(bug("ZuneGfx: ZuneCreateTextureTagList - invalid dimensions\n"));
+            EXIT_FUNCTION("ZuneCreateTextureTagList");
             return NULL;
         }
         texture = AllocateTexture();
@@ -146,8 +146,8 @@ AROS_LH1(struct ZuneTexture *, ZuneCreateTextureA,
         AddTextureToList(base, texture);
     }
 
-    D(bug("ZuneGfx: ZuneCreateTextureA - result=%p\n", texture));
-    EXIT_FUNCTION("ZuneCreateTextureA");
+    D(bug("ZuneGfx: ZuneCreateTextureTagList - result=%p\n", texture));
+    EXIT_FUNCTION("ZuneCreateTextureTagList");
     return texture;
 
     AROS_LIBFUNC_EXIT
