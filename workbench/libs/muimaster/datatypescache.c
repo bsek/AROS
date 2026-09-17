@@ -802,7 +802,7 @@ struct dt_node *dt_load_picture(CONST_STRPTR filename, struct Screen *scr)
         node->count = 1;
         node->o = NULL;         /* No DataTypes object needed */
         node->bfi = NULL;       /* No legacy tiling cache needed */
-        node->mask = (node->texture->flags & ZUNE_TEXTURE_ALPHA) ? mskHasAlpha : 0;
+        node->mask = (ZuneGetTextureFlags(node->texture) & ZUNE_TEXTURE_ALPHA) ? mskHasAlpha : 0;
         
         D(bug("[Zune:DTC] %s: loaded texture %dx%d from %s\n", __func__,
               node->texture->width, node->texture->height, filename));
@@ -905,8 +905,12 @@ int dt_width(struct dt_node *node)
         return 0;
     
     /* New path: Get dimensions from ZuneTexture */
-    if (node->texture)
-        return node->texture->width;
+    if (node->texture) {
+        UWORD w = 0, h = 0;
+
+        ZuneGetTextureSize(node->texture, &w, &h);
+        return w;
+    }
     
     /* Legacy path: Get from DataTypes object */
     if (node->o)
@@ -926,8 +930,12 @@ int dt_height(struct dt_node *node)
         return 0;
     
     /* New path: Get dimensions from ZuneTexture */
-    if (node->texture)
-        return node->texture->height;
+    if (node->texture) {
+        UWORD w = 0, h = 0;
+
+        ZuneGetTextureSize(node->texture, &w, &h);
+        return h;
+    }
     
     /* Legacy path: Get from DataTypes object */
     if (node->o)

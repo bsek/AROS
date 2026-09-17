@@ -118,9 +118,11 @@ BOOL DemoInit(struct DemoContext *ctx, const char *title, UWORD width, UWORD hei
 
 void DemoPresent(struct DemoContext *ctx)
 {
+    UWORD w = 0, h = 0;
+
+    ZuneGetBoardSize(ctx->board, &w, &h);
     ZunePresent(ctx->rctx, 0, 0,
-                ctx->window->BorderLeft, ctx->window->BorderTop,
-                ctx->board->width, ctx->board->height);
+                ctx->window->BorderLeft, ctx->window->BorderTop, w, h);
 }
 
 void DemoWaitKey(struct DemoContext *ctx)

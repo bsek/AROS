@@ -752,16 +752,16 @@ static void ShowRenderInfo(struct MUI_RenderInfo *mri) {
         /* Modern double buffering with DrawingBoard
          * MUI renders to the DrawingBoard's bitmap RastPort (legacy SetAPen/RectFill)
          * zunegfx draws to DrawingBoard via mri_RenderContext (may use FBO for OpenGL) */
-        mri->mri_RastPort = mri->mri_DrawingBoard->rastport;
+        mri->mri_RastPort = ZuneGetBoardRastPort(mri->mri_DrawingBoard);
         D(bug("ShowRenderInfo: Using DrawingBoard for double buffering\n"));
         D(bug("  mri_DrawingBoard: %p\n", mri->mri_DrawingBoard));
-        D(bug("  mri_DrawingBoard->rastport: %p\n", mri->mri_DrawingBoard->rastport));
-        D(bug("  mri_DrawingBoard->bitmap: %p\n", mri->mri_DrawingBoard->bitmap));
+        D(bug("  mri_DrawingBoard->rastport: %p\n", ZuneGetBoardRastPort(mri->mri_DrawingBoard)));
+        D(bug("  mri_DrawingBoard->bitmap: %p\n", ZuneGetBoardBitMap(mri->mri_DrawingBoard)));
         D(bug("  mri_RastPort (set to board->rastport): %p\n", mri->mri_RastPort));
         if (mri->mri_RastPort) {
             D(bug("  mri_RastPort->BitMap: %p\n", mri->mri_RastPort->BitMap));
             D(bug("  MATCH: rastport->BitMap == board->bitmap? %s\n",
-                  (mri->mri_RastPort->BitMap == mri->mri_DrawingBoard->bitmap) ? "YES" : "NO"));
+                  (mri->mri_RastPort->BitMap == ZuneGetBoardBitMap(mri->mri_DrawingBoard)) ? "YES" : "NO"));
         }
     } else {
         /* Direct rendering to window (no double buffering) */
@@ -1021,7 +1021,7 @@ static void WindowSyncFboToBitmap(struct MUI_RenderInfo *mri) {
 
 static void WindowSyncBitmapToFbo(struct MUI_RenderInfo *mri) {
     if (!mri || !mri->mri_RenderContext || !mri->mri_DrawingBoard ||
-        !mri->mri_DrawingBoard->rastport)
+        !ZuneGetBoardRastPort(mri->mri_DrawingBoard))
         return;
     ZuneSetTarget(mri->mri_RenderContext, mri->mri_DrawingBoard);
     /* Reload the FBO from the DrawingBoard's bitmap.
@@ -3238,7 +3238,7 @@ static void InstallBackbuffer(struct IClass *cl, Object *obj) {
             return;
         }
         InitRenderContextPenCache(mri);
-        D(bug("Created RenderContext for window %p, backend=%ld\n", win, mri->mri_RenderContext->backend_type));
+        D(bug("Created RenderContext for window %p, backend=%ld\n", win, ZuneGetBackendType(mri->mri_RenderContext)));
     }
 
     /* Only install double buffering if enabled both per-window and globally.
@@ -3248,7 +3248,7 @@ static void InstallBackbuffer(struct IClass *cl, Object *obj) {
      * drawing goes to the window's RastPort and the GL framebuffer stays empty.
      */
     BOOL opengl_requires_buffer = (mri->mri_RenderContext &&
-                                   mri->mri_RenderContext->backend_type == BACKEND_OPENGL);
+                                   ZuneGetBackendType(mri->mri_RenderContext) == BACKEND_OPENGL);
     BOOL use_double_buffer = data->wd_DoubleBuffer &&
                              muiGlobalInfo(obj)->mgi_Prefs->renderer_doublebuffer;
 
@@ -3272,21 +3272,21 @@ static void InstallBackbuffer(struct IClass *cl, Object *obj) {
      * Pass 0 for flags to use friend_bitmap for colormap inheritance (pen drawing). */
     mri->mri_DrawingBoard = ZuneCreateDrawingBoardForRenderContext(mri->mri_RenderContext, buffer_width, buffer_height, 0);
 
-    if (mri->mri_DrawingBoard && mri->mri_DrawingBoard->bitmap && mri->mri_DrawingBoard->rastport) {
+    if (mri->mri_DrawingBoard && ZuneGetBoardBitMap(mri->mri_DrawingBoard) && ZuneGetBoardRastPort(mri->mri_DrawingBoard)) {
         /*
          * DrawingBoard already has its own allocated RastPort from
          * ZuneCreateDrawingBoardForRenderContext(). We just use it directly.
          */
         D(bug("InstallBackbuffer: Setup complete\n"));
-        D(bug("  mri_DrawingBoard->rastport: %p\n", mri->mri_DrawingBoard->rastport));
-        D(bug("  mri_DrawingBoard->rastport->BitMap: %p\n", mri->mri_DrawingBoard->rastport->BitMap));
-        D(bug("  mri_DrawingBoard->bitmap: %p\n", mri->mri_DrawingBoard->bitmap));
+        D(bug("  mri_DrawingBoard->rastport: %p\n", ZuneGetBoardRastPort(mri->mri_DrawingBoard)));
+        D(bug("  mri_DrawingBoard->rastport->BitMap: %p\n", ZuneGetBoardRastPort(mri->mri_DrawingBoard)->BitMap));
+        D(bug("  mri_DrawingBoard->bitmap: %p\n", ZuneGetBoardBitMap(mri->mri_DrawingBoard)));
 
         /* Set the RenderContext to target the DrawingBoard for zunegfx operations */
         ZuneSetTarget(mri->mri_RenderContext, mri->mri_DrawingBoard);
 
         D(bug("Double buffer installed: DrawingBoard %dx%d, bitmap=%p\n",
-              buffer_width, buffer_height, mri->mri_DrawingBoard->bitmap));
+              buffer_width, buffer_height, ZuneGetBoardBitMap(mri->mri_DrawingBoard)));
     } else {
         /* DrawingBoard creation failed - continue without double buffering */
         D(bug("DrawingBoard creation failed, using direct rendering\n"));
@@ -3367,7 +3367,10 @@ void FlushDoubleBufferRegion(struct MUI_RenderInfo *mri, LONG left, LONG top, LO
         LONG copy_width = width;
         LONG copy_height = height;
 
-        if (!adjust_region_for_buffer(win, mri->mri_DrawingBoard->width, mri->mri_DrawingBoard->height, &copy_left, &copy_top, &copy_width,
+        UWORD board_w = 0, board_h = 0;
+
+        ZuneGetBoardSize(mri->mri_DrawingBoard, &board_w, &board_h);
+        if (!adjust_region_for_buffer(win, board_w, board_h, &copy_left, &copy_top, &copy_width,
                                       &copy_height, &src_x, &src_y))
             return;
 

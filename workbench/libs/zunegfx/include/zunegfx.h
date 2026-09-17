@@ -432,137 +432,29 @@ struct ZuneBrush {
 #define ZuneCreateRoundedRectRegionRect(x, y, w, h, radius)                    \
   ZuneCreateRoundedRectRegion(ZUNE_RECT_PTR((x), (y), (w), (h)), (radius))
 
-/* Forward declarations */
+/*****************************************************************************/
+/* Opaque objects                                                            */
+/*****************************************************************************/
+
+/*
+ * RenderContext, DrawingBoard and ZuneTexture are owned by the library and
+ * their layout is private. Use the accessors below to reach the few fields
+ * that are useful from outside.
+ */
 struct DrawingBoard;
 struct RenderContext;
-struct PenCache;
-struct ColorCache;
-struct PenColorCache;
 struct ZuneTexture;
 
-/* Drawing Board - Off-screen rendering surface */
-/* Where each component sits inside a locked pixel. Derived from the pixel
- * format the driver reports at lock time, so direct writes land in the
- * order that bitmap actually uses. */
-struct ZunePixelLayout {
-  UBYTE a_shift, r_shift, g_shift, b_shift; /* ULONG shifts */
-  UBYTE bytes_per_pixel;
-  BOOL has_alpha;
-  BOOL valid; /* FALSE = do not write this buffer directly */
-};
-
-struct DrawingBoard {
-  struct Node node; /* For linking in lists */
-
-  /* Surface properties */
-  struct BitMap *bitmap; /* Underlaying bitmap */
-  struct RastPort *rastport;
-  UWORD width, height;       /* Surface dimensions */
-  UBYTE depth;               /* Color depth */
-  ULONG flags;               /* ZUNE_DRAWINGBOARD_* flags */
-  struct ColorMap *colormap; /* Associated colormap for indexed surfaces */
-
-  /* Direct pixel access */
-  APTR pixels;        /* Direct pixel buffer */
-  APTR lock_handle;   /* Lock handle for pixel access */
-  ULONG pitch;        /* Bytes per row */
-  ULONG pixel_format; /* Pixel format identifier */
-  BOOL pixels_locked; /* Pixel buffer lock state */
-  struct ZunePixelLayout pixel_layout; /* Component order of the locked pixels */
-
-  /* Backend information */
-  BOOL hardware_surface; /* True if in video memory */
-  APTR backend_data;     /* Backend-specific data (e.g., FBO for OpenGL) */
-
-  /* Parent window for OpenGL FBO support */
-  struct Window *parent_window; /* Window this DrawingBoard belongs to (for GL context) */
-
-  /* State */
-  BOOL valid; /* Surface is ready for use */
-};
-
-/* Render Port - Rendering context */
-struct RenderContext {
-  struct Node node; /* For linking in lists */
-
-  /* Window binding (required for OpenGL context) */
-  struct Window *window;             /* Window this RenderContext belongs to */
-
-  /* Target surfaces */
-  struct RastPort *target_rastport;        /* Target RastPort (screen/window) */
-  struct DrawingBoard *target_board; /* Current target DrawingBoard (or NULL for window) */
-  struct ColorMap *colormap;         /* Color mapping */
-  ULONG pixel_format;                /* Pixel format identifier */
-
-  /* Backend information */
-  ULONG backend_type;   /* Active backend */
-  APTR backend_context; /* Backend-specific context (GL context, etc.) */
-  APTR backend_vtable;  /* Backend function table */
-  APTR hidd_bitmap_obj; /* Cached HIDD bitmap object for direct operations */
-  struct PenCache *pen_cache; /* Backend-specific pen cache (graphics) */
-  struct ColorCache *color_cache;     /* Per-RenderContext color cache */
-  struct PenColorCache *pen_color_cache; /* Per-RenderContext pen color cache */
-
-  /* Batching system */
-  BOOL batching_enabled; /* Batch operations for performance */
-  APTR batch_state;      /* Batching context */
-
-  /* Clipping */
-  struct Region *clip_region; /* Clipping region */
-  struct Region *saved_clip_region; /* Previous Layer clip region (restored on clear) */
-  BOOL clipping_enabled;      /* Clipping active */
-  BOOL clipping_installed;    /* We installed a region on the Layer */
-
-  /* Text rendering */
-  struct TextFont *font;      /* Current font for text operations */
-
-  /* State */
-  BOOL valid; /* RenderContext ready for use */
-};
-
-/* Texture - Texture data for rendering */
-
-struct ZuneTexture {
-  struct Node node; /* For linking in lists */
-
-  /* Texture properties */
-  UWORD width, height; /* Texture dimensions */
-  UBYTE depth;         /* Color depth in bits */
-  ULONG format;        /* Pixel format (ZUNE_TEXTURE_FORMAT_*) */
-  ULONG flags;         /* ZUNE_TEXTURE_* flags */
-
-  /* Data storage */
-  APTR pixel_data; /* Raw pixel data */
-  ULONG data_size; /* Size of pixel data in bytes */
-  ULONG pitch;     /* Bytes per row */
-
-  /* Direct pixel access */
-  APTR lock_handle;   /* Lock handle for pixel access */
-  BOOL pixels_locked; /* Pixel buffer lock state */
-
-  /* Backend integration */
-  APTR backend_handle;   /* Backend-specific texture handle */
-  BOOL hardware_texture; /* TRUE if stored in video memory */
-  ULONG backend_type;    /* Backend that owns this texture */
-
-  /* State and management */
-  BOOL valid;      /* Texture is ready for use */
-  ULONG ref_count; /* Reference counting for cleanup */
-
-  /* Pre-tiled cache for optimized tiled rendering.
-   * When a texture is used for tiled rendering (e.g., backgrounds),
-   * we create a larger pre-tiled version (e.g., 256x256) on first use.
-   * This avoids repeatedly tiling small textures across large areas.
-   * Similar to the legacy BackFillInfo system in datatypescache.c.
-   *
-   * We store both a native BitMap (for hardware BltBitMap) and ARGB32 pixels
-   * (for software fallback). The BitMap path is preferred when available. */
-  struct BitMap *tiled_cache_bitmap;  /* Native pre-tiled bitmap for BltBitMap */
-  APTR tiled_cache_pixels;            /* Pre-tiled pixel data (ARGB32) for software path */
-  UWORD tiled_cache_width;            /* Width of pre-tiled cache (e.g., 256) */
-  UWORD tiled_cache_height;           /* Height of pre-tiled cache (e.g., 256) */
-  ULONG tiled_cache_pitch;            /* Bytes per row in pixel cache */
-};
+struct RastPort *ZuneGetBoardRastPort(struct DrawingBoard *board);
+struct BitMap *ZuneGetBoardBitMap(struct DrawingBoard *board);
+void ZuneGetBoardSize(struct DrawingBoard *board, UWORD *width, UWORD *height);
+struct RastPort *ZuneGetTargetRastPort(struct RenderContext *rctx);
+struct DrawingBoard *ZuneGetTargetBoard(struct RenderContext *rctx);
+ULONG ZuneGetBackendType(struct RenderContext *rctx);
+void ZuneGetTextureSize(struct ZuneTexture *texture, UWORD *width,
+                        UWORD *height);
+ULONG ZuneGetTextureFlags(struct ZuneTexture *texture);
+void ZuneRetainTexture(struct ZuneTexture *texture);
 
 /*****************************************************************************/
 /* RenderContext Management */

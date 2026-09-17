@@ -44,8 +44,8 @@ static void RunSyncDemo(struct DemoContext *ctx)
     ZuneSync(rctx);
 
     /* Direct CyberGfx access after sync */
-    if (ctx->board->rastport && ctx->CyberGfxBase) {
-        FillPixelArray(ctx->board->rastport, 200, 40, 100, 60, 0xFFFFFF00);
+    if (ZuneGetBoardRastPort(ctx->board) && ctx->CyberGfxBase) {
+        FillPixelArray(ZuneGetBoardRastPort(ctx->board), 200, 40, 100, 60, 0xFFFFFF00);
         printf("  CyberGfx FillPixelArray done\n");
     }
 

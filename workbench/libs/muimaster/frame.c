@@ -54,7 +54,7 @@ struct FrameRendererBrush {
 };
 
 static inline BOOL frame_renderer_can_use_zunegfx(struct MUI_RenderInfo *mri) {
-    return mri && mri->mri_RenderContext && (mri->mri_RenderContext->target_rastport == mri->mri_RastPort);
+    return mri && mri->mri_RenderContext && (ZuneGetTargetRastPort(mri->mri_RenderContext) == mri->mri_RastPort);
 }
 
 static inline UBYTE frame_renderer_clamp_channel(ULONG value) {
@@ -245,14 +245,14 @@ static BOOL frame_renderer_background_to_brush(struct MUI_ImageSpec_intern *back
 
         if (node->texture) {
             tex = node->texture;
-            tex->ref_count++; /* retain while brush is in use */
+            ZuneRetainTexture(tex); /* retain while brush is in use */
             cached = TRUE;
         } else if (node->o) {
             /* Legacy fallback: create texture from DataTypes object */
             tex = ZuneCreateTextureFromDatatype(NULL, (APTR)node->o, ZUNE_TEXTURE_WRAPPING);
             if (tex) {
                 node->texture = tex;
-                tex->ref_count++; /* retain while brush is in use */
+                ZuneRetainTexture(tex); /* retain while brush is in use */
             }
         }
 
