@@ -166,6 +166,8 @@ struct ZunePoint {
 };
 
 struct ZuneTexture;
+struct DrawingBoard;
+struct RenderContext;
 
 /* Brush system for fill styles */
 enum ZuneBrushType {
@@ -388,16 +390,52 @@ struct ZuneBrush {
 /*****************************************************************************/
 /* Opaque objects                                                            */
 /*****************************************************************************/
+/* Shapes and textures                                                       */
+/*****************************************************************************/
+
+/*
+ * How a shape is painted. A NULL fill leaves the interior alone; a zero
+ * border_width leaves the edge alone; corner_radius applies to rectangles.
+ */
+#define ZUNE_SHAPE_ANTIALIAS  (1 << 0)
+
+struct ZuneShapeStyle {
+  const struct ZuneBrush *fill; /* NULL = no fill */
+  ULONG border_color;           /* only read when border_width > 0 */
+  UWORD border_width;           /* 0 = no border */
+  UBYTE corner_radius;          /* rectangles only; 0 = square */
+  ULONG flags;                  /* ZUNE_SHAPE_* */
+};
+
+/*
+ * How a texture is painted. A NULL source takes the whole texture, a zero
+ * tint means untinted, and a dest with zero width or height takes the
+ * source's size.
+ */
+#define ZUNE_TEXTURE_TILE     (1 << 0)
+
+struct ZuneTextureStyle {
+  const struct ZuneRect *source; /* NULL = whole texture */
+  ULONG tint;                    /* 0 = untinted */
+  ULONG flags;                   /* ZUNE_TEXTURE_TILE */
+};
+
+void ZuneDrawRect(struct RenderContext *rctx, const struct ZuneRect *rect,
+                  const struct ZuneShapeStyle *style);
+void ZuneDrawCircle(struct RenderContext *rctx, const struct ZunePoint *center,
+                    UWORD radius, const struct ZuneShapeStyle *style);
+void ZuneDrawTextureStyled(struct RenderContext *rctx,
+                           struct ZuneTexture *texture,
+                           const struct ZuneRect *dest,
+                           const struct ZuneTextureStyle *style);
+
+/*****************************************************************************/
 
 /*
  * RenderContext, DrawingBoard and ZuneTexture are owned by the library and
  * their layout is private. Use the accessors below to reach the few fields
  * that are useful from outside.
  */
-struct DrawingBoard;
-struct RenderContext;
-struct ZuneTexture;
-
 struct RastPort *ZuneGetBoardRastPort(struct DrawingBoard *board);
 struct BitMap *ZuneGetBoardBitMap(struct DrawingBoard *board);
 void ZuneGetBoardSize(struct DrawingBoard *board, UWORD *width, UWORD *height);

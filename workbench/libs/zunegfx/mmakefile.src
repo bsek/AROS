@@ -18,6 +18,7 @@ CORE_FILES := \
         src/core/zunecreaterendercontexta        \
         src/zunegfx_utils                        \
         src/accessors/zuneaccessors               \
+        src/shapes/zuneshapes                    \
         src/zunegfx_fallback
 
 TEXTURE_FILES := \
