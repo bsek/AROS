@@ -30,7 +30,7 @@
  *   - For LINEAR_GRADIENT: Pre-computes gradient direction and step sizes
  *   - For TEXTURE: Caches direct pixel pointers and dimensions
  *   - For SOLID: No preparation needed
- *   - Sets brush->internal.valid = TRUE on success
+ *   - Sets BRUSHCACHE(brush)->valid = TRUE on success
  */
 void PrepareBrushForRendering(struct RenderContext *rctx, struct ZuneBrush *brush, WORD rect_x, WORD rect_y,
                               UWORD rect_w, UWORD rect_h);
@@ -125,9 +125,10 @@ void InterpolateGradientStops(const struct ZuneGradientStop *stops,
  *
  * Notes:
  *   - Safe to call multiple times on the same brush
- *   - Sets brush->internal.valid = FALSE
+ *   - Sets BRUSHCACHE(brush)->valid = FALSE
  *   - Frees any allocated internal.color memory
  */
 void CleanupBrushInternalState(struct ZuneBrush *brush);
+void CleanupBrushCache(struct RenderContext *rctx);
 
 #endif /* CYBERGFX_BRUSH_SAMPLER_H */

@@ -190,12 +190,6 @@ enum ZuneBrushFilterMode {
 };
 
 
-struct InternalColor {
-  ULONG original_pixel; /* As provided */
-  UBYTE a, r, g, b;     /* Individual components */
-  LONG pen;             /* Allocated pen */
-  BOOL pen_allocated;   /* TRUE if pen is allocated */
-};
 
 struct ZuneGradientStop {
   float position; /* 0.0 - 1.0 */
@@ -206,50 +200,9 @@ struct ZuneBrush {
   enum ZuneBrushType type;
   ULONG flags;
 
-  /* INTERNAL CACHE - DO NOT MODIFY DIRECTLY
-   * These fields are populated automatically by ZuneGfx when the brush
-   * is used in rendering operations. They cache pre-computed data for optimal
-   * performance in tight rendering loops. */
-  struct {
-    BOOL valid; /* TRUE if cache data is valid and up-to-date */
-
-    struct InternalColor color;  /* Inline color cache (no allocation needed) */
-
-    /* Cached data for LINEAR_GRADIENT - incremental calculation */
-    struct {
-      float t_start;  /* Gradient t-value at rectangle origin */
-      float t_step_x; /* Increment per pixel in x-direction */
-      float t_step_y; /* Increment per pixel in y-direction */
-      /* Pre-rasterized gradient texture for fast repeated drawing */
-      ULONG *rasterized_pixels;  /* ARGB32 pixel data, NULL if not cached */
-      UWORD rasterized_width;    /* Width the cache was created for */
-      UWORD rasterized_height;   /* Height the cache was created for */
-    } linear_cache;
-
-    /* Cached data for TEXTURE - fast pixel access */
-    struct {
-      ULONG *pixels;    /* Direct pointer to texture pixel data */
-      WORD pitch_pixels; /* Pitch in pixels (not bytes) */
-      WORD src_x, src_y; /* Source rectangle start coordinates */
-      UWORD src_w, src_h; /* Source rectangle dimensions */
-    } texture_cache;
-
-    /* Cached data for RADIAL_GRADIENT - pre-rasterized */
-    struct {
-      ULONG *rasterized_pixels;  /* ARGB32 pixel data, NULL if not cached */
-      UWORD rasterized_width;    /* Width the cache was created for */
-      UWORD rasterized_height;   /* Height the cache was created for */
-      float center_x;            /* Absolute center X */
-      float center_y;            /* Absolute center Y */
-      float inv_radius;          /* 1.0f / radius for fast distance→t */
-    } radial_cache;
-
-    /* Cached data for PATTERN - pre-computed colors */
-    struct {
-      ULONG fg_color;   /* Foreground color (ARGB32) */
-      ULONG bg_color;   /* Background color (ARGB32) */
-    } pattern_cache;
-  } internal;
+  /* Library-owned scratch set by the drawing calls. Opaque here: the brush
+   * is usually a temporary, so the cache itself lives in the RenderContext. */
+  APTR internal;
 
   union {
     struct {
@@ -298,7 +251,7 @@ struct ZuneBrush {
   ((struct ZuneBrush){                                                   \
       .type = ZUNE_BRUSH_TYPE_SOLID,                                           \
       .flags = 0,                                                              \
-      .internal = {0},                                                         \
+      .internal = NULL,                                                         \
       .data = {.solid = {.color = (ULONG)(color_value)}}})
 
 #define ZUNE_BRUSH_SOLID(color_value) (&ZUNE_BRUSH_LITERAL_SOLID(color_value))
@@ -306,7 +259,7 @@ struct ZuneBrush {
 #define ZUNE_BRUSH_LITERAL_PEN_EX(pen_value, should_release)                   \
   ((struct ZuneBrush){.type = ZUNE_BRUSH_TYPE_PEN,                       \
                             .flags = 0,                                        \
-                            .internal = {0},                                   \
+                            .internal = NULL,                                   \
                             .data = {.pen = {.pen = (LONG)(pen_value),         \
                                              .release_pen = (should_release),  \
                                              .reserved = 0}}})

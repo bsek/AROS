@@ -26,15 +26,15 @@ static void cybergfx_init_fill_state(struct ZuneBrush *brush, BOOL draw_fill, cy
         return;
     }
 
-    if (!brush->internal.valid) {
+    if (!BRUSHCACHE(brush)->valid) {
         return;
     }
 
     state->enabled = TRUE;
     state->brush = brush;
 
-    if ((brush->type == ZUNE_BRUSH_TYPE_SOLID || brush->type == ZUNE_BRUSH_TYPE_PEN) && brush->internal.valid) {
-        ULONG pixel = brush->internal.color.original_pixel;
+    if ((brush->type == ZUNE_BRUSH_TYPE_SOLID || brush->type == ZUNE_BRUSH_TYPE_PEN) && BRUSHCACHE(brush)->valid) {
+        ULONG pixel = BRUSHCACHE(brush)->color.original_pixel;
         state->solid = TRUE;
         state->solid_r = ZUNE_GET_RED(pixel);
         state->solid_g = ZUNE_GET_GREEN(pixel);
@@ -128,8 +128,8 @@ void CybergfxAARectangleRasterPort(struct RastPort *rp, UWORD x, UWORD y, UWORD 
         if (core_min_x <= core_max_x && core_min_y <= core_max_y) {
             WORD core_width = core_max_x - core_min_x + 1;
             WORD core_height = core_max_y - core_min_y + 1;
-            if (core_width > 0 && core_height > 0 && fill_state.brush && fill_state.brush->internal.valid) {
-                ULONG solid_pixel = fill_state.brush->internal.color.original_pixel;
+            if (core_width > 0 && core_height > 0 && fill_state.brush && BRUSHCACHE(fill_state.brush)->valid) {
+                ULONG solid_pixel = BRUSHCACHE(fill_state.brush)->color.original_pixel;
                 FillPixelArray(rp, (UWORD)core_min_x, (UWORD)core_min_y, (UWORD)core_width, (UWORD)core_height, solid_pixel);
                 core_prefilled = TRUE;
             }
@@ -242,7 +242,7 @@ void CybergfxAARectangleRasterPort(struct RastPort *rp, UWORD x, UWORD y, UWORD 
 
                     /* Fast path for solid fill with no blending needed */
                     if (fill_state.solid && alphaFill[i] > 0.9999f && alphaLine[i] < CYBERGFX_AA_MIN_ALPHA_THRESHOLD) {
-                        row_buffer[buffer_index + i] = fill_state.brush->internal.color.original_pixel;
+                        row_buffer[buffer_index + i] = BRUSHCACHE(fill_state.brush)->color.original_pixel;
                         batch_dirty[row_in_batch] = TRUE;
                         any_dirty = TRUE;
                         continue;

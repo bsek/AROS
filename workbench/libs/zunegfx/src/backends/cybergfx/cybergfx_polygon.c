@@ -236,11 +236,11 @@ void CybergfxFillPolygon(struct RenderContext *rctx, struct ZunePoint *points,
     if (brush->type == ZUNE_BRUSH_TYPE_SOLID || brush->type == ZUNE_BRUSH_TYPE_PEN) {
         use_simple_solid = TRUE;
         if (use_locked) {
-            solid_pixel = pack_pixel(pl, 255, brush->internal.color.r,
-                                      brush->internal.color.g,
-                                      brush->internal.color.b);
+            solid_pixel = pack_pixel(pl, 255, BRUSHCACHE(brush)->color.r,
+                                      BRUSHCACHE(brush)->color.g,
+                                      BRUSHCACHE(brush)->color.b);
         } else {
-            solid_color_rp = brush->internal.color.original_pixel;
+            solid_color_rp = BRUSHCACHE(brush)->color.original_pixel;
         }
     }
 

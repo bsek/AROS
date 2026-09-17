@@ -40,6 +40,60 @@
 
 #include "../include/zunegfx.h"
 
+struct InternalColor {
+  ULONG original_pixel; /* As provided */
+  UBYTE a, r, g, b;     /* Individual components */
+  LONG pen;             /* Allocated pen */
+  BOOL pen_allocated;   /* TRUE if pen is allocated */
+};
+
+/*
+ * Scratch a brush needs while it is being rendered. One per RenderContext:
+ * callers usually pass a temporary brush, so this cannot live inside it.
+ */
+struct ZuneBrushCache {
+    BOOL valid; /* TRUE if cache data is valid and up-to-date */
+
+    struct InternalColor color;  /* Inline color cache (no allocation needed) */
+
+    /* Cached data for LINEAR_GRADIENT - incremental calculation */
+    struct {
+      float t_start;  /* Gradient t-value at rectangle origin */
+      float t_step_x; /* Increment per pixel in x-direction */
+      float t_step_y; /* Increment per pixel in y-direction */
+      /* Pre-rasterized gradient texture for fast repeated drawing */
+      ULONG *rasterized_pixels;  /* ARGB32 pixel data, NULL if not cached */
+      UWORD rasterized_width;    /* Width the cache was created for */
+      UWORD rasterized_height;   /* Height the cache was created for */
+    } linear_cache;
+
+    /* Cached data for TEXTURE - fast pixel access */
+    struct {
+      ULONG *pixels;    /* Direct pointer to texture pixel data */
+      WORD pitch_pixels; /* Pitch in pixels (not bytes) */
+      WORD src_x, src_y; /* Source rectangle start coordinates */
+      UWORD src_w, src_h; /* Source rectangle dimensions */
+    } texture_cache;
+
+    /* Cached data for RADIAL_GRADIENT - pre-rasterized */
+    struct {
+      ULONG *rasterized_pixels;  /* ARGB32 pixel data, NULL if not cached */
+      UWORD rasterized_width;    /* Width the cache was created for */
+      UWORD rasterized_height;   /* Height the cache was created for */
+      float center_x;            /* Absolute center X */
+      float center_y;            /* Absolute center Y */
+      float inv_radius;          /* 1.0f / radius for fast distance→t */
+    } radial_cache;
+
+    /* Cached data for PATTERN - pre-computed colors */
+    struct {
+      ULONG fg_color;   /* Foreground color (ARGB32) */
+      ULONG bg_color;   /* Background color (ARGB32) */
+    } pattern_cache;
+  };
+
+#define BRUSHCACHE(b) ((struct ZuneBrushCache *)(b)->internal)
+
 /*****************************************************************************/
 /* Object layouts -- private to the library                                  */
 /*****************************************************************************/
@@ -116,6 +170,9 @@ struct RenderContext {
   struct PenColorCache *pen_color_cache; /* Per-RenderContext pen color cache */
 
   /* Batching system */
+  /* Scratch for whichever brush is currently being rendered */
+  struct ZuneBrushCache brush_cache;
+
   BOOL batching_enabled; /* Batch operations for performance */
   APTR batch_state;      /* Batching context */
 

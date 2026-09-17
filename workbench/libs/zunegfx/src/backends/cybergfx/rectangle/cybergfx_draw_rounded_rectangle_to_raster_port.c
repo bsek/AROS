@@ -34,8 +34,8 @@ void CybergfxDrawRoundedRectangleToRasterPort(struct RenderContext *renderport, 
         r = (WORD)(height / 2);
     }
 
-    if (filled && (!fill_brush || !fill_brush->internal.valid)) {
-        if (fill_brush && !fill_brush->internal.valid) {
+    if (filled && (!fill_brush || !BRUSHCACHE(fill_brush)->valid)) {
+        if (fill_brush && !BRUSHCACHE(fill_brush)->valid) {
             D(bug("CybergfxDrawRoundedRectangleToRasterPort: Brush preparation failed\n"));
         }
         filled = FALSE;
@@ -52,7 +52,7 @@ void CybergfxDrawRoundedRectangleToRasterPort(struct RenderContext *renderport, 
     ULONG fill_color = 0;
     BOOL solid_fill = FALSE;
     if (filled && (fill_brush->type == ZUNE_BRUSH_TYPE_SOLID || fill_brush->type == ZUNE_BRUSH_TYPE_PEN)) {
-        fill_color = fill_brush->internal.color.original_pixel;
+        fill_color = BRUSHCACHE(fill_brush)->color.original_pixel;
         solid_fill = TRUE;
     }
 

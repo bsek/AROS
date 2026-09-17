@@ -41,7 +41,7 @@ void CybergfxDrawRectangleToRasterPort(struct RenderContext *renderport,
   height = (UWORD)clipped_height;
 
   if (filled) {
-    if (!fill_brush || !fill_brush->internal.valid) {
+    if (!fill_brush || !BRUSHCACHE(fill_brush)->valid) {
       D(bug("Brush preperation has failed!\n"));
       filled = 0; /* Brush preparation failed or no brush */
     }
@@ -60,7 +60,7 @@ void CybergfxDrawRectangleToRasterPort(struct RenderContext *renderport,
      * This works correctly for both window RastPorts and off-screen DrawingBoards
      * since it uses the pre-converted ARGB value instead of pen index */
     if (fill_brush->type == ZUNE_BRUSH_TYPE_SOLID || fill_brush->type == ZUNE_BRUSH_TYPE_PEN) {
-      ULONG argb = fill_brush->internal.color.original_pixel;
+      ULONG argb = BRUSHCACHE(fill_brush)->color.original_pixel;
       D(bug("CybergfxDrawRectangleToRasterPort: Using FillPixelArray with ARGB=0x%08lx\n", argb));
       FillPixelArray(rp, x, y, width, height, argb);
     } else {

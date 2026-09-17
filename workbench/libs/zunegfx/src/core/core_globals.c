@@ -205,6 +205,25 @@ void CleanupRenderContext(struct RenderContext *rctx) {
     rctx->batch_state = NULL;
   }
 
+  /* Drop any clip region we installed on the window's Layer, or it outlives
+   * the context and clips everything drawn there afterwards. Done inline
+   * rather than through the LVO, which is not callable from in here. */
+  if (rctx->clipping_installed || rctx->clip_region) {
+    ZuneBackend *backend = ZuneGetRenderContextBackend(rctx);
+
+    if (backend && backend->ops && backend->ops->ClearClipping) {
+      backend->ops->ClearClipping(rctx);
+    }
+    rctx->clipping_enabled = FALSE;
+    if (rctx->clip_region) {
+      DisposeRegion(rctx->clip_region);
+      rctx->clip_region = NULL;
+    }
+  }
+
+  /* Release the brush scratch before the backend goes away */
+  CleanupBrushCache(rctx);
+
   /* Cleanup backend system */
   ZuneUnbindRenderContextFromBackend(rctx);
 

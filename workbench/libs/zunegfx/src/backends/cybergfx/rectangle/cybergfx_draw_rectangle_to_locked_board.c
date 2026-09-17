@@ -52,9 +52,9 @@ void CybergfxDrawRectangleToLockedDrawingBoard(struct RenderContext *renderport,
 
     /* Fast path for solid color brushes */
     if (fill_brush->type == ZUNE_BRUSH_TYPE_SOLID || fill_brush->type == ZUNE_BRUSH_TYPE_PEN) {
-      ULONG fill_pixel = pack_pixel(&board->pixel_layout, 255, fill_brush->internal.color.r,
-                                     fill_brush->internal.color.g,
-                                     fill_brush->internal.color.b);
+      ULONG fill_pixel = pack_pixel(&board->pixel_layout, 255, BRUSHCACHE(fill_brush)->color.r,
+                                     BRUSHCACHE(fill_brush)->color.g,
+                                     BRUSHCACHE(fill_brush)->color.b);
       {
           static BOOL reported = FALSE;
 
@@ -62,9 +62,9 @@ void CybergfxDrawRectangleToLockedDrawingBoard(struct RenderContext *renderport,
               reported = TRUE;
               bug("[ZuneGfx] locked solid fill rgb=%u,%u,%u origpixel=0x%08lx"
                   " -> pixel=0x%08lx bytes %02x %02x %02x %02x\n",
-                  fill_brush->internal.color.r, fill_brush->internal.color.g,
-                  fill_brush->internal.color.b,
-                  (unsigned long)fill_brush->internal.color.original_pixel,
+                  BRUSHCACHE(fill_brush)->color.r, BRUSHCACHE(fill_brush)->color.g,
+                  BRUSHCACHE(fill_brush)->color.b,
+                  (unsigned long)BRUSHCACHE(fill_brush)->color.original_pixel,
                   (unsigned long)fill_pixel,
                   (unsigned)(fill_pixel & 0xFF), (unsigned)((fill_pixel >> 8) & 0xFF),
                   (unsigned)((fill_pixel >> 16) & 0xFF), (unsigned)((fill_pixel >> 24) & 0xFF));
