@@ -19,42 +19,100 @@ static void DrawAARectangles(struct DemoContext *ctx)
     struct RenderContext *rctx = ctx->rctx;
 
     /* Filled rounded AA with different radii */
-    ZuneFillRectangleRoundedAAXYWH(rctx, 50, 50, 100, 80, 5, ZUNE_BRUSH_SOLID(ZUNE_RED));
-    ZuneFillRectangleRoundedAAXYWH(rctx, 170, 50, 100, 80, 20, ZUNE_BRUSH_SOLID(ZUNE_GREEN));
-    ZuneFillRectangleRoundedAAXYWH(rctx, 290, 50, 100, 80, 25, ZUNE_BRUSH_SOLID(ZUNE_BLACK));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(50, 50, 100, 80),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_RED),
+                            .corner_radius = 5,
+                            .flags = ZUNE_SHAPE_ANTIALIAS));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(170, 50, 100, 80),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_GREEN),
+                            .corner_radius = 20,
+                            .flags = ZUNE_SHAPE_ANTIALIAS));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(290, 50, 100, 80),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_BLACK),
+                            .corner_radius = 25,
+                            .flags = ZUNE_SHAPE_ANTIALIAS));
 
     /* Outlined rounded AA */
-    ZuneDrawRectangleRoundedOutlineAAXYWH(rctx, 50, 150, 100, 80, 5, ZUNE_LIGHTGRAY);
-    ZuneDrawRectangleRoundedOutlineAAXYWH(rctx, 170, 150, 100, 80, 15, ZUNE_MAGENTA);
-    ZuneDrawRectangleRoundedOutlineStyledAAXYWH(rctx, 290, 150, 100, 80, 20, 5, ZUNE_CYAN);
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(50, 150, 100, 80),
+                 ZUNE_STYLE(.border_color = ZUNE_LIGHTGRAY,
+                            .border_width = 1,
+                            .corner_radius = 5,
+                            .flags = ZUNE_SHAPE_ANTIALIAS));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(170, 150, 100, 80),
+                 ZUNE_STYLE(.border_color = ZUNE_MAGENTA,
+                            .border_width = 1,
+                            .corner_radius = 15,
+                            .flags = ZUNE_SHAPE_ANTIALIAS));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(290, 150, 100, 80),
+                 ZUNE_STYLE(.border_color = ZUNE_CYAN,
+                            .border_width = 5,
+                            .corner_radius = 20,
+                            .flags = ZUNE_SHAPE_ANTIALIAS));
 
     /* Filled + border (styled AA) */
-    ZuneFillRectangleRoundedStyledAAXYWH(rctx, 50, 250, 100, 80, 15, 1,
-                                         ZUNE_BRUSH_SOLID(ZUNE_WHITE), ZUNE_LIGHTGRAY);
-    ZuneFillRectangleRoundedStyledAAXYWH(rctx, 170, 250, 100, 80, 20, 4,
-                                         ZUNE_BRUSH_SOLID(ZUNE_YELLOW), ZUNE_LIGHTGRAY);
-    ZuneFillRectangleRoundedStyledAAXYWH(rctx, 290, 250, 100, 80, 25, 1,
-                                         ZUNE_BRUSH_SOLID(ZUNE_GRAY), ZUNE_LIGHTGRAY);
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(50, 250, 100, 80),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_WHITE),
+                            .border_color = ZUNE_LIGHTGRAY,
+                            .border_width = 1,
+                            .corner_radius = 15,
+                            .flags = ZUNE_SHAPE_ANTIALIAS));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(170, 250, 100, 80),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_YELLOW),
+                            .border_color = ZUNE_LIGHTGRAY,
+                            .border_width = 4,
+                            .corner_radius = 20,
+                            .flags = ZUNE_SHAPE_ANTIALIAS));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(290, 250, 100, 80),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_GRAY),
+                            .border_color = ZUNE_LIGHTGRAY,
+                            .border_width = 1,
+                            .corner_radius = 25,
+                            .flags = ZUNE_SHAPE_ANTIALIAS));
 
     /* Outlined styled AA with different line widths */
-    ZuneDrawRectangleRoundedOutlineStyledAAXYWH(rctx, 50, 350, 100, 80, 10, 1, ZUNE_RED);
-    ZuneDrawRectangleRoundedOutlineStyledAAXYWH(rctx, 170, 350, 100, 80, 15, 3, ZUNE_GREEN);
-    ZuneDrawRectangleRoundedOutlineStyledAAXYWH(rctx, 290, 350, 100, 80, 20, 4, ZUNE_BLUE);
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(50, 350, 100, 80),
+                 ZUNE_STYLE(.border_color = ZUNE_RED,
+                            .border_width = 1,
+                            .corner_radius = 10,
+                            .flags = ZUNE_SHAPE_ANTIALIAS));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(170, 350, 100, 80),
+                 ZUNE_STYLE(.border_color = ZUNE_GREEN,
+                            .border_width = 3,
+                            .corner_radius = 15,
+                            .flags = ZUNE_SHAPE_ANTIALIAS));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(290, 350, 100, 80),
+                 ZUNE_STYLE(.border_color = ZUNE_BLUE,
+                            .border_width = 4,
+                            .corner_radius = 20,
+                            .flags = ZUNE_SHAPE_ANTIALIAS));
 
     /* Overlapping AA */
-    ZuneFillRectangleRoundedAAXYWH(rctx, 420, 100, 150, 100, 30,
-                                   ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(128, 255, 255, 0)));
-    ZuneDrawRectangleRoundedOutlineStyledAAXYWH(rctx, 450, 130, 150, 100, 35, 5,
-                                                ZUNE_COLOR_ARGB32(255, 255, 0, 0));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(420, 100, 150, 100),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(128, 255, 255, 0)),
+                            .corner_radius = 30,
+                            .flags = ZUNE_SHAPE_ANTIALIAS));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(450, 130, 150, 100),
+                 ZUNE_STYLE(.border_color = ZUNE_COLOR_ARGB32(255, 255, 0, 0),
+                            .border_width = 5,
+                            .corner_radius = 35,
+                            .flags = ZUNE_SHAPE_ANTIALIAS));
 
     /* Small AA rectangles */
-    ZuneFillRectangleRoundedAAXYWH(rctx, 420, 280, 40, 30, 8,
-                                   ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(200, 255, 128, 64)));
-    ZuneDrawRectangleRoundedOutlineStyledAAXYWH(rctx, 470, 290, 35, 25, 6, 2,
-                                                ZUNE_COLOR_ARGB32(200, 64, 255, 128));
-    ZuneFillRectangleRoundedStyledAAXYWH(rctx, 515, 300, 45, 35, 10, 3,
-                                         ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(200, 128, 64, 255)),
-                                         ZUNE_COLOR_ARGB32(255, 255, 255, 255));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(420, 280, 40, 30),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(200, 255, 128, 64)),
+                            .corner_radius = 8,
+                            .flags = ZUNE_SHAPE_ANTIALIAS));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(470, 290, 35, 25),
+                 ZUNE_STYLE(.border_color = ZUNE_COLOR_ARGB32(200, 64, 255, 128),
+                            .border_width = 2,
+                            .corner_radius = 6,
+                            .flags = ZUNE_SHAPE_ANTIALIAS));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(515, 300, 45, 35),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(200, 128, 64, 255)),
+                            .border_color = ZUNE_COLOR_ARGB32(255, 255, 255, 255),
+                            .border_width = 3,
+                            .corner_radius = 10,
+                            .flags = ZUNE_SHAPE_ANTIALIAS));
 
     /* Gradient AA */
     struct ZuneGradientStop gradient_stops[] = {
@@ -72,8 +130,12 @@ static void DrawAARectangles(struct DemoContext *ctx)
             .stop_count = 3
         }}
     };
-    ZuneFillRectangleRoundedStyledAAXYWH(rctx, 420, 350, 180, 80, 18, 5,
-                                         &gradient_brush, ZUNE_RED);
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(420, 350, 180, 80),
+                 ZUNE_STYLE(.fill = &gradient_brush,
+                            .border_color = ZUNE_RED,
+                            .border_width = 5,
+                            .corner_radius = 18,
+                            .flags = ZUNE_SHAPE_ANTIALIAS));
 }
 
 int main(int argc, char **argv)

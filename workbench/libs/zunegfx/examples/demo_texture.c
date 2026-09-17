@@ -10,9 +10,7 @@
     - ZuneUpdateTextureData
     - ZuneLockTexturePixels, ZuneUnlockTexturePixels
     - ZuneGetTexturePixel, ZuneSetTexturePixel
-    - ZuneDrawTexture, ZuneDrawTextureScaled, ZuneDrawTextureRegion
-    - ZuneDrawTextureTinted, ZuneDrawTextureScaledTinted, ZuneDrawTextureRegionTinted
-    - ZuneDrawTextureTiled
+    - ZuneDrawTextureStyled: position, scaling, source region, tint, tiling
 
     Usage: demo_texture [cybergfx|opengl]
 */
@@ -59,57 +57,39 @@ static void RunTextureDemo(struct DemoContext *ctx)
 
     printf("  Texture created: %dx%d, valid=%d\n", tex_w, tex_h, ZuneIsTextureValid(tex));
 
-    /* ZuneDrawTexture */
-    ZuneDrawTextAt(rctx, 20, 30, "DrawTexture:", 12, ZUNE_LIGHTGRAY);
-    {
-        struct ZunePoint pos = {20, 45};
-        ZuneDrawTexture(rctx, tex, &pos);
-    }
+    /* Plain: a dest with no extent takes the texture's own size */
+    ZuneDrawTextAt(rctx, 20, 30, "Plain:", 6, ZUNE_LIGHTGRAY);
+    ZuneDrawTextureStyled(rctx, tex, ZUNE_RECT_PTR(20, 45, 0, 0), NULL);
 
-    /* ZuneDrawTextureScaled */
+    /* Scaled: a dest extent different from the source scales */
     ZuneDrawTextAt(rctx, 100, 30, "Scaled:", 7, ZUNE_LIGHTGRAY);
-    {
-        struct ZuneRect dst = {100, 45, 128, 128};
-        ZuneDrawTextureScaled(rctx, tex, &dst);
-    }
+    ZuneDrawTextureStyled(rctx, tex, ZUNE_RECT_PTR(100, 45, 128, 128), NULL);
 
-    /* ZuneDrawTextureTinted */
+    /* Tinted */
     ZuneDrawTextAt(rctx, 250, 30, "Tinted:", 7, ZUNE_LIGHTGRAY);
-    {
-        struct ZunePoint pos = {250, 45};
-        ZuneDrawTextureTinted(rctx, tex, &pos, ZUNE_COLOR_ARGB32(128, 255, 0, 0));
-    }
+    ZuneDrawTextureStyled(rctx, tex, ZUNE_RECT_PTR(250, 45, 0, 0),
+                          ZUNE_TEXSTYLE(.tint = ZUNE_COLOR_ARGB32(128, 255, 0, 0)));
 
-    /* ZuneDrawTextureScaledTinted */
+    /* Scaled and tinted at once */
     ZuneDrawTextAt(rctx, 330, 30, "ScaledTinted:", 13, ZUNE_LIGHTGRAY);
-    {
-        struct ZuneRect dst = {330, 45, 96, 96};
-        ZuneDrawTextureScaledTinted(rctx, tex, &dst, ZUNE_COLOR_ARGB32(128, 0, 255, 0));
-    }
+    ZuneDrawTextureStyled(rctx, tex, ZUNE_RECT_PTR(330, 45, 96, 96),
+                          ZUNE_TEXSTYLE(.tint = ZUNE_COLOR_ARGB32(128, 0, 255, 0)));
 
-    /* ZuneDrawTextureRegion */
+    /* A source sub-rect */
     ZuneDrawTextAt(rctx, 450, 30, "Region:", 7, ZUNE_LIGHTGRAY);
-    {
-        struct ZuneRect src = {16, 16, 32, 32};
-        struct ZuneRect dst = {450, 45, 64, 64};
-        ZuneDrawTextureRegion(rctx, tex, &src, &dst);
-    }
+    ZuneDrawTextureStyled(rctx, tex, ZUNE_RECT_PTR(450, 45, 64, 64),
+                          ZUNE_TEXSTYLE(.source = ZUNE_RECT_PTR(16, 16, 32, 32)));
 
-    /* ZuneDrawTextureRegionTinted */
+    /* Region and tint together */
     ZuneDrawTextAt(rctx, 530, 30, "RegionTinted:", 13, ZUNE_LIGHTGRAY);
-    {
-        struct ZuneRect src = {0, 0, 32, 32};
-        struct ZuneRect dst = {530, 45, 96, 96};
-        ZuneDrawTextureRegionTinted(rctx, tex, &src, &dst,
-                                    ZUNE_COLOR_ARGB32(128, 0, 0, 255));
-    }
+    ZuneDrawTextureStyled(rctx, tex, ZUNE_RECT_PTR(530, 45, 96, 96),
+                          ZUNE_TEXSTYLE(.source = ZUNE_RECT_PTR(0, 0, 32, 32),
+                                        .tint = ZUNE_COLOR_ARGB32(128, 0, 0, 255)));
 
-    /* ZuneDrawTextureTiled */
+    /* Tiled across the dest */
     ZuneDrawTextAt(rctx, 20, 190, "Tiled:", 6, ZUNE_LIGHTGRAY);
-    {
-        struct ZuneRect dst = {20, 205, 200, 100};
-        ZuneDrawTextureTiled(rctx, tex, &dst);
-    }
+    ZuneDrawTextureStyled(rctx, tex, ZUNE_RECT_PTR(20, 205, 200, 100),
+                          ZUNE_TEXSTYLE(.flags = ZUNE_TEXTURE_TILE));
 
     /* Pixel manipulation */
     ZuneDrawTextAt(rctx, 250, 190, "Pixel manipulation:", 19, ZUNE_LIGHTGRAY);
@@ -132,8 +112,7 @@ static void RunTextureDemo(struct DemoContext *ctx)
 
             ZuneUnlockTexturePixels(rctx, tex);
 
-            struct ZunePoint pos = {250, 205};
-            ZuneDrawTexture(rctx, tex, &pos);
+            ZuneDrawTextureStyled(rctx, tex, ZUNE_RECT_PTR(250, 205, 0, 0), NULL);
         }
     }
 
@@ -150,8 +129,7 @@ static void RunTextureDemo(struct DemoContext *ctx)
         struct ZuneRect rect = {0, 0, tex_w, tex_h};
         ZuneUpdateTextureData(rctx, tex, pixel_data, &rect);
 
-        struct ZunePoint pos = {350, 205};
-        ZuneDrawTexture(rctx, tex, &pos);
+        ZuneDrawTextureStyled(rctx, tex, ZUNE_RECT_PTR(350, 205, 0, 0), NULL);
     }
 
     /* CreateTextureFromFile */
@@ -164,15 +142,10 @@ static void RunTextureDemo(struct DemoContext *ctx)
         if (ftex) {
             printf("  TextureFromFile: valid=%d\n", ZuneIsTextureValid(ftex));
 
-            struct ZunePoint pos = {20, 335};
-            ZuneDrawTexture(rctx, ftex, &pos);
-
-            struct ZuneRect dst = {160, 335, 96, 96};
-            ZuneDrawTextureScaled(rctx, ftex, &dst);
-
-            struct ZuneRect dst2 = {270, 335, 64, 64};
-            ZuneDrawTextureTinted(rctx, ftex, (struct ZunePoint *)&dst2,
-                                  ZUNE_COLOR_ARGB32(128, 255, 0, 0));
+            ZuneDrawTextureStyled(rctx, ftex, ZUNE_RECT_PTR(20, 335, 0, 0), NULL);
+            ZuneDrawTextureStyled(rctx, ftex, ZUNE_RECT_PTR(160, 335, 96, 96), NULL);
+            ZuneDrawTextureStyled(rctx, ftex, ZUNE_RECT_PTR(270, 335, 64, 64),
+                                  ZUNE_TEXSTYLE(.tint = ZUNE_COLOR_ARGB32(128, 255, 0, 0)));
 
             ZuneDestroyTexture(rctx, ftex);
         } else {
@@ -188,18 +161,17 @@ static void RunTextureDemo(struct DemoContext *ctx)
         if (tmp) {
             ZuneSetTarget(rctx, tmp);
             ZuneClearDrawingBoard(rctx, ZUNE_DARKGRAY);
-            ZuneDrawRectangleXYWH(rctx, 10, 10, 50, 50, ZUNE_BRUSH_SOLID(ZUNE_RED));
-            ZuneDrawCircleAt(rctx, 90, 90, 25, ZUNE_BRUSH_SOLID(ZUNE_GREEN));
+            ZuneDrawRect(rctx, ZUNE_RECT_PTR(10, 10, 50, 50),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_RED)));
+            ZuneDrawCircle(rctx, ZUNE_POINT_PTR(90, 90), 25,
+                   ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_GREEN)));
 
             struct ZuneTexture *btex = ZuneCreateTextureFromDrawingBoard(rctx, ZUNE_TEXTURE_HARDWARE);
             ZuneSetTarget(rctx, ctx->board);
 
             if (btex) {
-                struct ZunePoint pos = {400, 335};
-                ZuneDrawTexture(rctx, btex, &pos);
-
-                struct ZuneRect dst = {540, 335, 64, 64};
-                ZuneDrawTextureScaled(rctx, btex, &dst);
+                ZuneDrawTextureStyled(rctx, btex, ZUNE_RECT_PTR(400, 335, 0, 0), NULL);
+                ZuneDrawTextureStyled(rctx, btex, ZUNE_RECT_PTR(540, 335, 64, 64), NULL);
 
                 ZuneDestroyTexture(rctx, btex);
             }

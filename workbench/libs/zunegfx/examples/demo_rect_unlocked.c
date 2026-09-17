@@ -22,30 +22,49 @@ static void DrawRectangles(struct DemoContext *ctx)
     struct RenderContext *rctx = ctx->rctx;
 
     /* Solid filled rectangles */
-    ZuneDrawRectangleXYWH(rctx, 50, 50, 100, 80, ZUNE_BRUSH_SOLID(ZUNE_RED));
-    ZuneDrawRectangleXYWH(rctx, 170, 50, 100, 80, ZUNE_BRUSH_SOLID(ZUNE_GREEN));
-    ZuneDrawRectangleXYWH(rctx, 290, 50, 100, 80, ZUNE_BRUSH_SOLID(ZUNE_BLUE));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(50, 50, 100, 80),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_RED)));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(170, 50, 100, 80),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_GREEN)));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(290, 50, 100, 80),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_BLUE)));
 
     /* Outlined rectangles */
-    ZuneDrawRectangleOutlineXYWH(rctx, 50, 150, 100, 80, ZUNE_YELLOW);
-    ZuneDrawRectangleOutlineXYWH(rctx, 170, 150, 100, 80, ZUNE_MAGENTA);
-    ZuneDrawRectangleOutlineStyledXYWH(rctx, 290, 150, 100, 80, 5, ZUNE_CYAN);
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(50, 150, 100, 80),
+                 ZUNE_STYLE(.border_color = ZUNE_YELLOW, .border_width = 1));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(170, 150, 100, 80),
+                 ZUNE_STYLE(.border_color = ZUNE_MAGENTA, .border_width = 1));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(290, 150, 100, 80),
+                 ZUNE_STYLE(.border_color = ZUNE_CYAN, .border_width = 5));
 
     /* Rounded filled rectangles */
-    ZuneDrawRectangleRoundedXYWH(rctx, 50, 250, 100, 80, 15, ZUNE_BRUSH_SOLID(ZUNE_WHITE));
-    ZuneDrawRectangleRoundedXYWH(rctx, 170, 250, 100, 80, 20, ZUNE_BRUSH_SOLID(ZUNE_LIGHTGRAY));
-    ZuneDrawRectangleRoundedXYWH(rctx, 290, 250, 100, 80, 25, ZUNE_BRUSH_SOLID(ZUNE_GRAY));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(50, 250, 100, 80),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_WHITE), .corner_radius = 15));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(170, 250, 100, 80),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_LIGHTGRAY), .corner_radius = 20));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(290, 250, 100, 80),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_GRAY), .corner_radius = 25));
 
     /* Rounded outlined rectangles */
-    ZuneDrawRectangleRoundedOutlineXYWH(rctx, 50, 350, 100, 80, 10, ZUNE_RED);
-    ZuneDrawRectangleRoundedOutlineXYWH(rctx, 170, 350, 100, 80, 15, ZUNE_GREEN);
-    ZuneDrawRectangleRoundedOutlineXYWH(rctx, 290, 350, 100, 80, 20, ZUNE_BLUE);
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(50, 350, 100, 80),
+                 ZUNE_STYLE(.border_color = ZUNE_RED,
+                            .border_width = 1,
+                            .corner_radius = 10));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(170, 350, 100, 80),
+                 ZUNE_STYLE(.border_color = ZUNE_GREEN,
+                            .border_width = 1,
+                            .corner_radius = 15));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(290, 350, 100, 80),
+                 ZUNE_STYLE(.border_color = ZUNE_BLUE,
+                            .border_width = 1,
+                            .corner_radius = 20));
 
     /* Semi-transparent overlapping rectangles */
-    ZuneDrawRectangleXYWH(rctx, 420, 100, 150, 100,
-                          ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(128, 255, 255, 0)));
-    ZuneDrawRectangleRoundedXYWH(rctx, 450, 130, 150, 100, 30,
-                                 ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(128, 0, 255, 255)));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(420, 100, 150, 100),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(128, 255, 255, 0))));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(450, 130, 150, 100),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(128, 0, 255, 255)),
+                            .corner_radius = 30));
 
     /* Gradient brush */
     struct ZuneGradientStop gradient_stops[] = {
@@ -63,7 +82,8 @@ static void DrawRectangles(struct DemoContext *ctx)
             .stop_count = 3
         }}
     };
-    ZuneDrawRectangleRoundedXYWH(rctx, 420, 250, 180, 80, 20, &gradient_brush);
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(420, 250, 180, 80),
+                 ZUNE_STYLE(.fill = &gradient_brush, .corner_radius = 20));
 
     /* Texture brush from testimage.png */
     {
@@ -83,14 +103,18 @@ static void DrawRectangles(struct DemoContext *ctx)
                     .filter = ZUNE_BRUSH_FILTER_LINEAR
                 }}
             };
-            ZuneDrawRectangleRoundedXYWH(rctx, 420, 350, 180, 80, 20, &tex_brush);
+            ZuneDrawRect(rctx, ZUNE_RECT_PTR(420, 350, 180, 80),
+                 ZUNE_STYLE(.fill = &tex_brush, .corner_radius = 20));
             ZuneDestroyTexture(rctx, ptex);
         }
     }
 
     /* Rounded styled (fill + border) */
-    ZuneDrawRectangleRoundedStyledXYWH(rctx, 620, 50, 140, 80, 15, 3,
-                                       ZUNE_BRUSH_SOLID(ZUNE_LIGHTGRAY), ZUNE_RED);
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(620, 50, 140, 80),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_LIGHTGRAY),
+                            .border_color = ZUNE_RED,
+                            .border_width = 3,
+                            .corner_radius = 15));
 
     struct ZuneGradientStop styled_stops[] = {
         {0.0f, ZUNE_COLOR_ARGB32(255, 100, 150, 255)},
@@ -106,12 +130,17 @@ static void DrawRectangles(struct DemoContext *ctx)
             .stop_count = 2
         }}
     };
-    ZuneDrawRectangleRoundedStyledXYWH(rctx, 620, 150, 140, 80, 20, 4,
-                                       &styled_brush, ZUNE_WHITE);
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(620, 150, 140, 80),
+                 ZUNE_STYLE(.fill = &styled_brush,
+                            .border_color = ZUNE_WHITE,
+                            .border_width = 4,
+                            .corner_radius = 20));
 
-    ZuneDrawRectangleRoundedStyledXYWH(rctx, 620, 250, 140, 80, 25, 1,
-                                       ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(255, 255, 200, 100)),
-                                       ZUNE_COLOR_ARGB32(255, 150, 100, 50));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(620, 250, 140, 80),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(255, 255, 200, 100)),
+                            .border_color = ZUNE_COLOR_ARGB32(255, 150, 100, 50),
+                            .border_width = 1,
+                            .corner_radius = 25));
 }
 
 int main(int argc, char **argv)

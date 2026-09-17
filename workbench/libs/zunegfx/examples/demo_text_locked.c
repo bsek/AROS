@@ -63,7 +63,8 @@ static void DrawText(struct DemoContext *ctx)
     text_width = ZuneTextLength(rctx, test_string, strlen(test_string));
     printf("   TextLength(\"%s\") = %d pixels\n", test_string, text_width);
 
-    ZuneDrawRectangleOutlineXYWH(rctx, 19, y - 1, text_width + 2, 14, ZUNE_CYAN);
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(19, y - 1, text_width + 2, 14),
+                 ZUNE_STYLE(.border_color = ZUNE_CYAN, .border_width = 1));
     ZuneDrawTextAt(rctx, 20, y, test_string, strlen(test_string), ZUNE_WHITE);
     y += 20;
 
@@ -81,8 +82,8 @@ static void DrawText(struct DemoContext *ctx)
     chars_fit = ZuneTextFit(rctx, long_string, strlen(long_string), 200);
     printf("   TextFit in 200px: %d chars of %d\n", chars_fit, (int)strlen(long_string));
 
-    ZuneDrawRectangleXYWH(rctx, 20, y, 200, 14,
-                          ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(80, 0, 128, 255)));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(20, y, 200, 14),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(80, 0, 128, 255))));
     ZuneDrawTextAt(rctx, 20, y, long_string, chars_fit, ZUNE_WHITE);
     y += 16;
     ZuneDrawTextAt(rctx, 20, y, long_string, strlen(long_string), ZUNE_GRAY);

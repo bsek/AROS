@@ -18,36 +18,50 @@ static void DrawCircles(struct DemoContext *ctx)
     struct RenderContext *rctx = ctx->rctx;
 
     /* Filled circles */
-    ZuneDrawCircleAt(rctx, 120, 90, 40, ZUNE_BRUSH_SOLID(ZUNE_RED));
-    ZuneDrawCircleAt(rctx, 240, 90, 40, ZUNE_BRUSH_SOLID(ZUNE_GREEN));
-    ZuneDrawCircleAt(rctx, 360, 90, 40, ZUNE_BRUSH_SOLID(ZUNE_BLUE));
+    ZuneDrawCircle(rctx, ZUNE_POINT_PTR(120, 90), 40,
+                   ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_RED)));
+    ZuneDrawCircle(rctx, ZUNE_POINT_PTR(240, 90), 40,
+                   ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_GREEN)));
+    ZuneDrawCircle(rctx, ZUNE_POINT_PTR(360, 90), 40,
+                   ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_BLUE)));
 
     /* Outlined circles */
-    ZuneDrawCircleOutlineAt(rctx, 120, 200, 40, ZUNE_YELLOW);
-    ZuneDrawCircleOutlineAt(rctx, 240, 200, 40, ZUNE_MAGENTA);
-    ZuneDrawCircleOutlineStyledAt(rctx, 360, 200, 40, 5, ZUNE_CYAN);
+    ZuneDrawCircle(rctx, ZUNE_POINT_PTR(120, 200), 40,
+                   ZUNE_STYLE(.border_color = ZUNE_YELLOW, .border_width = 1));
+    ZuneDrawCircle(rctx, ZUNE_POINT_PTR(240, 200), 40,
+                   ZUNE_STYLE(.border_color = ZUNE_MAGENTA, .border_width = 1));
+    ZuneDrawCircle(rctx, ZUNE_POINT_PTR(360, 200), 40,
+                   ZUNE_STYLE(.border_color = ZUNE_CYAN, .border_width = 5));
 
     /* Various sizes */
-    ZuneDrawCircleAt(rctx, 480, 90, 30, ZUNE_BRUSH_SOLID(ZUNE_WHITE));
-    ZuneDrawCircleAt(rctx, 480, 150, 25, ZUNE_BRUSH_SOLID(ZUNE_LIGHTGRAY));
-    ZuneDrawCircleAt(rctx, 480, 200, 20, ZUNE_BRUSH_SOLID(ZUNE_GRAY));
+    ZuneDrawCircle(rctx, ZUNE_POINT_PTR(480, 90), 30,
+                   ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_WHITE)));
+    ZuneDrawCircle(rctx, ZUNE_POINT_PTR(480, 150), 25,
+                   ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_LIGHTGRAY)));
+    ZuneDrawCircle(rctx, ZUNE_POINT_PTR(480, 200), 20,
+                   ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_GRAY)));
 
     /* Outlined with different styles */
-    ZuneDrawCircleOutlineAt(rctx, 120, 320, 35, ZUNE_RED);
-    ZuneDrawCircleOutlineStyledAt(rctx, 240, 320, 30, 3, ZUNE_GREEN);
-    ZuneDrawCircleOutlineStyledAt(rctx, 360, 320, 25, 2, ZUNE_BLUE);
+    ZuneDrawCircle(rctx, ZUNE_POINT_PTR(120, 320), 35,
+                   ZUNE_STYLE(.border_color = ZUNE_RED, .border_width = 1));
+    ZuneDrawCircle(rctx, ZUNE_POINT_PTR(240, 320), 30,
+                   ZUNE_STYLE(.border_color = ZUNE_GREEN, .border_width = 3));
+    ZuneDrawCircle(rctx, ZUNE_POINT_PTR(360, 320), 25,
+                   ZUNE_STYLE(.border_color = ZUNE_BLUE, .border_width = 2));
 
     /* Overlapping semi-transparent */
-    ZuneDrawCircleAt(rctx, 480, 280, 45,
-                     ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(128, 255, 255, 0)));
-    ZuneDrawCircleOutlineStyledAt(rctx, 500, 300, 40, 4,
-                                  ZUNE_COLOR_ARGB32(128, 0, 255, 255));
+    ZuneDrawCircle(rctx, ZUNE_POINT_PTR(480, 280), 45,
+                   ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(128, 255, 255, 0))));
+    ZuneDrawCircle(rctx, ZUNE_POINT_PTR(500, 300), 40,
+                   ZUNE_STYLE(.border_color = ZUNE_COLOR_ARGB32(128, 0, 255, 255),
+                              .border_width = 4));
 
     /* Small circles */
-    ZuneDrawCircleAt(rctx, 520, 350, 15,
-                     ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(200, 255, 128, 64)));
-    ZuneDrawCircleOutlineAt(rctx, 550, 370, 12,
-                            ZUNE_COLOR_ARGB32(200, 64, 255, 128));
+    ZuneDrawCircle(rctx, ZUNE_POINT_PTR(520, 350), 15,
+                   ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(200, 255, 128, 64))));
+    ZuneDrawCircle(rctx, ZUNE_POINT_PTR(550, 370), 12,
+                   ZUNE_STYLE(.border_color = ZUNE_COLOR_ARGB32(200, 64, 255, 128),
+                              .border_width = 1));
 }
 
 int main(int argc, char **argv)

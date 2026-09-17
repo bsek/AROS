@@ -27,9 +27,18 @@ static void RunSyncDemo(struct DemoContext *ctx)
     ZuneDrawTextAt(rctx, 20, 10, "Test 1: ZuneGfx only", 20, ZUNE_WHITE);
     ZuneClearDrawingBoard(rctx, ZUNE_COLOR_RGB24(30, 30, 40));
 
-    ZuneFillRectangleRoundedAAXYWH(rctx, 50, 30, 100, 80, 15, ZUNE_BRUSH_SOLID(ZUNE_RED));
-    ZuneFillRectangleRoundedAAXYWH(rctx, 170, 30, 100, 80, 15, ZUNE_BRUSH_SOLID(ZUNE_GREEN));
-    ZuneFillRectangleRoundedAAXYWH(rctx, 290, 30, 100, 80, 15, ZUNE_BRUSH_SOLID(ZUNE_BLUE));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(50, 30, 100, 80),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_RED),
+                            .corner_radius = 15,
+                            .flags = ZUNE_SHAPE_ANTIALIAS));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(170, 30, 100, 80),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_GREEN),
+                            .corner_radius = 15,
+                            .flags = ZUNE_SHAPE_ANTIALIAS));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(290, 30, 100, 80),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_BLUE),
+                            .corner_radius = 15,
+                            .flags = ZUNE_SHAPE_ANTIALIAS));
 
     DemoPresent(ctx);
     printf("  Test 1 done (pure ZuneGfx). Press ENTER...\n");
@@ -38,7 +47,10 @@ static void RunSyncDemo(struct DemoContext *ctx)
     /* Test 2: ZuneSync - copy FBO to bitmap, then CyberGfx draws */
     ZuneDrawTextAt(rctx, 20, 10, "Test 2: ZuneSync + CyberGfx", 27, ZUNE_WHITE);
     ZuneClearDrawingBoard(rctx, ZUNE_COLOR_RGB24(30, 30, 40));
-    ZuneFillRectangleRoundedAAXYWH(rctx, 50, 30, 100, 80, 15, ZUNE_BRUSH_SOLID(ZUNE_RED));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(50, 30, 100, 80),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_RED),
+                            .corner_radius = 15,
+                            .flags = ZUNE_SHAPE_ANTIALIAS));
 
     printf("  Calling ZuneSync...\n");
     ZuneSync(rctx);
@@ -54,7 +66,10 @@ static void RunSyncDemo(struct DemoContext *ctx)
     ZuneReload(rctx);
 
     /* More ZuneGfx drawing on top */
-    ZuneFillRectangleRoundedAAXYWH(rctx, 350, 30, 100, 80, 15, ZUNE_BRUSH_SOLID(ZUNE_CYAN));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(350, 30, 100, 80),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_CYAN),
+                            .corner_radius = 15,
+                            .flags = ZUNE_SHAPE_ANTIALIAS));
 
     DemoPresent(ctx);
     printf("  Test 2 done (Sync+CyberGfx+Reload). Press ENTER...\n");
@@ -70,7 +85,10 @@ static void RunSyncDemo(struct DemoContext *ctx)
         /* Draw content on source board */
         ZuneSetTarget(rctx, src_board);
         ZuneClearDrawingBoard(rctx, ZUNE_COLOR_ARGB32(255, 60, 60, 100));
-        ZuneFillRectangleRoundedAAXYWH(rctx, 20, 20, 160, 110, 20, ZUNE_BRUSH_SOLID(ZUNE_YELLOW));
+        ZuneDrawRect(rctx, ZUNE_RECT_PTR(20, 20, 160, 110),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_YELLOW),
+                            .corner_radius = 20,
+                            .flags = ZUNE_SHAPE_ANTIALIAS));
         ZuneDrawTextAt(rctx, 50, 65, "Source", 6, ZUNE_BLACK);
 
         /* Switch back to main board */

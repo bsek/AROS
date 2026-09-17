@@ -420,6 +420,18 @@ struct ZuneTextureStyle {
   ULONG flags;                   /* ZUNE_TEXTURE_TILE */
 };
 
+/*
+ * Style literals. One macro covers every combination, so the axes stay
+ * parameters instead of turning into more entry points:
+ *
+ *   ZuneDrawRect(rctx, ZUNE_RECT_PTR(10, 10, 80, 40),
+ *                ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_RED),
+ *                           .corner_radius = 6,
+ *                           .flags = ZUNE_SHAPE_ANTIALIAS));
+ */
+#define ZUNE_STYLE(...)    (&(struct ZuneShapeStyle){__VA_ARGS__})
+#define ZUNE_TEXSTYLE(...) (&(struct ZuneTextureStyle){__VA_ARGS__})
+
 void ZuneDrawRect(struct RenderContext *rctx, const struct ZuneRect *rect,
                   const struct ZuneShapeStyle *style);
 void ZuneDrawCircle(struct RenderContext *rctx, const struct ZunePoint *center,

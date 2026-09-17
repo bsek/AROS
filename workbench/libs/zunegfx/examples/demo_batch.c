@@ -53,8 +53,8 @@ static void RunBatchDemo(struct DemoContext *ctx)
         UBYTE r = (UBYTE)(50 + i * 4);
         UBYTE g = (UBYTE)(200 - i * 3);
         UBYTE b = (UBYTE)(100 + i * 2);
-        ZuneDrawRectangleXYWH(rctx, 20 + i * 10, y, 30, 20,
-                              ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(200, r, g, b)));
+        ZuneDrawRect(rctx, ZUNE_RECT_PTR(20 + i * 10, y, 30, 20),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(200, r, g, b))));
     }
     y += 30;
 
@@ -80,8 +80,8 @@ static void RunBatchDemo(struct DemoContext *ctx)
     for (int i = 0; i < 30; i++) {
         UBYTE r = (UBYTE)(255 - i * 8);
         UBYTE g = (UBYTE)(i * 8);
-        ZuneDrawCircleAt(rctx, 35 + i * 18, y + 15, 8,
-                         ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(200, r, g, 128)));
+        ZuneDrawCircle(rctx, ZUNE_POINT_PTR(35 + i * 18, y + 15), 8,
+                   ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(200, r, g, 128))));
     }
     y += 40;
 

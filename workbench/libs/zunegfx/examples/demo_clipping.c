@@ -23,9 +23,12 @@ static void RunClippingDemo(struct DemoContext *ctx)
 
     /* No clipping - reference */
     ZuneDrawTextAt(rctx, 20, 10, "No clipping (reference):", 24, ZUNE_WHITE);
-    ZuneDrawRectangleXYWH(rctx, 20, 30, 150, 100, ZUNE_BRUSH_SOLID(ZUNE_RED));
-    ZuneDrawRectangleXYWH(rctx, 50, 50, 150, 100, ZUNE_BRUSH_SOLID(ZUNE_GREEN));
-    ZuneDrawRectangleXYWH(rctx, 80, 70, 150, 100, ZUNE_BRUSH_SOLID(ZUNE_BLUE));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(20, 30, 150, 100),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_RED)));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(50, 50, 150, 100),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_GREEN)));
+    ZuneDrawRect(rctx, ZUNE_RECT_PTR(80, 70, 150, 100),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_BLUE)));
 
     /* Rectangular clip region */
     ZuneDrawTextAt(rctx, 300, 10, "Rectangular clip:", 17, ZUNE_WHITE);
@@ -34,14 +37,18 @@ static void RunClippingDemo(struct DemoContext *ctx)
         struct Region *region = ZuneCreateRoundedRectRegion(&clip_rect, 0);
         if (region) {
             ZuneSetClipRegion(rctx, region);
-            ZuneDrawRectangleXYWH(rctx, 280, 20, 150, 100, ZUNE_BRUSH_SOLID(ZUNE_RED));
-            ZuneDrawRectangleXYWH(rctx, 310, 40, 150, 100, ZUNE_BRUSH_SOLID(ZUNE_GREEN));
-            ZuneDrawRectangleXYWH(rctx, 340, 60, 150, 100, ZUNE_BRUSH_SOLID(ZUNE_BLUE));
+            ZuneDrawRect(rctx, ZUNE_RECT_PTR(280, 20, 150, 100),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_RED)));
+            ZuneDrawRect(rctx, ZUNE_RECT_PTR(310, 40, 150, 100),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_GREEN)));
+            ZuneDrawRect(rctx, ZUNE_RECT_PTR(340, 60, 150, 100),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_BLUE)));
             ZuneClearClipRegion(rctx);
             DisposeRegion(region);
         }
         /* Show clip boundary */
-        ZuneDrawRectangleOutlineXYWH(rctx, 300, 30, 120, 80, ZUNE_YELLOW);
+        ZuneDrawRect(rctx, ZUNE_RECT_PTR(300, 30, 120, 80),
+                 ZUNE_STYLE(.border_color = ZUNE_YELLOW, .border_width = 1));
     }
 
     /* Circle clip region */
@@ -51,12 +58,15 @@ static void RunClippingDemo(struct DemoContext *ctx)
         struct Region *region = ZuneCreateCircleRegion(&center, 60);
         if (region) {
             ZuneSetClipRegion(rctx, region);
-            ZuneDrawRectangleXYWH(rctx, 40, 170, 160, 140, ZUNE_BRUSH_SOLID(ZUNE_RED));
-            ZuneDrawRectangleXYWH(rctx, 70, 190, 160, 140, ZUNE_BRUSH_SOLID(ZUNE_GREEN));
+            ZuneDrawRect(rctx, ZUNE_RECT_PTR(40, 170, 160, 140),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_RED)));
+            ZuneDrawRect(rctx, ZUNE_RECT_PTR(70, 190, 160, 140),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_GREEN)));
             ZuneClearClipRegion(rctx);
             DisposeRegion(region);
         }
-        ZuneDrawCircleOutlineAt(rctx, 120, 240, 60, ZUNE_YELLOW);
+        ZuneDrawCircle(rctx, ZUNE_POINT_PTR(120, 240), 60,
+                   ZUNE_STYLE(.border_color = ZUNE_YELLOW, .border_width = 1));
     }
 
     /* Rounded rect clip */
@@ -70,13 +80,16 @@ static void RunClippingDemo(struct DemoContext *ctx)
             for (int i = 0; i < 15; i++) {
                 ULONG color = (i % 2) ? ZUNE_COLOR_ARGB32(255, 100, 100, 200)
                                       : ZUNE_COLOR_ARGB32(255, 200, 100, 100);
-                ZuneDrawRectangleXYWH(rctx, 300, 175 + i * 7, 150, 7,
-                                      ZUNE_BRUSH_SOLID(color));
+                ZuneDrawRect(rctx, ZUNE_RECT_PTR(300, 175 + i * 7, 150, 7),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(color)));
             }
             ZuneClearClipRegion(rctx);
             DisposeRegion(region);
         }
-        ZuneDrawRectangleRoundedOutlineXYWH(rctx, 300, 175, 150, 100, 20, ZUNE_YELLOW);
+        ZuneDrawRect(rctx, ZUNE_RECT_PTR(300, 175, 150, 100),
+                 ZUNE_STYLE(.border_color = ZUNE_YELLOW,
+                            .border_width = 1,
+                            .corner_radius = 20));
     }
 
     /* Combined regions using OrRegionRegion */
@@ -96,8 +109,8 @@ static void RunClippingDemo(struct DemoContext *ctx)
             /* Draw gradient background to show combined clip shape */
             for (int y = 340; y < 460; y++) {
                 UBYTE v = (UBYTE)((y - 340) * 255 / 120);
-                ZuneDrawRectangleXYWH(rctx, 50, y, 200, 1,
-                                      ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(255, v, 100, (UBYTE)(255 - v))));
+                ZuneDrawRect(rctx, ZUNE_RECT_PTR(50, y, 200, 1),
+                 ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(255, v, 100, (UBYTE)(255 - v)))));
             }
 
             ZuneClearClipRegion(rctx);
