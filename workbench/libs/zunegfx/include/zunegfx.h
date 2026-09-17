@@ -396,8 +396,8 @@ struct ZuneBrush {
                                    color)                                      \
   ZuneDrawLineStyledAA((rctx), ZUNE_POINT_PTR((startX), (startY)),               \
                        ZUNE_POINT_PTR((endX), (endY)), (width), (color))
-#define GetPixelAt(rctx, x, y) ZuneGetPixel((rctx), ZUNE_POINT_PTR((x), (y)))
-#define SetPixelAt(rctx, x, y, color)                                            \
+#define ZuneGetPixelAt(rctx, x, y) ZuneGetPixel((rctx), ZUNE_POINT_PTR((x), (y)))
+#define ZuneSetPixelAt(rctx, x, y, color)                                            \
   ZuneSetPixel((rctx), ZUNE_POINT_PTR((x), (y)), (color))
 
 /*
@@ -619,9 +619,9 @@ void ZuneClearDrawingBoard(struct RenderContext *rctx, ULONG color);
 /*****************************************************************************/
 
 /* Basic filled shapes */
-void ZuneDrawRectangle(struct RenderContext *rctx, struct ZuneRect *rect,
+void ZuneFillRectangle(struct RenderContext *rctx, struct ZuneRect *rect,
                        const struct ZuneBrush *brush);
-void ZuneDrawCircle(struct RenderContext *rctx, struct ZunePoint *center,
+void ZuneFillCircle(struct RenderContext *rctx, struct ZunePoint *center,
                     UBYTE radius, const struct ZuneBrush *brush);
 
 /* Shape outlines */
@@ -639,8 +639,8 @@ void ZuneDrawCircleOutlineStyled(struct RenderContext *rctx,
                                  UBYTE lineWidth, ULONG color);
 
 /* Rounded rectangles */
-void ZuneDrawRectangleRounded(struct RenderContext *rctx, struct ZuneRect *rect,
-                              UBYTE cornerRadius,
+void ZuneFillRectangleRounded(struct RenderContext *rctx,
+                              struct ZuneRect *rect, UBYTE cornerRadius,
                               const struct ZuneBrush *brush);
 void ZuneDrawRectangleRoundedOutline(struct RenderContext *rctx,
                                      struct ZuneRect *rect, UBYTE cornerRadius,
@@ -933,6 +933,8 @@ void ZuneDrawPolyline(struct RenderContext *rctx, struct ZunePoint *points,
 /*
  * ZuneDrawPolylineStyled - Draw connected line segments with custom width
  */
+void ZuneDrawPolyline(struct RenderContext *rctx, struct ZunePoint *points,
+                      UWORD count, ULONG color);
 void ZuneDrawPolylineStyled(struct RenderContext *rctx, struct ZunePoint *points,
                             UWORD count, UWORD lineWidth, ULONG color);
 
@@ -962,6 +964,9 @@ void ZuneInitPenCache(struct RenderContext *rctx, LONG *pens, UWORD count);
 /*****************************************************************************/
 /* Tag-Based Creation API                                                    */
 /*****************************************************************************/
+
+/* OpenGL interop */
+APTR ZuneGetMasterGLContext(void);
 
 struct RenderContext *ZuneCreateRenderContextA(struct TagItem *tags);
 struct DrawingBoard *ZuneCreateDrawingBoardA(struct TagItem *tags);
