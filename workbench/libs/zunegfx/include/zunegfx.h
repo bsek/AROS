@@ -52,13 +52,14 @@
 #define BACKEND_SOFTWARE 1
 #define BACKEND_CYBERGFX 2
 #define BACKEND_OPENGL 3
-#define BACKEND_COUNT 3
+#define BACKEND_COUNT 3 /* real backends, not counting BEST_AVAILABLE */
 
 /*****************************************************************************/
 /* Color System */
 /*****************************************************************************/
 
-/* Color creation macros */
+/* Every colour in this API is logical 0xAARRGGBB, whatever the target's
+ * pixel format happens to be. The library converts on the way in. */
 #define ZUNE_COLOR_ARGB32(a, r, g, b)                                          \
   (((ULONG)(a) << 24) | ((ULONG)(r) << 16) | ((ULONG)(g) << 8) | (ULONG)(b))
 #define ZUNE_COLOR_RGB24(r, g, b) ZUNE_COLOR_ARGB32(255, r, g, b)
@@ -90,9 +91,8 @@
 #define ZUNE_DRAWINGBOARD_HARDWARE                                             \
   (1 << 0) /* Use hardware acceleration if available */
 #define ZUNE_DRAWINGBOARD_ALPHA (1 << 1)  /* Support alpha blending */
-#define ZUNE_DRAWINGBOARD_CACHED (1 << 2) /* Cache in video memory */
-#define ZUNE_DRAWINGBOARD_TEMP                                                 \
-  (1 << 3) /* Temporary surface, optimize for short usage */
+#define ZUNE_DRAWINGBOARD_CACHED (1 << 2) /* Set on every board; nothing reads it */
+#define ZUNE_DRAWINGBOARD_TEMP (1 << 3)   /* Accepted and ignored */
 #define ZUNE_DRAWINGBOARD_LINEARMEM                                            \
   (1 << 4) /* Force linear memory for direct pixel access (no friend bitmap) */
 
@@ -100,13 +100,15 @@
 /* Texture Flags */
 /*****************************************************************************/
 
-#define ZUNE_TEXTURE_HARDWARE (1 << 0)  /* Prefer hardware storage */
-#define ZUNE_TEXTURE_MIPMAPS (1 << 1)   /* Generate mipmaps */
-#define ZUNE_TEXTURE_FILTERING (1 << 2) /* Enable texture filtering */
-#define ZUNE_TEXTURE_WRAPPING (1 << 3)  /* Enable texture wrapping */
-#define ZUNE_TEXTURE_DYNAMIC (1 << 4)   /* Frequently updated texture */
-#define ZUNE_TEXTURE_ALPHA (1 << 5)     /* Support alpha blending */
-#define ZUNE_TEXTURE_OPAQUE (1 << 6)    /* All pixels fully opaque (optimization) */
+/* Only ALPHA and OPAQUE do anything today. The rest are accepted and
+ * ignored: no code path reads them. */
+#define ZUNE_TEXTURE_HARDWARE (1 << 0)  /* Ignored */
+#define ZUNE_TEXTURE_MIPMAPS (1 << 1)   /* Ignored */
+#define ZUNE_TEXTURE_FILTERING (1 << 2) /* Ignored */
+#define ZUNE_TEXTURE_WRAPPING (1 << 3)  /* Ignored; see ZuneBrush wrap_u/wrap_v */
+#define ZUNE_TEXTURE_DYNAMIC (1 << 4)   /* Ignored */
+#define ZUNE_TEXTURE_ALPHA (1 << 5)     /* Texture has a meaningful alpha channel */
+#define ZUNE_TEXTURE_OPAQUE (1 << 6)    /* All pixels fully opaque (skips blending) */
 
 /*****************************************************************************/
 /* Texture Formats */
@@ -136,7 +138,7 @@
 #define ZUNE_DrawingBoard_Height       (ZUNE_TAG_BASE + 18)   /* UWORD               (required) */
 #define ZUNE_DrawingBoard_Flags        (ZUNE_TAG_BASE + 19)   /* ULONG               (default: 0) */
 
-/* Texture creation tags (ZuneCreateTextureA - unified) */
+/* Texture creation tags (ZuneCreateTextureTags) */
 #define ZUNE_Texture_RenderContext     (ZUNE_TAG_BASE + 32)   /* struct RenderContext * (optional) */
 #define ZUNE_Texture_Width             (ZUNE_TAG_BASE + 33)   /* UWORD               (required unless Source*) */
 #define ZUNE_Texture_Height            (ZUNE_TAG_BASE + 34)   /* UWORD               (required unless Source*) */
@@ -145,7 +147,7 @@
 #define ZUNE_Texture_Flags             (ZUNE_TAG_BASE + 37)   /* ULONG               (default: 0) */
 #define ZUNE_Texture_Data              (ZUNE_TAG_BASE + 38)   /* APTR pixel data     (optional) */
 #define ZUNE_Texture_Pitch             (ZUNE_TAG_BASE + 39)   /* ULONG bytes/row     (required if Data) */
-#define ZUNE_Texture_SourceDrawingBoard (ZUNE_TAG_BASE + 40)  /* BOOL - use rctx's target_board */
+#define ZUNE_Texture_SourceDrawingBoard (ZUNE_TAG_BASE + 40)  /* BOOL - capture the context's target board */
 #define ZUNE_Texture_SourceDatatype    (ZUNE_TAG_BASE + 41)   /* APTR dt_object      (optional) */
 #define ZUNE_Texture_SourceFile        (ZUNE_TAG_BASE + 42)   /* CONST_STRPTR        (optional) */
 
@@ -282,10 +284,10 @@ struct ZuneBrush {
                ZUNE_POINT_PTR((endX), (endY)), (style))
 
 /*****************************************************************************/
-/* Opaque objects                                                            */
+/* Drawing Styles                                                            */
 /*****************************************************************************/
-/* Shapes and textures                                                       */
-/*****************************************************************************/
+
+#define ZUNE_SHAPE_ANTIALIAS  (1 << 0)
 
 /*
  * How a shape is painted. A NULL fill leaves the interior alone; a zero
@@ -294,8 +296,6 @@ struct ZuneBrush {
  * Lines and polylines use the same struct: they are pure strokes, so they
  * read stroke_color, stroke_width and the flags and ignore the rest.
  */
-#define ZUNE_SHAPE_ANTIALIAS  (1 << 0)
-
 struct ZuneShapeStyle {
   const struct ZuneBrush *fill; /* NULL = no fill */
   ULONG stroke_color;           /* only read when stroke_width > 0 */
@@ -304,17 +304,27 @@ struct ZuneShapeStyle {
   ULONG flags;                  /* ZUNE_SHAPE_* */
 };
 
+#define ZUNE_TEXTURE_TILE     (1 << 0)
+
 /*
  * How a texture is painted. A NULL source takes the whole texture, a zero
  * tint means untinted, and a dest with zero width or height takes the
  * source's size.
  */
-#define ZUNE_TEXTURE_TILE     (1 << 0)
-
 struct ZuneTextureStyle {
   const struct ZuneRect *source; /* NULL = whole texture */
   ULONG tint;                    /* 0 = untinted */
   ULONG flags;                   /* ZUNE_TEXTURE_TILE */
+};
+
+/*
+ * How text is painted. A zero background means none, the same way a zero
+ * tint means untinted.
+ */
+struct ZuneTextStyle {
+  ULONG color;      /* glyph colour */
+  ULONG background; /* 0 = draw no background */
+  ULONG flags;      /* none defined yet */
 };
 
 /*
@@ -326,16 +336,6 @@ struct ZuneTextureStyle {
  *                           .corner_radius = 6,
  *                           .flags = ZUNE_SHAPE_ANTIALIAS));
  */
-/*
- * How text is painted. A zero background means none, the same way a zero
- * tint means untinted.
- */
-struct ZuneTextStyle {
-  ULONG color;      /* glyph colour */
-  ULONG background; /* 0 = draw no background */
-  ULONG flags;      /* reserved */
-};
-
 #define ZUNE_STYLE(...)     (&(struct ZuneShapeStyle){__VA_ARGS__})
 #define ZUNE_TEXSTYLE(...)  (&(struct ZuneTextureStyle){__VA_ARGS__})
 #define ZUNE_TEXTSTYLE(...) (&(struct ZuneTextStyle){__VA_ARGS__})
@@ -473,9 +473,10 @@ ULONG ZuneGetBatchCount(struct RenderContext *rctx);
  * - Screen RastPort to DrawingBoard
  * - Screen RastPort to screen RastPort
  *
- * Automatically syncs OpenGL FBO to bitmap when source is a DrawingBoard.
- * Use the helper macros (ZuneBlitBoards, ZuneBlitBoardToScreen, etc.)
- * for convenience when you need to set targets before blitting.
+ * Which combination you get follows from each context's current target, so
+ * call ZuneSetTarget() on both before blitting. Flushes any pending batch
+ * and syncs the backend's buffer (the OpenGL FBO) when the source is a
+ * DrawingBoard.
  */
 void ZuneBlit(struct RenderContext *src_rctx, struct RenderContext *dst_rctx,
               WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
@@ -509,14 +510,14 @@ void ZuneCapture(struct RenderContext *rctx, struct RastPort *src_rp,
                  WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
                  UWORD width, UWORD height);
 
-/**
+/*
  * Synchronize backend render buffer to DrawingBoard's bitmap.
  * For OpenGL: copies FBO to bitmap. For CyberGfx: no-op.
  * Call after Zune drawing and before direct bitmap operations.
  */
 BOOL ZuneSync(struct RenderContext *rctx);
 
-/**
+/*
  * Reload backend render buffer from DrawingBoard's bitmap.
  * For OpenGL: uploads bitmap to FBO. For CyberGfx: no-op.
  * Call after direct bitmap operations and before Zune drawing.
@@ -656,12 +657,17 @@ ULONG ZuneBlendColors(ULONG color1, ULONG color2, UBYTE alpha);
 void ZuneInitPenCache(struct RenderContext *rctx, LONG *pens, UWORD count);
 
 /*****************************************************************************/
+/* OpenGL Interop                                                            */
+/*****************************************************************************/
+
+APTR ZuneGetMasterGLContext(void);
+
+/*****************************************************************************/
 /* Tag-Based Creation API                                                    */
 /*****************************************************************************/
 
-/* OpenGL interop */
-APTR ZuneGetMasterGLContext(void);
-
+/* Equivalent to the fixed-argument creation calls above, and the only way to
+ * reach every texture source through one entry point. */
 struct RenderContext *ZuneCreateRenderContextA(struct TagItem *tags);
 struct DrawingBoard *ZuneCreateDrawingBoardA(struct TagItem *tags);
 struct ZuneTexture *ZuneCreateTextureTagList(struct TagItem *tags);
