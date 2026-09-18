@@ -276,47 +276,10 @@ struct ZuneBrush {
   (&(struct ZuneRect){(WORD)(x), (WORD)(y), (UWORD)(w), (UWORD)(h)})
 #define ZUNE_POINT_PTR(x, y) (&(struct ZunePoint){(WORD)(x), (WORD)(y)})
 
-/* Convenience macros for coordinate-based calls */
+/* Lines are the one call taking two points, so spelling them out is worth it */
 #define ZuneDrawLinePoints(rctx, startX, startY, endX, endY, style)              \
   ZuneDrawLine((rctx), ZUNE_POINT_PTR((startX), (startY)),                       \
                ZUNE_POINT_PTR((endX), (endY)), (style))
-#define ZuneDrawPixelAt(rctx, x, y, color)                                       \
-  ZuneDrawPixel((rctx), ZUNE_POINT_PTR((x), (y)), (color))
-#define ZuneGetPixelAt(rctx, x, y) ZuneGetPixel((rctx), ZUNE_POINT_PTR((x), (y)))
-#define ZuneSetPixelAt(rctx, x, y, color)                                            \
-  ZuneSetPixel((rctx), ZUNE_POINT_PTR((x), (y)), (color))
-
-/*
- * Blit helper macros - set target before blitting for convenience
- */
-
-/* Blit from DrawingBoard to DrawingBoard */
-#define ZuneBlitBoards(src_rctx, dst_rctx, src_x, src_y, dst_x, dst_y, w, h)       \
-  do {                                                                         \
-    ZuneSetTarget((src_rctx), (src_rctx)->target_board);                           \
-    ZuneSetTarget((dst_rctx), (dst_rctx)->target_board);                           \
-    ZuneBlit((src_rctx), (dst_rctx), (src_x), (src_y), (dst_x), (dst_y), (w), (h));\
-  } while (0)
-
-/* Blit from DrawingBoard to screen RastPort */
-#define ZuneBlitBoardToScreen(src_rctx, dst_rctx, src_x, src_y, dst_x, dst_y, w, h)\
-  do {                                                                         \
-    ZuneSetTarget((src_rctx), (src_rctx)->target_board);                           \
-    ZuneSetTarget((dst_rctx), NULL);                                             \
-    ZuneBlit((src_rctx), (dst_rctx), (src_x), (src_y), (dst_x), (dst_y), (w), (h));\
-  } while (0)
-
-/* Blit from screen RastPort to DrawingBoard */
-#define ZuneBlitScreenToBoard(src_rctx, dst_rctx, src_x, src_y, dst_x, dst_y, w, h)\
-  do {                                                                         \
-    ZuneSetTarget((src_rctx), NULL);                                             \
-    ZuneSetTarget((dst_rctx), (dst_rctx)->target_board);                           \
-    ZuneBlit((src_rctx), (dst_rctx), (src_x), (src_y), (dst_x), (dst_y), (w), (h));\
-  } while (0)
-#define ZuneCreateCircleRegionAt(cx, cy, radius)                               \
-  ZuneCreateCircleRegion(ZUNE_POINT_PTR((cx), (cy)), (radius))
-#define ZuneCreateRoundedRectRegionRect(x, y, w, h, radius)                    \
-  ZuneCreateRoundedRectRegion(ZUNE_RECT_PTR((x), (y), (w), (h)), (radius))
 
 /*****************************************************************************/
 /* Opaque objects                                                            */
