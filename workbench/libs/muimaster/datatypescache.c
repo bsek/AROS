@@ -793,7 +793,7 @@ struct dt_node *dt_load_picture(CONST_STRPTR filename, struct Screen *scr)
      * Pass NULL for RenderContext since we don't have one at cache time.
      */
     node->texture = ZuneCreateTextureFromFile(NULL, filename,
-                                          ZUNE_TEXTURE_WRAPPING | ZUNE_TEXTURE_ALPHA);
+                                          ZUNE_TEXTURE_ALPHA);
     
     if (node->texture)
     {

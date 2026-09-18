@@ -425,7 +425,7 @@ struct DrawingBoard *CreateDrawingBoardForRenderContextInternal(
   board->width = width;
   board->height = height;
   board->depth = depth;
-  board->flags = flags | ZUNE_DRAWINGBOARD_CACHED;
+  board->flags = flags;
 
   /* Store parent window for OpenGL FBO support */
   if (rctx->window) {

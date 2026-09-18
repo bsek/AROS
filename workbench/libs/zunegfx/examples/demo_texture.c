@@ -49,7 +49,7 @@ static void RunTextureDemo(struct DemoContext *ctx)
 
     tex = ZuneCreateTextureFromData(rctx, pixel_data, tex_w, tex_h, 32,
                                     ZUNE_TEXTURE_FORMAT_ARGB32, tex_w * 4,
-                                    ZUNE_TEXTURE_HARDWARE);
+                                    0);
     if (!tex) {
         printf("ERROR: Cannot create texture\n");
         FreeMem(pixel_data, data_size);
@@ -148,7 +148,7 @@ static void RunTextureDemo(struct DemoContext *ctx)
     {
         struct ZuneTexture *ftex = ZuneCreateTextureFromFile(rctx,
                                        "PROGDIR:testimage.png",
-                                       ZUNE_TEXTURE_HARDWARE);
+                                       0);
         if (ftex) {
             printf("  TextureFromFile: valid=%d\n", ZuneIsTextureValid(ftex));
 
@@ -178,7 +178,7 @@ static void RunTextureDemo(struct DemoContext *ctx)
             ZuneDrawCircle(rctx, ZUNE_POINT_PTR(90, 90), 25,
                    ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_GREEN)));
 
-            struct ZuneTexture *btex = ZuneCreateTextureFromDrawingBoard(rctx, ZUNE_TEXTURE_HARDWARE);
+            struct ZuneTexture *btex = ZuneCreateTextureFromDrawingBoard(rctx, 0);
             ZuneSetTarget(rctx, ctx->board);
 
             if (btex) {

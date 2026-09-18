@@ -417,7 +417,6 @@ void CleanupZuneGfx(struct IntZuneGfxBase *base);
 BOOL InitializeZuneGfx(struct IntZuneGfxBase *base);
 
 /* Utilities */
-ULONG BlendColorsInternal(ULONG color1, ULONG color2, ULONG alpha);
 
 /* Texture management */
 void AddTextureToList(struct IntZuneGfxBase *base,

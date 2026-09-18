@@ -91,8 +91,6 @@
 #define ZUNE_DRAWINGBOARD_HARDWARE                                             \
   (1 << 0) /* Use hardware acceleration if available */
 #define ZUNE_DRAWINGBOARD_ALPHA (1 << 1)  /* Support alpha blending */
-#define ZUNE_DRAWINGBOARD_CACHED (1 << 2) /* Set on every board; nothing reads it */
-#define ZUNE_DRAWINGBOARD_TEMP (1 << 3)   /* Accepted and ignored */
 #define ZUNE_DRAWINGBOARD_LINEARMEM                                            \
   (1 << 4) /* Force linear memory for direct pixel access (no friend bitmap) */
 
@@ -100,15 +98,8 @@
 /* Texture Flags */
 /*****************************************************************************/
 
-/* Only ALPHA and OPAQUE do anything today. The rest are accepted and
- * ignored: no code path reads them. */
-#define ZUNE_TEXTURE_HARDWARE (1 << 0)  /* Ignored */
-#define ZUNE_TEXTURE_MIPMAPS (1 << 1)   /* Ignored */
-#define ZUNE_TEXTURE_FILTERING (1 << 2) /* Ignored */
-#define ZUNE_TEXTURE_WRAPPING (1 << 3)  /* Ignored; see ZuneBrush wrap_u/wrap_v */
-#define ZUNE_TEXTURE_DYNAMIC (1 << 4)   /* Ignored */
-#define ZUNE_TEXTURE_ALPHA (1 << 5)     /* Texture has a meaningful alpha channel */
-#define ZUNE_TEXTURE_OPAQUE (1 << 6)    /* All pixels fully opaque (skips blending) */
+#define ZUNE_TEXTURE_ALPHA (1 << 0)  /* Texture has a meaningful alpha channel */
+#define ZUNE_TEXTURE_OPAQUE (1 << 1) /* All pixels fully opaque (skips blending) */
 
 /*****************************************************************************/
 /* Texture Formats */
@@ -431,15 +422,7 @@ void ZuneDrawLine(struct RenderContext *rctx, struct ZunePoint *start,
 /* Single pixel */
 void ZuneDrawPixel(struct RenderContext *rctx, struct ZunePoint *point, ULONG color);
 
-/*****************************************************************************/
-/* Antialiasing */
-/*****************************************************************************/
-
-/* Everything that can be antialiased takes ZUNE_SHAPE_ANTIALIAS in its
- * style. The quality setting applies to all of them. */
-
-void ZuneSetAntialiasingQuality(struct RenderContext *rctx, UBYTE quality);
-UBYTE ZuneGetAntialiasingQuality(struct RenderContext *rctx);
+/* Antialiasing is a per-call style flag: ZUNE_SHAPE_ANTIALIAS. */
 
 /*****************************************************************************/
 /* Direct Pixel Access */
@@ -641,14 +624,6 @@ void ZuneDrawPolyline(struct RenderContext *rctx, struct ZunePoint *points,
  */
 void ZuneFillPolygon(struct RenderContext *rctx, struct ZunePoint *points,
                      UWORD count, const struct ZuneShapeStyle *style);
-
-/*****************************************************************************/
-/* Color Utilities */
-/*****************************************************************************/
-
-ULONG ZuneRGBToColor(UBYTE r, UBYTE g, UBYTE b);
-ULONG ZuneARGBToColor(UBYTE a, UBYTE r, UBYTE g, UBYTE b);
-ULONG ZuneBlendColors(ULONG color1, ULONG color2, UBYTE alpha);
 
 /*****************************************************************************/
 /* Cache Utilities */

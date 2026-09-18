@@ -89,7 +89,7 @@ static void DrawRectangles(struct DemoContext *ctx)
     {
         struct ZuneTexture *ptex = ZuneCreateTextureFromFile(rctx,
                                        "PROGDIR:testimage.png",
-                                       ZUNE_TEXTURE_WRAPPING);
+                                       0);
         if (ptex) {
             struct ZuneBrush tex_brush = {
                 .type = ZUNE_BRUSH_TYPE_TEXTURE,

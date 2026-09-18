@@ -193,7 +193,7 @@ static void DrawPolygons(struct DemoContext *ctx)
     {
         struct ZuneTexture *img_tex = ZuneCreateTextureFromFile(rctx,
                                           "PROGDIR:testimage.png",
-                                          ZUNE_TEXTURE_WRAPPING);
+                                          0);
         if (img_tex) {
             struct ZuneBrush tex_brush = {
                 .type = ZUNE_BRUSH_TYPE_TEXTURE,

@@ -11,7 +11,6 @@
 
 #define CYBERGFX_AA_SMOOTHNESS 0.8f /* Sharper edges for UI elements */
 #define CYBERGFX_AA_MIN_ALPHA_THRESHOLD 0.005f
-extern WORD cybergfx_aa_quality;
 extern float cybergfx_aa_smoothness;
 
 /*

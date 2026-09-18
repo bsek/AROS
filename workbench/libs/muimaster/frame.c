@@ -249,7 +249,7 @@ static BOOL frame_renderer_background_to_brush(struct MUI_ImageSpec_intern *back
             cached = TRUE;
         } else if (node->o) {
             /* Legacy fallback: create texture from DataTypes object */
-            tex = ZuneCreateTextureFromDatatype(NULL, (APTR)node->o, ZUNE_TEXTURE_WRAPPING);
+            tex = ZuneCreateTextureFromDatatype(NULL, (APTR)node->o, 0);
             if (tex) {
                 node->texture = tex;
                 ZuneRetainTexture(tex); /* retain while brush is in use */
