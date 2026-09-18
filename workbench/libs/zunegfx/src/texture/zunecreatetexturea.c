@@ -37,7 +37,6 @@ AROS_LH1(struct ZuneTexture *, ZuneCreateTextureTagList,
     APTR data;
     CONST_STRPTR filename;
     APTR dt_object;
-    struct Screen *screen;
     BOOL from_board;
 
     ENTER_FUNCTION("ZuneCreateTextureTagList");
@@ -62,7 +61,6 @@ AROS_LH1(struct ZuneTexture *, ZuneCreateTextureTagList,
     from_board = (BOOL)LibGetTagData(ZUNE_Texture_SourceDrawingBoard, FALSE, tags);
     data       = (APTR)LibGetTagData(ZUNE_Texture_Data, 0, tags);
     pitch      = (ULONG)LibGetTagData(ZUNE_Texture_Pitch, 0, tags);
-    screen     = (struct Screen *)LibGetTagData(ZUNE_Texture_Screen, 0, tags);
 
     D(bug("ZuneGfx: ZuneCreateTextureTagList(rctx=%p, %dx%d, depth=%d, fmt=0x%x, flags=0x%x)\n",
           rctx, width, height, depth, format, flags));

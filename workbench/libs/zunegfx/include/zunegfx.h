@@ -148,7 +148,6 @@
 #define ZUNE_Texture_SourceDrawingBoard (ZUNE_TAG_BASE + 40)  /* BOOL - use rctx's target_board */
 #define ZUNE_Texture_SourceDatatype    (ZUNE_TAG_BASE + 41)   /* APTR dt_object      (optional) */
 #define ZUNE_Texture_SourceFile        (ZUNE_TAG_BASE + 42)   /* CONST_STRPTR        (optional) */
-#define ZUNE_Texture_Screen            (ZUNE_TAG_BASE + 43)   /* struct Screen *     (for file loading) */
 
 /*****************************************************************************/
 /* Core Structures */
@@ -579,7 +578,6 @@ struct ZuneTexture *ZuneCreateTextureFromDatatype(struct RenderContext *rctx,
                                               APTR dt_object, ULONG flags);
 struct ZuneTexture *ZuneCreateTextureFromFile(struct RenderContext *rctx,
                                           CONST_STRPTR filename,
-                                          struct Screen *screen,
                                           ULONG flags);
 void ZuneDestroyTexture(struct RenderContext *rctx, struct ZuneTexture *texture);
 

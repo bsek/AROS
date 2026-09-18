@@ -148,7 +148,6 @@ static void RunTextureDemo(struct DemoContext *ctx)
     {
         struct ZuneTexture *ftex = ZuneCreateTextureFromFile(rctx,
                                        "PROGDIR:testimage.png",
-                                       ctx->window->WScreen,
                                        ZUNE_TEXTURE_HARDWARE);
         if (ftex) {
             printf("  TextureFromFile: valid=%d\n", ZuneIsTextureValid(ftex));

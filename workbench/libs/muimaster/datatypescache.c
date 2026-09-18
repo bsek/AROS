@@ -792,7 +792,7 @@ struct dt_node *dt_load_picture(CONST_STRPTR filename, struct Screen *scr)
      * This avoids keeping the DataTypes object around.
      * Pass NULL for RenderContext since we don't have one at cache time.
      */
-    node->texture = ZuneCreateTextureFromFile(NULL, filename, scr, 
+    node->texture = ZuneCreateTextureFromFile(NULL, filename,
                                           ZUNE_TEXTURE_WRAPPING | ZUNE_TEXTURE_ALPHA);
     
     if (node->texture)

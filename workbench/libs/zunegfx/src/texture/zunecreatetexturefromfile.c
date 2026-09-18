@@ -19,10 +19,9 @@
 #include "../zunegfx_intern.h"
 #include "texture_intern.h"
 
-AROS_LH4(struct ZuneTexture *, ZuneCreateTextureFromFile,
+AROS_LH3(struct ZuneTexture *, ZuneCreateTextureFromFile,
          AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(CONST_STRPTR, filename, A1),
-         AROS_LHA(struct Screen *, screen, A2),
          AROS_LHA(ULONG, flags, D0),
          struct Library *, ZuneGfxBase, 74, zunegfx)
 {
