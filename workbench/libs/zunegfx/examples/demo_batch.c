@@ -21,32 +21,38 @@ static void RunBatchDemo(struct DemoContext *ctx)
     int y;
 
     ZuneSetFont(rctx, ctx->window->RPort->Font);
-    ZuneDrawTextAt(rctx, 20, 10, "Batching Demo", 13, ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, 20, 10, "Batching Demo", 13,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
 
     y = 35;
 
     /* Show initial state */
     snprintf(buf, sizeof(buf), "Batching enabled: %s",
              ZuneIsBatchingEnabled(rctx) ? "YES" : "NO");
-    ZuneDrawTextAt(rctx, 20, y, buf, strlen(buf), ZUNE_LIGHTGRAY);
+    ZuneDrawTextAt(rctx, 20, y, buf, strlen(buf),
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
     y += 16;
 
     snprintf(buf, sizeof(buf), "Batch count: %lu", (unsigned long)ZuneGetBatchCount(rctx));
-    ZuneDrawTextAt(rctx, 20, y, buf, strlen(buf), ZUNE_LIGHTGRAY);
+    ZuneDrawTextAt(rctx, 20, y, buf, strlen(buf),
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
     y += 25;
 
     /* Begin batch */
-    ZuneDrawTextAt(rctx, 20, y, "--- BeginBatch ---", 18, ZUNE_CYAN);
+    ZuneDrawTextAt(rctx, 20, y, "--- BeginBatch ---", 18,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_CYAN));
     y += 16;
     ZuneBeginBatch(rctx);
 
     snprintf(buf, sizeof(buf), "Batching enabled: %s",
              ZuneIsBatchingEnabled(rctx) ? "YES" : "NO");
-    ZuneDrawTextAt(rctx, 20, y, buf, strlen(buf), ZUNE_LIGHTGRAY);
+    ZuneDrawTextAt(rctx, 20, y, buf, strlen(buf),
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
     y += 20;
 
     /* Draw multiple shapes in batch */
-    ZuneDrawTextAt(rctx, 20, y, "Drawing 50 rectangles in batch...", 33, ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, 20, y, "Drawing 50 rectangles in batch...", 33,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
     y += 16;
 
     for (int i = 0; i < 50; i++) {
@@ -60,21 +66,25 @@ static void RunBatchDemo(struct DemoContext *ctx)
 
     snprintf(buf, sizeof(buf), "Batch count after 50 rects: %lu",
              (unsigned long)ZuneGetBatchCount(rctx));
-    ZuneDrawTextAt(rctx, 20, y, buf, strlen(buf), ZUNE_LIGHTGRAY);
+    ZuneDrawTextAt(rctx, 20, y, buf, strlen(buf),
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
     y += 20;
 
     /* Flush mid-batch */
-    ZuneDrawTextAt(rctx, 20, y, "--- FlushBatch (mid-batch) ---", 30, ZUNE_CYAN);
+    ZuneDrawTextAt(rctx, 20, y, "--- FlushBatch (mid-batch) ---", 30,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_CYAN));
     y += 16;
     ZuneFlushBatch(rctx);
 
     snprintf(buf, sizeof(buf), "Batch count after flush: %lu",
              (unsigned long)ZuneGetBatchCount(rctx));
-    ZuneDrawTextAt(rctx, 20, y, buf, strlen(buf), ZUNE_LIGHTGRAY);
+    ZuneDrawTextAt(rctx, 20, y, buf, strlen(buf),
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
     y += 20;
 
     /* More drawing after flush */
-    ZuneDrawTextAt(rctx, 20, y, "Drawing 30 circles...", 21, ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, 20, y, "Drawing 30 circles...", 21,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
     y += 16;
 
     for (int i = 0; i < 30; i++) {
@@ -87,18 +97,21 @@ static void RunBatchDemo(struct DemoContext *ctx)
 
     snprintf(buf, sizeof(buf), "Batch count after 30 circles: %lu",
              (unsigned long)ZuneGetBatchCount(rctx));
-    ZuneDrawTextAt(rctx, 20, y, buf, strlen(buf), ZUNE_LIGHTGRAY);
+    ZuneDrawTextAt(rctx, 20, y, buf, strlen(buf),
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
     y += 20;
 
     /* End batch */
-    ZuneDrawTextAt(rctx, 20, y, "--- EndBatch ---", 16, ZUNE_CYAN);
+    ZuneDrawTextAt(rctx, 20, y, "--- EndBatch ---", 16,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_CYAN));
     y += 16;
     ZuneEndBatch(rctx);
 
     snprintf(buf, sizeof(buf), "Batching enabled: %s, count: %lu",
              ZuneIsBatchingEnabled(rctx) ? "YES" : "NO",
              (unsigned long)ZuneGetBatchCount(rctx));
-    ZuneDrawTextAt(rctx, 20, y, buf, strlen(buf), ZUNE_LIGHTGRAY);
+    ZuneDrawTextAt(rctx, 20, y, buf, strlen(buf),
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
 }
 
 int main(int argc, char **argv)

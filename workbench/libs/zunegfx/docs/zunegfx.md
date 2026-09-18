@@ -369,19 +369,6 @@ adds `tf_Baseline` internally.
 ZuneDrawTextAt(rctx, 20, 50, "Hello, AROS!", 12, ZUNE_WHITE);
 ```
 
-### ZuneDrawTextBackground / ZuneDrawTextBackgroundAt
-
-Draws text with a solid background color (JAM2 mode). Useful for
-selections and highlighted text.
-
-```c
-ZuneDrawTextBackgroundAt(rctx, 20, 50, "Selected", 8, ZUNE_WHITE, ZUNE_BLUE);
-```
-
----
-
-## Texture Management
-
 ### ZuneCreateTexture(rctx, width, height, depth, format, flags)
 
 Creates an empty texture.

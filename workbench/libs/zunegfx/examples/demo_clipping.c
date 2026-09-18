@@ -22,7 +22,8 @@ static void RunClippingDemo(struct DemoContext *ctx)
     ZuneSetFont(rctx, ctx->window->RPort->Font);
 
     /* No clipping - reference */
-    ZuneDrawTextAt(rctx, 20, 10, "No clipping (reference):", 24, ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, 20, 10, "No clipping (reference):", 24,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
     ZuneDrawRect(rctx, ZUNE_RECT_PTR(20, 30, 150, 100),
                  ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_RED)));
     ZuneDrawRect(rctx, ZUNE_RECT_PTR(50, 50, 150, 100),
@@ -31,7 +32,8 @@ static void RunClippingDemo(struct DemoContext *ctx)
                  ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_BLUE)));
 
     /* Rectangular clip region */
-    ZuneDrawTextAt(rctx, 300, 10, "Rectangular clip:", 17, ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, 300, 10, "Rectangular clip:", 17,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
     {
         struct ZuneRect clip_rect = {300, 30, 120, 80};
         struct Region *region = ZuneCreateRoundedRectRegion(&clip_rect, 0);
@@ -52,7 +54,8 @@ static void RunClippingDemo(struct DemoContext *ctx)
     }
 
     /* Circle clip region */
-    ZuneDrawTextAt(rctx, 20, 155, "Circle clip:", 12, ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, 20, 155, "Circle clip:", 12,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
     {
         struct ZunePoint center = {120, 240};
         struct Region *region = ZuneCreateCircleRegion(&center, 60);
@@ -70,7 +73,8 @@ static void RunClippingDemo(struct DemoContext *ctx)
     }
 
     /* Rounded rect clip */
-    ZuneDrawTextAt(rctx, 300, 155, "Rounded rect clip:", 18, ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, 300, 155, "Rounded rect clip:", 18,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
     {
         struct ZuneRect clip_rect = {300, 175, 150, 100};
         struct Region *region = ZuneCreateRoundedRectRegion(&clip_rect, 20);
@@ -93,7 +97,8 @@ static void RunClippingDemo(struct DemoContext *ctx)
     }
 
     /* Combined regions using OrRegionRegion */
-    ZuneDrawTextAt(rctx, 20, 320, "Combined (circle OR rect):", 26, ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, 20, 320, "Combined (circle OR rect):", 26,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
     {
         struct ZunePoint center = {120, 400};
         struct Region *circle = ZuneCreateCircleRegion(&center, 50);

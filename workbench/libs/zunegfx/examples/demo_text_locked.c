@@ -8,7 +8,6 @@
     - ZuneTextLength
     - ZuneTextFit
     - ZuneDrawText / ZuneDrawTextAt
-    - ZuneDrawTextBackground / ZuneDrawTextBackgroundAt
 
     Usage: demo_text_locked [cybergfx|opengl]
 */
@@ -28,36 +27,47 @@ static void DrawText(struct DemoContext *ctx)
     ZuneSetFont(rctx, ctx->window->RPort->Font);
 
     /* Basic text drawing in different colors */
-    ZuneDrawTextAt(rctx, 20, y, "=== Basic Text Drawing ===", 26, ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, 20, y, "=== Basic Text Drawing ===", 26,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
     y += 20;
 
-    ZuneDrawTextAt(rctx, 20, y, test_string, strlen(test_string), ZUNE_RED);
-    y += 16;
-    ZuneDrawTextAt(rctx, 20, y, test_string, strlen(test_string), ZUNE_GREEN);
-    y += 16;
-    ZuneDrawTextAt(rctx, 20, y, test_string, strlen(test_string), ZUNE_BLUE);
-    y += 16;
-    ZuneDrawTextAt(rctx, 20, y, test_string, strlen(test_string), ZUNE_YELLOW);
+    ZuneDrawTextAt(rctx, 20, y, test_string, strlen(test_string),
+                   ZUNE_TEXTSTYLE(.color = ZUNE_RED));
     y += 16;
     ZuneDrawTextAt(rctx, 20, y, test_string, strlen(test_string),
-                   ZUNE_COLOR_ARGB32(255, 255, 128, 0));
+                   ZUNE_TEXTSTYLE(.color = ZUNE_GREEN));
+    y += 16;
+    ZuneDrawTextAt(rctx, 20, y, test_string, strlen(test_string),
+                   ZUNE_TEXTSTYLE(.color = ZUNE_BLUE));
+    y += 16;
+    ZuneDrawTextAt(rctx, 20, y, test_string, strlen(test_string),
+                   ZUNE_TEXTSTYLE(.color = ZUNE_YELLOW));
+    y += 16;
+    ZuneDrawTextAt(rctx, 20, y, test_string, strlen(test_string),
+                   ZUNE_TEXTSTYLE(.color = ZUNE_COLOR_ARGB32(255, 255, 128, 0)));
     y += 25;
 
     /* Text with background (JAM2) */
-    ZuneDrawTextAt(rctx, 20, y, "=== Text With Background (JAM2) ===", 36, ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, 20, y, "=== Text With Background (JAM2) ===", 36,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
     y += 20;
 
-    ZuneDrawTextBackgroundAt(rctx, 20, y, "White on Blue", 13, ZUNE_WHITE, ZUNE_BLUE);
+    ZuneDrawTextAt(rctx, 20, y, "White on Blue", 13,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_TEXTSTYLE(.color = ZUNE_WHITE, .background = ZUNE_BLUE)));
     y += 16;
-    ZuneDrawTextBackgroundAt(rctx, 20, y, "Black on Yellow", 15, ZUNE_BLACK, ZUNE_YELLOW);
+    ZuneDrawTextAt(rctx, 20, y, "Black on Yellow", 15,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_TEXTSTYLE(.color = ZUNE_BLACK, .background = ZUNE_YELLOW)));
     y += 16;
-    ZuneDrawTextBackgroundAt(rctx, 20, y, "Red on Lightgray", 16, ZUNE_RED, ZUNE_LIGHTGRAY);
+    ZuneDrawTextAt(rctx, 20, y, "Red on Lightgray", 16,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_TEXTSTYLE(.color = ZUNE_RED, .background = ZUNE_LIGHTGRAY)));
     y += 16;
-    ZuneDrawTextBackgroundAt(rctx, 20, y, "Green on Darkgray", 17, ZUNE_GREEN, ZUNE_DARKGRAY);
+    ZuneDrawTextAt(rctx, 20, y, "Green on Darkgray", 17,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_TEXTSTYLE(.color = ZUNE_GREEN, .background = ZUNE_DARKGRAY)));
     y += 25;
 
     /* Text measurement */
-    ZuneDrawTextAt(rctx, 20, y, "=== Text Measurement ===", 24, ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, 20, y, "=== Text Measurement ===", 24,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
     y += 20;
 
     text_width = ZuneTextLength(rctx, test_string, strlen(test_string));
@@ -65,18 +75,21 @@ static void DrawText(struct DemoContext *ctx)
 
     ZuneDrawRect(rctx, ZUNE_RECT_PTR(19, y - 1, text_width + 2, 14),
                  ZUNE_STYLE(.stroke_color = ZUNE_CYAN, .stroke_width = 1));
-    ZuneDrawTextAt(rctx, 20, y, test_string, strlen(test_string), ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, 20, y, test_string, strlen(test_string),
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
     y += 20;
 
     {
         char buf[80];
         snprintf(buf, sizeof(buf), "Measured width: %d pixels", text_width);
-        ZuneDrawTextAt(rctx, 20, y, buf, strlen(buf), ZUNE_LIGHTGRAY);
+        ZuneDrawTextAt(rctx, 20, y, buf, strlen(buf),
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
     }
     y += 20;
 
     /* TextFit test */
-    ZuneDrawTextAt(rctx, 20, y, "=== TextFit Test (max 200px) ===", 32, ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, 20, y, "=== TextFit Test (max 200px) ===", 32,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
     y += 20;
 
     chars_fit = ZuneTextFit(rctx, long_string, strlen(long_string), 200);
@@ -84,36 +97,47 @@ static void DrawText(struct DemoContext *ctx)
 
     ZuneDrawRect(rctx, ZUNE_RECT_PTR(20, y, 200, 14),
                  ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(80, 0, 128, 255))));
-    ZuneDrawTextAt(rctx, 20, y, long_string, chars_fit, ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, 20, y, long_string, chars_fit,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
     y += 16;
-    ZuneDrawTextAt(rctx, 20, y, long_string, strlen(long_string), ZUNE_GRAY);
+    ZuneDrawTextAt(rctx, 20, y, long_string, strlen(long_string),
+                   ZUNE_TEXTSTYLE(.color = ZUNE_GRAY));
     y += 20;
 
     {
         char buf[80];
         snprintf(buf, sizeof(buf), "%d of %d chars fit in 200 pixels",
                  chars_fit, (int)strlen(long_string));
-        ZuneDrawTextAt(rctx, 20, y, buf, strlen(buf), ZUNE_LIGHTGRAY);
+        ZuneDrawTextAt(rctx, 20, y, buf, strlen(buf),
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
     }
 
     /* Right column: partial strings and single chars */
     y = 30;
     int x = 450;
 
-    ZuneDrawTextAt(rctx, x, y, "=== Right Column ===", 20, ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, x, y, "=== Right Column ===", 20,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
     y += 20;
 
-    ZuneDrawTextAt(rctx, x, y, "First 5:", 8, ZUNE_LIGHTGRAY);
-    ZuneDrawTextAt(rctx, x + 80, y, test_string, 5, ZUNE_CYAN);
+    ZuneDrawTextAt(rctx, x, y, "First 5:", 8,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
+    ZuneDrawTextAt(rctx, x + 80, y, test_string, 5,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_CYAN));
     y += 16;
-    ZuneDrawTextAt(rctx, x, y, "First 10:", 9, ZUNE_LIGHTGRAY);
-    ZuneDrawTextAt(rctx, x + 80, y, test_string, 10, ZUNE_CYAN);
+    ZuneDrawTextAt(rctx, x, y, "First 10:", 9,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
+    ZuneDrawTextAt(rctx, x + 80, y, test_string, 10,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_CYAN));
     y += 16;
-    ZuneDrawTextAt(rctx, x, y, "First 20:", 9, ZUNE_LIGHTGRAY);
-    ZuneDrawTextAt(rctx, x + 80, y, test_string, 20, ZUNE_CYAN);
+    ZuneDrawTextAt(rctx, x, y, "First 20:", 9,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
+    ZuneDrawTextAt(rctx, x + 80, y, test_string, 20,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_CYAN));
     y += 25;
 
-    ZuneDrawTextAt(rctx, x, y, "Single chars:", 13, ZUNE_LIGHTGRAY);
+    ZuneDrawTextAt(rctx, x, y, "Single chars:", 13,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
     y += 16;
     {
         int cx = x;
@@ -122,7 +146,8 @@ static void DrawText(struct DemoContext *ctx)
         for (i = 0; i < 13; i++) {
             ULONG color = ZUNE_COLOR_ARGB32(255, (UBYTE)(255 - i * 19),
                                             (UBYTE)(i * 19), (UBYTE)(128 + i * 9));
-            ZuneDrawTextAt(rctx, cx, y, &letters[i], 1, color);
+            ZuneDrawTextAt(rctx, cx, y, &letters[i], 1,
+                   ZUNE_TEXTSTYLE(.color = color));
             cx += ZuneTextLength(rctx, &letters[i], 1) + 2;
         }
     }

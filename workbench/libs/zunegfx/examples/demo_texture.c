@@ -26,7 +26,8 @@ static void RunTextureDemo(struct DemoContext *ctx)
     struct ZuneTexture *tex = NULL;
 
     ZuneSetFont(rctx, ctx->window->RPort->Font);
-    ZuneDrawTextAt(rctx, 20, 10, "Texture Demo", 12, ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, 20, 10, "Texture Demo", 12,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
 
     if (!pixel_data) {
         printf("ERROR: Cannot allocate pixel data\n");
@@ -58,41 +59,49 @@ static void RunTextureDemo(struct DemoContext *ctx)
     printf("  Texture created: %dx%d, valid=%d\n", tex_w, tex_h, ZuneIsTextureValid(tex));
 
     /* Plain: a dest with no extent takes the texture's own size */
-    ZuneDrawTextAt(rctx, 20, 30, "Plain:", 6, ZUNE_LIGHTGRAY);
+    ZuneDrawTextAt(rctx, 20, 30, "Plain:", 6,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
     ZuneDrawTextureStyled(rctx, tex, ZUNE_RECT_PTR(20, 45, 0, 0), NULL);
 
     /* Scaled: a dest extent different from the source scales */
-    ZuneDrawTextAt(rctx, 100, 30, "Scaled:", 7, ZUNE_LIGHTGRAY);
+    ZuneDrawTextAt(rctx, 100, 30, "Scaled:", 7,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
     ZuneDrawTextureStyled(rctx, tex, ZUNE_RECT_PTR(100, 45, 128, 128), NULL);
 
     /* Tinted */
-    ZuneDrawTextAt(rctx, 250, 30, "Tinted:", 7, ZUNE_LIGHTGRAY);
+    ZuneDrawTextAt(rctx, 250, 30, "Tinted:", 7,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
     ZuneDrawTextureStyled(rctx, tex, ZUNE_RECT_PTR(250, 45, 0, 0),
                           ZUNE_TEXSTYLE(.tint = ZUNE_COLOR_ARGB32(128, 255, 0, 0)));
 
     /* Scaled and tinted at once */
-    ZuneDrawTextAt(rctx, 330, 30, "ScaledTinted:", 13, ZUNE_LIGHTGRAY);
+    ZuneDrawTextAt(rctx, 330, 30, "ScaledTinted:", 13,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
     ZuneDrawTextureStyled(rctx, tex, ZUNE_RECT_PTR(330, 45, 96, 96),
                           ZUNE_TEXSTYLE(.tint = ZUNE_COLOR_ARGB32(128, 0, 255, 0)));
 
     /* A source sub-rect */
-    ZuneDrawTextAt(rctx, 450, 30, "Region:", 7, ZUNE_LIGHTGRAY);
+    ZuneDrawTextAt(rctx, 450, 30, "Region:", 7,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
     ZuneDrawTextureStyled(rctx, tex, ZUNE_RECT_PTR(450, 45, 64, 64),
                           ZUNE_TEXSTYLE(.source = ZUNE_RECT_PTR(16, 16, 32, 32)));
 
     /* Region and tint together */
-    ZuneDrawTextAt(rctx, 530, 30, "RegionTinted:", 13, ZUNE_LIGHTGRAY);
+    ZuneDrawTextAt(rctx, 530, 30, "RegionTinted:", 13,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
     ZuneDrawTextureStyled(rctx, tex, ZUNE_RECT_PTR(530, 45, 96, 96),
                           ZUNE_TEXSTYLE(.source = ZUNE_RECT_PTR(0, 0, 32, 32),
                                         .tint = ZUNE_COLOR_ARGB32(128, 0, 0, 255)));
 
     /* Tiled across the dest */
-    ZuneDrawTextAt(rctx, 20, 190, "Tiled:", 6, ZUNE_LIGHTGRAY);
+    ZuneDrawTextAt(rctx, 20, 190, "Tiled:", 6,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
     ZuneDrawTextureStyled(rctx, tex, ZUNE_RECT_PTR(20, 205, 200, 100),
                           ZUNE_TEXSTYLE(.flags = ZUNE_TEXTURE_TILE));
 
     /* Pixel manipulation */
-    ZuneDrawTextAt(rctx, 250, 190, "Pixel manipulation:", 19, ZUNE_LIGHTGRAY);
+    ZuneDrawTextAt(rctx, 250, 190, "Pixel manipulation:", 19,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
     {
         ULONG pitch = 0;
         APTR lock = ZuneLockTexturePixels(rctx, tex, &pitch);
@@ -117,7 +126,8 @@ static void RunTextureDemo(struct DemoContext *ctx)
     }
 
     /* UpdateTextureData */
-    ZuneDrawTextAt(rctx, 350, 190, "Updated data:", 13, ZUNE_LIGHTGRAY);
+    ZuneDrawTextAt(rctx, 350, 190, "Updated data:", 13,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
     {
         ULONG *px = (ULONG *)pixel_data;
         ULONG i, j;
@@ -133,7 +143,8 @@ static void RunTextureDemo(struct DemoContext *ctx)
     }
 
     /* CreateTextureFromFile */
-    ZuneDrawTextAt(rctx, 20, 320, "FromFile (testimage.png):", 24, ZUNE_LIGHTGRAY);
+    ZuneDrawTextAt(rctx, 20, 320, "FromFile (testimage.png):", 24,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
     {
         struct ZuneTexture *ftex = ZuneCreateTextureFromFile(rctx,
                                        "PROGDIR:testimage.png",
@@ -149,13 +160,15 @@ static void RunTextureDemo(struct DemoContext *ctx)
 
             ZuneDestroyTexture(rctx, ftex);
         } else {
-            ZuneDrawTextAt(rctx, 20, 340, "FAILED - testimage.png not found", 32, ZUNE_RED);
+            ZuneDrawTextAt(rctx, 20, 340, "FAILED - testimage.png not found", 32,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_RED));
             printf("  TextureFromFile: FAILED (testimage.png not found)\n");
         }
     }
 
     /* CreateTextureFromDrawingBoard */
-    ZuneDrawTextAt(rctx, 400, 320, "FromDrawingBoard:", 17, ZUNE_LIGHTGRAY);
+    ZuneDrawTextAt(rctx, 400, 320, "FromDrawingBoard:", 17,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
     {
         struct DrawingBoard *tmp = ZuneCreateDrawingBoardForRenderContext(rctx, 128, 128, 0);
         if (tmp) {

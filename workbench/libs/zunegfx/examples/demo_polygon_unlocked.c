@@ -20,7 +20,8 @@ static void DrawPolygons(struct DemoContext *ctx)
     ZuneSetFont(rctx, ctx->window->RPort->Font);
 
     /* Solid filled polygons */
-    ZuneDrawTextAt(rctx, 20, 20, "Solid filled:", 13, ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, 20, 20, "Solid filled:", 13,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
 
     {
         struct ZunePoint tri[] = {{80, 50}, {30, 140}, {130, 140}};
@@ -67,7 +68,8 @@ static void DrawPolygons(struct DemoContext *ctx)
     }
 
     /* Stars */
-    ZuneDrawTextAt(rctx, 20, 155, "Stars:", 6, ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, 20, 155, "Stars:", 6,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
 
     {
         struct ZunePoint star[10];
@@ -107,7 +109,8 @@ static void DrawPolygons(struct DemoContext *ctx)
     }
 
     /* Gradient polygons */
-    ZuneDrawTextAt(rctx, 20, 280, "Gradient filled:", 16, ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, 20, 280, "Gradient filled:", 16,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
 
     {
         static const struct ZuneGradientStop stops[] = {
@@ -154,7 +157,8 @@ static void DrawPolygons(struct DemoContext *ctx)
     }
 
     /* Complex shapes */
-    ZuneDrawTextAt(rctx, 430, 155, "Complex shapes:", 15, ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, 430, 155, "Complex shapes:", 15,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
 
     {
         struct ZunePoint arrow[] = {
@@ -183,7 +187,8 @@ static void DrawPolygons(struct DemoContext *ctx)
     }
 
     /* Texture-filled (from testimage.png) */
-    ZuneDrawTextAt(rctx, 430, 370, "Texture filled:", 15, ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, 430, 370, "Texture filled:", 15,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
 
     {
         struct ZuneTexture *img_tex = ZuneCreateTextureFromFile(rctx,

@@ -52,35 +52,41 @@ static void DrawPolylines(struct DemoContext *ctx)
     }
 
     /* Styled polylines with different widths */
-    ZuneDrawTextAt(rctx, 20, 220, "Styled (varying width):", 23, ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, 20, 220, "Styled (varying width):", 23,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
 
     {
         struct ZunePoint pts[] = {{30, 250}, {100, 280}, {170, 250}, {240, 280}, {310, 250}};
         ZuneDrawPolyline(rctx, pts, 5,
                      ZUNE_STYLE(.stroke_color = ZUNE_STYLE(.stroke_color = ZUNE_CYAN, .stroke_width = 1), .stroke_width = 1));
-        ZuneDrawTextAt(rctx, 320, 260, "w=1", 3, ZUNE_CYAN);
+        ZuneDrawTextAt(rctx, 320, 260, "w=1", 3,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_CYAN));
     }
     {
         struct ZunePoint pts[] = {{30, 290}, {100, 320}, {170, 290}, {240, 320}, {310, 290}};
         ZuneDrawPolyline(rctx, pts, 5,
                      ZUNE_STYLE(.stroke_color = ZUNE_STYLE(.stroke_color = ZUNE_MAGENTA, .stroke_width = 2), .stroke_width = 1));
-        ZuneDrawTextAt(rctx, 320, 300, "w=2", 3, ZUNE_MAGENTA);
+        ZuneDrawTextAt(rctx, 320, 300, "w=2", 3,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_MAGENTA));
     }
     {
         struct ZunePoint pts[] = {{30, 330}, {100, 360}, {170, 330}, {240, 360}, {310, 330}};
         ZuneDrawPolyline(rctx, pts, 5,
                      ZUNE_STYLE(.stroke_color = ZUNE_STYLE(.stroke_color = ZUNE_COLOR_ARGB32(255, 255, 128, 0), .stroke_width = 3), .stroke_width = 1));
-        ZuneDrawTextAt(rctx, 320, 340, "w=3", 3, ZUNE_COLOR_ARGB32(255, 255, 128, 0));
+        ZuneDrawTextAt(rctx, 320, 340, "w=3", 3,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_COLOR_ARGB32(255, 255, 128, 0)));
     }
     {
         struct ZunePoint pts[] = {{30, 380}, {100, 410}, {170, 380}, {240, 410}, {310, 380}};
         ZuneDrawPolyline(rctx, pts, 5,
                      ZUNE_STYLE(.stroke_color = ZUNE_STYLE(.stroke_color = ZUNE_COLOR_ARGB32(255, 128, 255, 0), .stroke_width = 5), .stroke_width = 1));
-        ZuneDrawTextAt(rctx, 320, 390, "w=5", 3, ZUNE_COLOR_ARGB32(255, 128, 255, 0));
+        ZuneDrawTextAt(rctx, 320, 390, "w=5", 3,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_COLOR_ARGB32(255, 128, 255, 0)));
     }
 
     /* Shapes: star, spiral, sine, hexagon */
-    ZuneDrawTextAt(rctx, 430, 20, "Polyline shapes:", 16, ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, 430, 20, "Polyline shapes:", 16,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
 
     /* Closed star */
     {

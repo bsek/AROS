@@ -364,8 +364,19 @@ struct ZuneTextureStyle {
  *                           .corner_radius = 6,
  *                           .flags = ZUNE_SHAPE_ANTIALIAS));
  */
-#define ZUNE_STYLE(...)    (&(struct ZuneShapeStyle){__VA_ARGS__})
-#define ZUNE_TEXSTYLE(...) (&(struct ZuneTextureStyle){__VA_ARGS__})
+/*
+ * How text is painted. A zero background means none, the same way a zero
+ * tint means untinted.
+ */
+struct ZuneTextStyle {
+  ULONG color;      /* glyph colour */
+  ULONG background; /* 0 = draw no background */
+  ULONG flags;      /* reserved */
+};
+
+#define ZUNE_STYLE(...)     (&(struct ZuneShapeStyle){__VA_ARGS__})
+#define ZUNE_TEXSTYLE(...)  (&(struct ZuneTextureStyle){__VA_ARGS__})
+#define ZUNE_TEXTSTYLE(...) (&(struct ZuneTextStyle){__VA_ARGS__})
 
 void ZuneDrawRect(struct RenderContext *rctx, const struct ZuneRect *rect,
                   const struct ZuneShapeStyle *style);
@@ -634,30 +645,18 @@ UWORD ZuneTextLength(struct RenderContext *rctx, CONST_STRPTR string, UWORD coun
 UWORD ZuneTextFit(struct RenderContext *rctx, CONST_STRPTR string, UWORD count, UWORD maxWidth);
 
 /*
- * ZuneDrawText - Draw text at a position with foreground color
+ * ZuneDrawText - Draw text at a position
  *
- * Position.y is the TOP of the text line (not baseline).
- * The implementation adds tf_Baseline internally.
- * Draws with transparent background (JAM1 mode).
+ * Takes the glyph colour and an optional background from the style, so
+ * background filling is a field rather than a second entry point.
  */
 void ZuneDrawText(struct RenderContext *rctx, struct ZunePoint *position,
-                  CONST_STRPTR string, UWORD count, ULONG color);
+                  CONST_STRPTR string, UWORD count,
+                  const struct ZuneTextStyle *style);
 
-/*
- * ZuneDrawTextBackground - Draw text with foreground and background colors
- *
- * Same as ZuneDrawText but fills the text background with bgColor (JAM2 mode).
- * Useful for text selections and highlighted text.
- */
-void ZuneDrawTextBackground(struct RenderContext *rctx, struct ZunePoint *position,
-                            CONST_STRPTR string, UWORD count,
-                            ULONG fgColor, ULONG bgColor);
-
-/* Convenience macros */
-#define ZuneDrawTextAt(rctx, x, y, str, count, color) \
-    ZuneDrawText((rctx), ZUNE_POINT_PTR((x),(y)), (str), (count), (color))
-#define ZuneDrawTextBackgroundAt(rctx, x, y, str, count, fg, bg) \
-    ZuneDrawTextBackground((rctx), ZUNE_POINT_PTR((x),(y)), (str), (count), (fg), (bg))
+/* Convenience macro */
+#define ZuneDrawTextAt(rctx, x, y, str, count, style) \
+    ZuneDrawText((rctx), ZUNE_POINT_PTR((x),(y)), (str), (count), (style))
 
 /*****************************************************************************/
 /* Polyline and Polygon Drawing */

@@ -22,7 +22,8 @@ static void RunPixelDemo(struct DemoContext *ctx)
     ZuneSetFont(rctx, ctx->window->RPort->Font);
 
     /* DrawPixel - individual pixels forming a pattern */
-    ZuneDrawTextAt(rctx, 20, 10, "ZuneDrawPixel - gradient pattern:", 33, ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, 20, 10, "ZuneDrawPixel - gradient pattern:", 33,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
     {
         int x, y;
         for (y = 0; y < 100; y++) {
@@ -37,7 +38,8 @@ static void RunPixelDemo(struct DemoContext *ctx)
     }
 
     /* GetPixel - sample back and display */
-    ZuneDrawTextAt(rctx, 250, 10, "ZuneGetPixel samples:", 21, ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, 250, 10, "ZuneGetPixel samples:", 21,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
     {
         struct ZunePoint p;
         char buf[60];
@@ -46,23 +48,27 @@ static void RunPixelDemo(struct DemoContext *ctx)
         p.x = 20; p.y = 30;
         ULONG c1 = ZuneGetPixel(rctx, &p);
         snprintf(buf, sizeof(buf), "(20,30) = 0x%08X", (unsigned int)c1);
-        ZuneDrawTextAt(rctx, 250, y, buf, strlen(buf), ZUNE_LIGHTGRAY);
+        ZuneDrawTextAt(rctx, 250, y, buf, strlen(buf),
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
         y += 16;
 
         p.x = 120; p.y = 80;
         ULONG c2 = ZuneGetPixel(rctx, &p);
         snprintf(buf, sizeof(buf), "(120,80) = 0x%08X", (unsigned int)c2);
-        ZuneDrawTextAt(rctx, 250, y, buf, strlen(buf), ZUNE_LIGHTGRAY);
+        ZuneDrawTextAt(rctx, 250, y, buf, strlen(buf),
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
         y += 16;
 
         p.x = 219; p.y = 129;
         ULONG c3 = ZuneGetPixel(rctx, &p);
         snprintf(buf, sizeof(buf), "(219,129) = 0x%08X", (unsigned int)c3);
-        ZuneDrawTextAt(rctx, 250, y, buf, strlen(buf), ZUNE_LIGHTGRAY);
+        ZuneDrawTextAt(rctx, 250, y, buf, strlen(buf),
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
     }
 
     /* Locked pixel access - Mandelbrot set */
-    ZuneDrawTextAt(rctx, 20, 145, "Locked pixels - Mandelbrot:", 27, ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, 20, 145, "Locked pixels - Mandelbrot:", 27,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
     {
         APTR pixels;
         ULONG pitch;
@@ -108,7 +114,8 @@ static void RunPixelDemo(struct DemoContext *ctx)
     }
 
     /* SetPixel + GetPixel verification */
-    ZuneDrawTextAt(rctx, 350, 145, "SetPixel + verify:", 18, ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, 350, 145, "SetPixel + verify:", 18,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
     {
         struct ZunePoint p;
         char buf[60];
@@ -119,21 +126,24 @@ static void RunPixelDemo(struct DemoContext *ctx)
         ZuneSetPixel(rctx, &p, ZUNE_RED);
         ULONG got = ZuneGetPixel(rctx, &p);
         snprintf(buf, sizeof(buf), "Set RED, got 0x%08X", (unsigned int)got);
-        ZuneDrawTextAt(rctx, 360, y, buf, strlen(buf), ZUNE_LIGHTGRAY);
+        ZuneDrawTextAt(rctx, 360, y, buf, strlen(buf),
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
         y += 16;
 
         p.x = 350; p.y = 185;
         ZuneSetPixel(rctx, &p, ZUNE_GREEN);
         got = ZuneGetPixel(rctx, &p);
         snprintf(buf, sizeof(buf), "Set GREEN, got 0x%08X", (unsigned int)got);
-        ZuneDrawTextAt(rctx, 360, y, buf, strlen(buf), ZUNE_LIGHTGRAY);
+        ZuneDrawTextAt(rctx, 360, y, buf, strlen(buf),
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
         y += 16;
 
         p.x = 350; p.y = 205;
         ZuneSetPixel(rctx, &p, ZUNE_BLUE);
         got = ZuneGetPixel(rctx, &p);
         snprintf(buf, sizeof(buf), "Set BLUE, got 0x%08X", (unsigned int)got);
-        ZuneDrawTextAt(rctx, 360, y, buf, strlen(buf), ZUNE_LIGHTGRAY);
+        ZuneDrawTextAt(rctx, 360, y, buf, strlen(buf),
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
     }
 }
 

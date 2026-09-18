@@ -25,7 +25,7 @@ AROS_LH5(void, ZuneDrawText,
          AROS_LHA(struct ZunePoint *, position, A1),
          AROS_LHA(CONST_STRPTR, string, A2),
          AROS_LHA(UWORD, count, D0),
-         AROS_LHA(ULONG, color, D1),
+         AROS_LHA(const struct ZuneTextStyle *, style, A3),
 
          /*  LOCATION */
          struct Library *, ZuneGfxBase, 113, zunegfx)
@@ -48,17 +48,27 @@ RESULT
 {
   AROS_LIBFUNC_INIT
 
-  if (!rctx || !position || !string || count == 0 || !rctx->font) {
+  struct InternalColor fg, bg;
+  struct InternalColor *bg_ptr = NULL;
+  WORD x, y;
+
+  if (!rctx || !position || !string || count == 0 || !rctx->font || !style) {
     D(bug("ZuneDrawText: Invalid parameters\n"));
     return;
   }
 
-  WORD x = position->x;
-  WORD y = position->y + rctx->font->tf_Baseline;
+  x = position->x;
+  y = position->y + rctx->font->tf_Baseline;
 
-  struct InternalColor fg_color = ZuneColorToInternal(rctx, color, rctx->pixel_format);
+  fg = ZuneColorToInternal(rctx, style->color, rctx->pixel_format);
 
-  ZUNE_BACKEND_CALL(rctx, DrawText, x, y, string, count, &fg_color, NULL);
+  /* A zero background means none, so the glyphs go down in JAM1 */
+  if (style->background) {
+    bg = ZuneColorToInternal(rctx, style->background, rctx->pixel_format);
+    bg_ptr = &bg;
+  }
+
+  ZUNE_BACKEND_CALL(rctx, DrawText, x, y, string, count, &fg, bg_ptr);
 
   AROS_LIBFUNC_EXIT
 }

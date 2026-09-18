@@ -24,7 +24,8 @@ static void RunSyncDemo(struct DemoContext *ctx)
     ZuneSetFont(rctx, ctx->window->RPort->Font);
 
     /* Test 1: Pure ZuneGfx rendering + Present */
-    ZuneDrawTextAt(rctx, 20, 10, "Test 1: ZuneGfx only", 20, ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, 20, 10, "Test 1: ZuneGfx only", 20,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
     ZuneClearDrawingBoard(rctx, ZUNE_COLOR_RGB24(30, 30, 40));
 
     ZuneDrawRect(rctx, ZUNE_RECT_PTR(50, 30, 100, 80),
@@ -45,7 +46,8 @@ static void RunSyncDemo(struct DemoContext *ctx)
     getchar();
 
     /* Test 2: ZuneSync - copy FBO to bitmap, then CyberGfx draws */
-    ZuneDrawTextAt(rctx, 20, 10, "Test 2: ZuneSync + CyberGfx", 27, ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, 20, 10, "Test 2: ZuneSync + CyberGfx", 27,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
     ZuneClearDrawingBoard(rctx, ZUNE_COLOR_RGB24(30, 30, 40));
     ZuneDrawRect(rctx, ZUNE_RECT_PTR(50, 30, 100, 80),
                  ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_RED),
@@ -76,7 +78,8 @@ static void RunSyncDemo(struct DemoContext *ctx)
     getchar();
 
     /* Test 3: ZuneBlit between DrawingBoards */
-    ZuneDrawTextAt(rctx, 20, 10, "Test 3: ZuneBlit", 16, ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, 20, 10, "Test 3: ZuneBlit", 16,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
     ZuneClearDrawingBoard(rctx, ZUNE_COLOR_RGB24(30, 30, 40));
 
     /* Create a second DrawingBoard */
@@ -89,7 +92,8 @@ static void RunSyncDemo(struct DemoContext *ctx)
                  ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_YELLOW),
                             .corner_radius = 20,
                             .flags = ZUNE_SHAPE_ANTIALIAS));
-        ZuneDrawTextAt(rctx, 50, 65, "Source", 6, ZUNE_BLACK);
+        ZuneDrawTextAt(rctx, 50, 65, "Source", 6,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_BLACK));
 
         /* Switch back to main board */
         ZuneSetTarget(rctx, ctx->board);
@@ -97,7 +101,8 @@ static void RunSyncDemo(struct DemoContext *ctx)
         /* Blit source to main at different positions */
         ZuneBlit(rctx, rctx, 0, 0, 50, 50, 200, 150);
 
-        ZuneDrawTextAt(rctx, 50, 210, "Blitted from source board", 25, ZUNE_LIGHTGRAY);
+        ZuneDrawTextAt(rctx, 50, 210, "Blitted from source board", 25,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
 
         ZuneDestroyDrawingBoard(rctx, src_board);
     }
@@ -107,12 +112,14 @@ static void RunSyncDemo(struct DemoContext *ctx)
     getchar();
 
     /* Test 4: ZuneCapture */
-    ZuneDrawTextAt(rctx, 20, 10, "Test 4: ZuneCapture from window", 31, ZUNE_WHITE);
+    ZuneDrawTextAt(rctx, 20, 10, "Test 4: ZuneCapture from window", 31,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_WHITE));
     ZuneClearDrawingBoard(rctx, ZUNE_COLOR_RGB24(30, 30, 40));
 
     /* Capture a portion of the window's RastPort into the DrawingBoard */
     ZuneCapture(rctx, ctx->window->RPort, 0, 0, 50, 50, 200, 100);
-    ZuneDrawTextAt(rctx, 50, 160, "Captured from window RastPort", 29, ZUNE_LIGHTGRAY);
+    ZuneDrawTextAt(rctx, 50, 160, "Captured from window RastPort", 29,
+                   ZUNE_TEXTSTYLE(.color = ZUNE_LIGHTGRAY));
 
     DemoPresent(ctx);
     printf("  Test 4 done (Capture). Press ENTER to exit...\n");

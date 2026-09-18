@@ -79,7 +79,6 @@ TEXT_FILES := \
         src/text/zunetextlength                 \
         src/text/zunetextfit                    \
         src/text/zunedrawtext                   \
-        src/text/zunedrawtextbg
 
 RECTANGLE_FILES := \
 
