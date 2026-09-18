@@ -63,7 +63,7 @@ static void DrawText(struct DemoContext *ctx)
     printf("   TextLength(\"%s\") = %d pixels\n", test_string, text_width);
 
     ZuneDrawRect(rctx, ZUNE_RECT_PTR(19, y - 1, text_width + 2, 14),
-                 ZUNE_STYLE(.border_color = ZUNE_CYAN, .border_width = 1));
+                 ZUNE_STYLE(.stroke_color = ZUNE_CYAN, .stroke_width = 1));
     ZuneDrawTextAt(rctx, 20, y, test_string, strlen(test_string), ZUNE_WHITE);
     y += 20;
 

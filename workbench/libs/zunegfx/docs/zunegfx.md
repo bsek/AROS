@@ -294,31 +294,11 @@ Higher values produce smoother edges at the cost of performance.
 
 1-pixel line.
 
-### ZuneDrawLineStyled / ZuneDrawLineStyledPoints
-
-Line with custom width.
-
-### ZuneDrawLineAA / ZuneDrawLineAAPoints
-
-Antialiased 1-pixel line.
-
-### ZuneDrawLineStyledAA / ZuneDrawLineStyledAAPoints
-
-Antialiased line with custom width.
-
----
-
-## Drawing - Polylines and Polygons
-
 ### ZuneDrawPolyline(rctx, points, count, color)
 
 Draws connected line segments through an array of points.
 Draws from `points[0]` to `points[1]` to ... to `points[count-1]`.
 Requires `count >= 2`.
-
-### ZuneDrawPolylineStyled(rctx, points, count, lineWidth, color)
-
-Polyline with custom line width.
 
 ### ZuneFillPolygon(rctx, points, count, brush)
 

@@ -278,21 +278,11 @@ struct ZuneBrush {
 #define ZUNE_POINT_PTR(x, y) (&(struct ZunePoint){(WORD)(x), (WORD)(y)})
 
 /* Convenience macros for coordinate-based calls */
-#define ZuneDrawLinePoints(rctx, startX, startY, endX, endY, color)              \
+#define ZuneDrawLinePoints(rctx, startX, startY, endX, endY, style)              \
   ZuneDrawLine((rctx), ZUNE_POINT_PTR((startX), (startY)),                       \
-               ZUNE_POINT_PTR((endX), (endY)), (color))
-#define ZuneDrawLineStyledPoints(rctx, startX, startY, endX, endY, width, color) \
-  ZuneDrawLineStyled((rctx), ZUNE_POINT_PTR((startX), (startY)),                 \
-                     ZUNE_POINT_PTR((endX), (endY)), (width), (color))
+               ZUNE_POINT_PTR((endX), (endY)), (style))
 #define ZuneDrawPixelAt(rctx, x, y, color)                                       \
   ZuneDrawPixel((rctx), ZUNE_POINT_PTR((x), (y)), (color))
-#define ZuneDrawLineAAPoints(rctx, startX, startY, endX, endY, color)            \
-  ZuneDrawLineAA((rctx), ZUNE_POINT_PTR((startX), (startY)),                     \
-                 ZUNE_POINT_PTR((endX), (endY)), (color))
-#define ZuneDrawLineStyledAAPoints(rctx, startX, startY, endX, endY, width,      \
-                                   color)                                      \
-  ZuneDrawLineStyledAA((rctx), ZUNE_POINT_PTR((startX), (startY)),               \
-                       ZUNE_POINT_PTR((endX), (endY)), (width), (color))
 #define ZuneGetPixelAt(rctx, x, y) ZuneGetPixel((rctx), ZUNE_POINT_PTR((x), (y)))
 #define ZuneSetPixelAt(rctx, x, y, color)                                            \
   ZuneSetPixel((rctx), ZUNE_POINT_PTR((x), (y)), (color))
@@ -337,14 +327,17 @@ struct ZuneBrush {
 
 /*
  * How a shape is painted. A NULL fill leaves the interior alone; a zero
- * border_width leaves the edge alone; corner_radius applies to rectangles.
+ * stroke_width leaves the edge alone; corner_radius applies to rectangles.
+ *
+ * Lines and polylines use the same struct: they are pure strokes, so they
+ * read stroke_color, stroke_width and the flags and ignore the rest.
  */
 #define ZUNE_SHAPE_ANTIALIAS  (1 << 0)
 
 struct ZuneShapeStyle {
   const struct ZuneBrush *fill; /* NULL = no fill */
-  ULONG border_color;           /* only read when border_width > 0 */
-  UWORD border_width;           /* 0 = no border */
+  ULONG stroke_color;           /* only read when stroke_width > 0 */
+  UWORD stroke_width;           /* 0 = no stroke */
   UBYTE corner_radius;          /* rectangles only; 0 = square */
   ULONG flags;                  /* ZUNE_SHAPE_* */
 };
@@ -454,10 +447,13 @@ void ZuneClearDrawingBoard(struct RenderContext *rctx, ULONG color);
 
 /* Rectangles and circles go through ZuneDrawRect()/ZuneDrawCircle() above. */
 
+/*
+ * A line is a pure stroke: it reads stroke_color, stroke_width and the flags
+ * from the style, so width and antialiasing are fields rather than separate
+ * entry points.
+ */
 void ZuneDrawLine(struct RenderContext *rctx, struct ZunePoint *start,
-                  struct ZunePoint *end, ULONG color);
-void ZuneDrawLineStyled(struct RenderContext *rctx, struct ZunePoint *start,
-                        struct ZunePoint *end, UWORD width, ULONG color);
+                  struct ZunePoint *end, const struct ZuneShapeStyle *style);
 
 /* Single pixel */
 void ZuneDrawPixel(struct RenderContext *rctx, struct ZunePoint *point, ULONG color);
@@ -466,16 +462,11 @@ void ZuneDrawPixel(struct RenderContext *rctx, struct ZunePoint *point, ULONG co
 /* Antialiasing */
 /*****************************************************************************/
 
-/* Shapes take ZUNE_SHAPE_ANTIALIAS in their style; lines have their own
- * entry points. Quality applies to both. */
+/* Everything that can be antialiased takes ZUNE_SHAPE_ANTIALIAS in its
+ * style. The quality setting applies to all of them. */
 
 void ZuneSetAntialiasingQuality(struct RenderContext *rctx, UBYTE quality);
 UBYTE ZuneGetAntialiasingQuality(struct RenderContext *rctx);
-
-void ZuneDrawLineAA(struct RenderContext *rctx, struct ZunePoint *start,
-                    struct ZunePoint *end, ULONG color);
-void ZuneDrawLineStyledAA(struct RenderContext *rctx, struct ZunePoint *start,
-                          struct ZunePoint *end, UBYTE width, ULONG color);
 
 /*****************************************************************************/
 /* Direct Pixel Access */
@@ -673,30 +664,22 @@ void ZuneDrawTextBackground(struct RenderContext *rctx, struct ZunePoint *positi
 /*****************************************************************************/
 
 /*
- * ZuneDrawPolyline - Draw connected line segments through a series of points
+ * ZuneDrawPolyline - Connected line segments through a series of points
  *
- * Draws lines from points[0]→points[1]→...→points[count-1].
- * Requires count >= 2. Uses 1-pixel line width.
+ * Draws points[0] to points[1] to ... to points[count-1], count >= 2.
+ * Strokes, so it reads stroke_color, stroke_width and the flags.
  */
 void ZuneDrawPolyline(struct RenderContext *rctx, struct ZunePoint *points,
-                      UWORD count, ULONG color);
-
-/*
- * ZuneDrawPolylineStyled - Draw connected line segments with custom width
- */
-void ZuneDrawPolyline(struct RenderContext *rctx, struct ZunePoint *points,
-                      UWORD count, ULONG color);
-void ZuneDrawPolylineStyled(struct RenderContext *rctx, struct ZunePoint *points,
-                            UWORD count, UWORD lineWidth, ULONG color);
+                      UWORD count, const struct ZuneShapeStyle *style);
 
 /*
  * ZuneFillPolygon - Fill a closed polygon defined by a series of points
  *
- * The polygon is automatically closed (last point connects to first).
- * Requires count >= 3. Uses scanline fill algorithm.
+ * The polygon closes itself, count >= 3. Takes the style's fill brush and
+ * ZUNE_SHAPE_ANTIALIAS; a style without a fill draws nothing.
  */
 void ZuneFillPolygon(struct RenderContext *rctx, struct ZunePoint *points,
-                     UWORD count, const struct ZuneBrush *brush);
+                     UWORD count, const struct ZuneShapeStyle *style);
 
 /*****************************************************************************/
 /* Color Utilities */

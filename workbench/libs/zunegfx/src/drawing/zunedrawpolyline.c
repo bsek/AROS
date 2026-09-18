@@ -23,7 +23,7 @@ AROS_LH4(void, ZuneDrawPolyline,
          AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(struct ZunePoint *, points, A1),
          AROS_LHA(UWORD, count, D0),
-         AROS_LHA(ULONG, color, D1),
+         AROS_LHA(const struct ZuneShapeStyle *, style, A2),
 
          /*  LOCATION */
          struct Library *, ZuneGfxBase, 116, zunegfx)
@@ -45,19 +45,23 @@ RESULT
 {
   AROS_LIBFUNC_INIT
 
-  UWORD i;
+  struct InternalColor color;
+  UWORD width, i;
+  BOOL aa;
 
-  if (!rctx || !points || count < 2) {
+  if (!ValidateRenderContext(rctx) || !points || count < 2 || !style) {
     return;
   }
 
-  struct InternalColor internal_color = ZuneColorToInternal(rctx, color, rctx->pixel_format);
+  width = style->stroke_width ? style->stroke_width : 1;
+  aa = (style->flags & ZUNE_SHAPE_ANTIALIAS) != 0;
+  color = ZuneColorToInternal(rctx, style->stroke_color, rctx->pixel_format);
 
   for (i = 0; i < count - 1; i++) {
     ZUNE_BACKEND_CALL(rctx, DrawLine,
                       points[i].x, points[i].y,
                       points[i + 1].x, points[i + 1].y,
-                      1, &internal_color, FALSE);
+                      width, &color, aa);
   }
 
   AROS_LIBFUNC_EXIT

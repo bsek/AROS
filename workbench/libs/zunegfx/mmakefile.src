@@ -70,10 +70,8 @@ BATCHING_FILES := \
 
 DRAWING_FILES := \
         src/drawing/zunedrawline                \
-        src/drawing/zunedrawlinestyled          \
         src/drawing/zunedrawpixel               \
         src/drawing/zunedrawpolyline            \
-        src/drawing/zunedrawpolylinestyled      \
         src/drawing/zunefillpolygon
 
 TEXT_FILES := \
@@ -89,8 +87,6 @@ ANTIALIASING_FILES := \
         src/antialiasing/antialiasing_globals                   \
         src/antialiasing/zunesetantialiasingquality             \
         src/antialiasing/zunegetantialiasingquality             \
-        src/antialiasing/zunedrawlineaa                         \
-        src/antialiasing/zunedrawlinestyledaa
 
 BACKEND_FILES := \
         src/backends/backend_manager        \

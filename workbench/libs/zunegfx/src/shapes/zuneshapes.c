@@ -41,8 +41,8 @@ AROS_LH3(void, ZuneDrawRect,
     fill = (struct ZuneBrush *)style->fill;
     aa = (style->flags & ZUNE_SHAPE_ANTIALIAS) != 0;
 
-    if (style->border_width > 0) {
-        border = ZuneColorToInternal(rctx, style->border_color,
+    if (style->stroke_width > 0) {
+        border = ZuneColorToInternal(rctx, style->stroke_color,
                                      rctx->pixel_format);
         border_ptr = &border;
     }
@@ -51,7 +51,7 @@ AROS_LH3(void, ZuneDrawRect,
         return;
 
     ZUNE_BACKEND_CALL(rctx, DrawRectangle, rect->x, rect->y, rect->width,
-                      rect->height, (UBYTE)style->border_width,
+                      rect->height, (UBYTE)style->stroke_width,
                       style->corner_radius, fill, border_ptr,
                       fill != NULL, aa);
 
@@ -78,8 +78,8 @@ AROS_LH4(void, ZuneDrawCircle,
     fill = (struct ZuneBrush *)style->fill;
     aa = (style->flags & ZUNE_SHAPE_ANTIALIAS) != 0;
 
-    if (style->border_width > 0) {
-        border = ZuneColorToInternal(rctx, style->border_color,
+    if (style->stroke_width > 0) {
+        border = ZuneColorToInternal(rctx, style->stroke_color,
                                      rctx->pixel_format);
         border_ptr = &border;
     }
@@ -88,7 +88,7 @@ AROS_LH4(void, ZuneDrawCircle,
         return;
 
     ZUNE_BACKEND_CALL(rctx, DrawCircle, center->x, center->y, radius,
-                      (UBYTE)style->border_width, fill, border_ptr,
+                      (UBYTE)style->stroke_width, fill, border_ptr,
                       fill != NULL, aa);
 
     AROS_LIBFUNC_EXIT

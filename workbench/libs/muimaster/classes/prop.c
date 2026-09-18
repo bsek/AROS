@@ -698,8 +698,8 @@ AROS_UFH3
             struct ZuneBrush knob_brush = ZUNE_BRUSH_LITERAL_SOLID(knob_color);
             ZuneDrawRect(rctx, &knob,
                          ZUNE_STYLE(.fill = &knob_brush,
-                                    .border_color = knob_border_color,
-                                    .border_width = 1,
+                                    .stroke_color = knob_border_color,
+                                    .stroke_width = 1,
                                     .corner_radius = corner_radius,
                                     .flags = ZUNE_SHAPE_ANTIALIAS));
         }

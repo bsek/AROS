@@ -34,55 +34,55 @@ static void DrawAARectangles(struct DemoContext *ctx)
 
     /* Outlined rounded AA */
     ZuneDrawRect(rctx, ZUNE_RECT_PTR(50, 150, 100, 80),
-                 ZUNE_STYLE(.border_color = ZUNE_LIGHTGRAY,
-                            .border_width = 1,
+                 ZUNE_STYLE(.stroke_color = ZUNE_LIGHTGRAY,
+                            .stroke_width = 1,
                             .corner_radius = 5,
                             .flags = ZUNE_SHAPE_ANTIALIAS));
     ZuneDrawRect(rctx, ZUNE_RECT_PTR(170, 150, 100, 80),
-                 ZUNE_STYLE(.border_color = ZUNE_MAGENTA,
-                            .border_width = 1,
+                 ZUNE_STYLE(.stroke_color = ZUNE_MAGENTA,
+                            .stroke_width = 1,
                             .corner_radius = 15,
                             .flags = ZUNE_SHAPE_ANTIALIAS));
     ZuneDrawRect(rctx, ZUNE_RECT_PTR(290, 150, 100, 80),
-                 ZUNE_STYLE(.border_color = ZUNE_CYAN,
-                            .border_width = 5,
+                 ZUNE_STYLE(.stroke_color = ZUNE_CYAN,
+                            .stroke_width = 5,
                             .corner_radius = 20,
                             .flags = ZUNE_SHAPE_ANTIALIAS));
 
     /* Filled + border (styled AA) */
     ZuneDrawRect(rctx, ZUNE_RECT_PTR(50, 250, 100, 80),
                  ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_WHITE),
-                            .border_color = ZUNE_LIGHTGRAY,
-                            .border_width = 1,
+                            .stroke_color = ZUNE_LIGHTGRAY,
+                            .stroke_width = 1,
                             .corner_radius = 15,
                             .flags = ZUNE_SHAPE_ANTIALIAS));
     ZuneDrawRect(rctx, ZUNE_RECT_PTR(170, 250, 100, 80),
                  ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_YELLOW),
-                            .border_color = ZUNE_LIGHTGRAY,
-                            .border_width = 4,
+                            .stroke_color = ZUNE_LIGHTGRAY,
+                            .stroke_width = 4,
                             .corner_radius = 20,
                             .flags = ZUNE_SHAPE_ANTIALIAS));
     ZuneDrawRect(rctx, ZUNE_RECT_PTR(290, 250, 100, 80),
                  ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_GRAY),
-                            .border_color = ZUNE_LIGHTGRAY,
-                            .border_width = 1,
+                            .stroke_color = ZUNE_LIGHTGRAY,
+                            .stroke_width = 1,
                             .corner_radius = 25,
                             .flags = ZUNE_SHAPE_ANTIALIAS));
 
     /* Outlined styled AA with different line widths */
     ZuneDrawRect(rctx, ZUNE_RECT_PTR(50, 350, 100, 80),
-                 ZUNE_STYLE(.border_color = ZUNE_RED,
-                            .border_width = 1,
+                 ZUNE_STYLE(.stroke_color = ZUNE_RED,
+                            .stroke_width = 1,
                             .corner_radius = 10,
                             .flags = ZUNE_SHAPE_ANTIALIAS));
     ZuneDrawRect(rctx, ZUNE_RECT_PTR(170, 350, 100, 80),
-                 ZUNE_STYLE(.border_color = ZUNE_GREEN,
-                            .border_width = 3,
+                 ZUNE_STYLE(.stroke_color = ZUNE_GREEN,
+                            .stroke_width = 3,
                             .corner_radius = 15,
                             .flags = ZUNE_SHAPE_ANTIALIAS));
     ZuneDrawRect(rctx, ZUNE_RECT_PTR(290, 350, 100, 80),
-                 ZUNE_STYLE(.border_color = ZUNE_BLUE,
-                            .border_width = 4,
+                 ZUNE_STYLE(.stroke_color = ZUNE_BLUE,
+                            .stroke_width = 4,
                             .corner_radius = 20,
                             .flags = ZUNE_SHAPE_ANTIALIAS));
 
@@ -92,8 +92,8 @@ static void DrawAARectangles(struct DemoContext *ctx)
                             .corner_radius = 30,
                             .flags = ZUNE_SHAPE_ANTIALIAS));
     ZuneDrawRect(rctx, ZUNE_RECT_PTR(450, 130, 150, 100),
-                 ZUNE_STYLE(.border_color = ZUNE_COLOR_ARGB32(255, 255, 0, 0),
-                            .border_width = 5,
+                 ZUNE_STYLE(.stroke_color = ZUNE_COLOR_ARGB32(255, 255, 0, 0),
+                            .stroke_width = 5,
                             .corner_radius = 35,
                             .flags = ZUNE_SHAPE_ANTIALIAS));
 
@@ -103,14 +103,14 @@ static void DrawAARectangles(struct DemoContext *ctx)
                             .corner_radius = 8,
                             .flags = ZUNE_SHAPE_ANTIALIAS));
     ZuneDrawRect(rctx, ZUNE_RECT_PTR(470, 290, 35, 25),
-                 ZUNE_STYLE(.border_color = ZUNE_COLOR_ARGB32(200, 64, 255, 128),
-                            .border_width = 2,
+                 ZUNE_STYLE(.stroke_color = ZUNE_COLOR_ARGB32(200, 64, 255, 128),
+                            .stroke_width = 2,
                             .corner_radius = 6,
                             .flags = ZUNE_SHAPE_ANTIALIAS));
     ZuneDrawRect(rctx, ZUNE_RECT_PTR(515, 300, 45, 35),
                  ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(200, 128, 64, 255)),
-                            .border_color = ZUNE_COLOR_ARGB32(255, 255, 255, 255),
-                            .border_width = 3,
+                            .stroke_color = ZUNE_COLOR_ARGB32(255, 255, 255, 255),
+                            .stroke_width = 3,
                             .corner_radius = 10,
                             .flags = ZUNE_SHAPE_ANTIALIAS));
 
@@ -132,8 +132,8 @@ static void DrawAARectangles(struct DemoContext *ctx)
     };
     ZuneDrawRect(rctx, ZUNE_RECT_PTR(420, 350, 180, 80),
                  ZUNE_STYLE(.fill = &gradient_brush,
-                            .border_color = ZUNE_RED,
-                            .border_width = 5,
+                            .stroke_color = ZUNE_RED,
+                            .stroke_width = 5,
                             .corner_radius = 18,
                             .flags = ZUNE_SHAPE_ANTIALIAS));
 }

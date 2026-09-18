@@ -48,7 +48,7 @@ static void RunClippingDemo(struct DemoContext *ctx)
         }
         /* Show clip boundary */
         ZuneDrawRect(rctx, ZUNE_RECT_PTR(300, 30, 120, 80),
-                 ZUNE_STYLE(.border_color = ZUNE_YELLOW, .border_width = 1));
+                 ZUNE_STYLE(.stroke_color = ZUNE_YELLOW, .stroke_width = 1));
     }
 
     /* Circle clip region */
@@ -66,7 +66,7 @@ static void RunClippingDemo(struct DemoContext *ctx)
             DisposeRegion(region);
         }
         ZuneDrawCircle(rctx, ZUNE_POINT_PTR(120, 240), 60,
-                   ZUNE_STYLE(.border_color = ZUNE_YELLOW, .border_width = 1));
+                   ZUNE_STYLE(.stroke_color = ZUNE_YELLOW, .stroke_width = 1));
     }
 
     /* Rounded rect clip */
@@ -87,8 +87,8 @@ static void RunClippingDemo(struct DemoContext *ctx)
             DisposeRegion(region);
         }
         ZuneDrawRect(rctx, ZUNE_RECT_PTR(300, 175, 150, 100),
-                 ZUNE_STYLE(.border_color = ZUNE_YELLOW,
-                            .border_width = 1,
+                 ZUNE_STYLE(.stroke_color = ZUNE_YELLOW,
+                            .stroke_width = 1,
                             .corner_radius = 20));
     }
 

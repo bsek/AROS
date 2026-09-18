@@ -4,8 +4,7 @@
     ZuneGfx Library - Polyline Demo (Unlocked DrawingBoard)
 
     Tests polyline functions with standard rastport operations:
-    - ZuneDrawPolyline
-    - ZuneDrawPolylineStyled (with width)
+    - ZuneDrawPolyline: width and antialiasing are style fields
 
     Usage: demo_polyline_unlocked [cybergfx|opengl]
 */
@@ -26,7 +25,8 @@ static void DrawPolylines(struct DemoContext *ctx)
             {30, 50}, {80, 100}, {130, 50}, {180, 100},
             {230, 50}, {280, 100}, {330, 50}
         };
-        ZuneDrawPolyline(rctx, zigzag, 7, ZUNE_RED);
+        ZuneDrawPolyline(rctx, zigzag, 7,
+                     ZUNE_STYLE(.stroke_color = ZUNE_RED, .stroke_width = 1));
     }
 
     /* Sawtooth */
@@ -36,7 +36,8 @@ static void DrawPolylines(struct DemoContext *ctx)
             {90, 130}, {120, 160}, {120, 130}, {150, 160},
             {150, 130}, {180, 160}, {180, 130}
         };
-        ZuneDrawPolyline(rctx, saw, 11, ZUNE_GREEN);
+        ZuneDrawPolyline(rctx, saw, 11,
+                     ZUNE_STYLE(.stroke_color = ZUNE_GREEN, .stroke_width = 1));
     }
 
     /* Staircase */
@@ -46,7 +47,8 @@ static void DrawPolylines(struct DemoContext *ctx)
             {90, 170}, {120, 170}, {120, 155}, {150, 155},
             {150, 140}, {180, 140}
         };
-        ZuneDrawPolyline(rctx, stairs, 10, ZUNE_YELLOW);
+        ZuneDrawPolyline(rctx, stairs, 10,
+                     ZUNE_STYLE(.stroke_color = ZUNE_YELLOW, .stroke_width = 1));
     }
 
     /* Styled polylines with different widths */
@@ -54,22 +56,26 @@ static void DrawPolylines(struct DemoContext *ctx)
 
     {
         struct ZunePoint pts[] = {{30, 250}, {100, 280}, {170, 250}, {240, 280}, {310, 250}};
-        ZuneDrawPolylineStyled(rctx, pts, 5, 1, ZUNE_CYAN);
+        ZuneDrawPolyline(rctx, pts, 5,
+                     ZUNE_STYLE(.stroke_color = ZUNE_STYLE(.stroke_color = ZUNE_CYAN, .stroke_width = 1), .stroke_width = 1));
         ZuneDrawTextAt(rctx, 320, 260, "w=1", 3, ZUNE_CYAN);
     }
     {
         struct ZunePoint pts[] = {{30, 290}, {100, 320}, {170, 290}, {240, 320}, {310, 290}};
-        ZuneDrawPolylineStyled(rctx, pts, 5, 2, ZUNE_MAGENTA);
+        ZuneDrawPolyline(rctx, pts, 5,
+                     ZUNE_STYLE(.stroke_color = ZUNE_STYLE(.stroke_color = ZUNE_MAGENTA, .stroke_width = 2), .stroke_width = 1));
         ZuneDrawTextAt(rctx, 320, 300, "w=2", 3, ZUNE_MAGENTA);
     }
     {
         struct ZunePoint pts[] = {{30, 330}, {100, 360}, {170, 330}, {240, 360}, {310, 330}};
-        ZuneDrawPolylineStyled(rctx, pts, 5, 3, ZUNE_COLOR_ARGB32(255, 255, 128, 0));
+        ZuneDrawPolyline(rctx, pts, 5,
+                     ZUNE_STYLE(.stroke_color = ZUNE_STYLE(.stroke_color = ZUNE_COLOR_ARGB32(255, 255, 128, 0), .stroke_width = 3), .stroke_width = 1));
         ZuneDrawTextAt(rctx, 320, 340, "w=3", 3, ZUNE_COLOR_ARGB32(255, 255, 128, 0));
     }
     {
         struct ZunePoint pts[] = {{30, 380}, {100, 410}, {170, 380}, {240, 410}, {310, 380}};
-        ZuneDrawPolylineStyled(rctx, pts, 5, 5, ZUNE_COLOR_ARGB32(255, 128, 255, 0));
+        ZuneDrawPolyline(rctx, pts, 5,
+                     ZUNE_STYLE(.stroke_color = ZUNE_STYLE(.stroke_color = ZUNE_COLOR_ARGB32(255, 128, 255, 0), .stroke_width = 5), .stroke_width = 1));
         ZuneDrawTextAt(rctx, 320, 390, "w=5", 3, ZUNE_COLOR_ARGB32(255, 128, 255, 0));
     }
 
@@ -86,7 +92,8 @@ static void DrawPolylines(struct DemoContext *ctx)
             star[i].y = cy + (WORD)(r * sinf(angle));
         }
         star[10] = star[0];
-        ZuneDrawPolylineStyled(rctx, star, 11, 2, ZUNE_YELLOW);
+        ZuneDrawPolyline(rctx, star, 11,
+                     ZUNE_STYLE(.stroke_color = ZUNE_STYLE(.stroke_color = ZUNE_YELLOW, .stroke_width = 2), .stroke_width = 1));
     }
 
     {
@@ -98,7 +105,8 @@ static void DrawPolylines(struct DemoContext *ctx)
             spiral[i].x = cx + (WORD)(r * cosf(angle));
             spiral[i].y = cy + (WORD)(r * sinf(angle));
         }
-        ZuneDrawPolyline(rctx, spiral, 40, ZUNE_COLOR_ARGB32(255, 100, 200, 255));
+        ZuneDrawPolyline(rctx, spiral, 40,
+                     ZUNE_STYLE(.stroke_color = ZUNE_COLOR_ARGB32(255, 100, 200, 255), .stroke_width = 1));
     }
 
     {
@@ -107,7 +115,8 @@ static void DrawPolylines(struct DemoContext *ctx)
             sine[i].x = 430 + i * 6;
             sine[i].y = 250 + (WORD)(40.0f * sinf((float)i * 0.15f));
         }
-        ZuneDrawPolylineStyled(rctx, sine, 60, 2, ZUNE_COLOR_ARGB32(255, 255, 100, 200));
+        ZuneDrawPolyline(rctx, sine, 60,
+                     ZUNE_STYLE(.stroke_color = ZUNE_STYLE(.stroke_color = ZUNE_COLOR_ARGB32(255, 255, 100, 200), .stroke_width = 2), .stroke_width = 1));
     }
 
     {
@@ -119,7 +128,8 @@ static void DrawPolylines(struct DemoContext *ctx)
             hex[i].y = cy + (WORD)(40 * sinf(angle));
         }
         hex[6] = hex[0];
-        ZuneDrawPolylineStyled(rctx, hex, 7, 3, ZUNE_GREEN);
+        ZuneDrawPolyline(rctx, hex, 7,
+                     ZUNE_STYLE(.stroke_color = ZUNE_STYLE(.stroke_color = ZUNE_GREEN, .stroke_width = 3), .stroke_width = 1));
     }
 }
 

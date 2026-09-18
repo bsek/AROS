@@ -23,7 +23,7 @@ AROS_LH4(void, ZuneFillPolygon,
          AROS_LHA(struct RenderContext *, rctx, A0),
          AROS_LHA(struct ZunePoint *, points, A1),
          AROS_LHA(UWORD, count, D0),
-         AROS_LHA(const struct ZuneBrush *, brush, A2),
+         AROS_LHA(const struct ZuneShapeStyle *, style, A2),
 
          /*  LOCATION */
          struct Library *, ZuneGfxBase, 118, zunegfx)
@@ -45,12 +45,14 @@ RESULT
 {
   AROS_LIBFUNC_INIT
 
-  if (!rctx || !points || count < 3 || !brush) {
+  if (!ValidateRenderContext(rctx) || !points || count < 3 || !style
+      || !style->fill) {
     return;
   }
 
   ZUNE_BACKEND_CALL(rctx, FillPolygon, points, count,
-                    (struct ZuneBrush *)brush, FALSE);
+                    (struct ZuneBrush *)style->fill,
+                    (style->flags & ZUNE_SHAPE_ANTIALIAS) != 0);
 
   AROS_LIBFUNC_EXIT
 }

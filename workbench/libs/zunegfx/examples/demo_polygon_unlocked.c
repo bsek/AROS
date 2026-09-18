@@ -24,11 +24,13 @@ static void DrawPolygons(struct DemoContext *ctx)
 
     {
         struct ZunePoint tri[] = {{80, 50}, {30, 140}, {130, 140}};
-        ZuneFillPolygon(rctx, tri, 3, ZUNE_BRUSH_SOLID(ZUNE_RED));
+        ZuneFillPolygon(rctx, tri, 3,
+                    ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_RED)));
     }
     {
         struct ZunePoint sq[] = {{170, 50}, {250, 50}, {250, 140}, {170, 140}};
-        ZuneFillPolygon(rctx, sq, 4, ZUNE_BRUSH_SOLID(ZUNE_GREEN));
+        ZuneFillPolygon(rctx, sq, 4,
+                    ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_GREEN)));
     }
     {
         struct ZunePoint pent[5];
@@ -38,7 +40,8 @@ static void DrawPolygons(struct DemoContext *ctx)
             pent[i].x = cx + (WORD)(45 * cosf(angle));
             pent[i].y = cy + (WORD)(45 * sinf(angle));
         }
-        ZuneFillPolygon(rctx, pent, 5, ZUNE_BRUSH_SOLID(ZUNE_BLUE));
+        ZuneFillPolygon(rctx, pent, 5,
+                    ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_BLUE)));
     }
     {
         struct ZunePoint hex[6];
@@ -48,7 +51,8 @@ static void DrawPolygons(struct DemoContext *ctx)
             hex[i].x = cx + (WORD)(45 * cosf(angle));
             hex[i].y = cy + (WORD)(45 * sinf(angle));
         }
-        ZuneFillPolygon(rctx, hex, 6, ZUNE_BRUSH_SOLID(ZUNE_YELLOW));
+        ZuneFillPolygon(rctx, hex, 6,
+                    ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_YELLOW)));
     }
     {
         struct ZunePoint oct[8];
@@ -58,7 +62,8 @@ static void DrawPolygons(struct DemoContext *ctx)
             oct[i].x = cx + (WORD)(45 * cosf(angle));
             oct[i].y = cy + (WORD)(45 * sinf(angle));
         }
-        ZuneFillPolygon(rctx, oct, 8, ZUNE_BRUSH_SOLID(ZUNE_MAGENTA));
+        ZuneFillPolygon(rctx, oct, 8,
+                    ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_MAGENTA)));
     }
 
     /* Stars */
@@ -73,7 +78,8 @@ static void DrawPolygons(struct DemoContext *ctx)
             star[i].x = cx + (WORD)(r * cosf(angle));
             star[i].y = cy + (WORD)(r * sinf(angle));
         }
-        ZuneFillPolygon(rctx, star, 10, ZUNE_BRUSH_SOLID(ZUNE_YELLOW));
+        ZuneFillPolygon(rctx, star, 10,
+                    ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_YELLOW)));
     }
     {
         struct ZunePoint star[12];
@@ -84,7 +90,8 @@ static void DrawPolygons(struct DemoContext *ctx)
             star[i].x = cx + (WORD)(r * cosf(angle));
             star[i].y = cy + (WORD)(r * sinf(angle));
         }
-        ZuneFillPolygon(rctx, star, 12, ZUNE_BRUSH_SOLID(ZUNE_CYAN));
+        ZuneFillPolygon(rctx, star, 12,
+                    ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_CYAN)));
     }
     {
         struct ZunePoint star[16];
@@ -96,7 +103,7 @@ static void DrawPolygons(struct DemoContext *ctx)
             star[i].y = cy + (WORD)(r * sinf(angle));
         }
         ZuneFillPolygon(rctx, star, 16,
-                        ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(255, 255, 128, 0)));
+                    ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(255, 255, 128, 0))));
     }
 
     /* Gradient polygons */
@@ -117,7 +124,8 @@ static void DrawPolygons(struct DemoContext *ctx)
             }}
         };
         struct ZunePoint tri[] = {{100, 300}, {30, 400}, {180, 400}};
-        ZuneFillPolygon(rctx, tri, 3, &brush);
+        ZuneFillPolygon(rctx, tri, 3,
+                    ZUNE_STYLE(.fill = &brush));
     }
     {
         static const struct ZuneGradientStop stops[] = {
@@ -141,7 +149,8 @@ static void DrawPolygons(struct DemoContext *ctx)
             hex[i].x = cx + (WORD)(50 * cosf(angle));
             hex[i].y = cy + (WORD)(50 * sinf(angle));
         }
-        ZuneFillPolygon(rctx, hex, 6, &brush);
+        ZuneFillPolygon(rctx, hex, 6,
+                    ZUNE_STYLE(.fill = &brush));
     }
 
     /* Complex shapes */
@@ -153,7 +162,7 @@ static void DrawPolygons(struct DemoContext *ctx)
             {530, 240}, {530, 220}, {430, 220}
         };
         ZuneFillPolygon(rctx, arrow, 7,
-                        ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(255, 100, 180, 255)));
+                    ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(255, 100, 180, 255))));
     }
     {
         struct ZunePoint lshape[] = {
@@ -161,7 +170,7 @@ static void DrawPolygons(struct DemoContext *ctx)
             {650, 250}, {620, 250}
         };
         ZuneFillPolygon(rctx, lshape, 6,
-                        ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(255, 255, 180, 100)));
+                    ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(255, 255, 180, 100))));
     }
     {
         struct ZunePoint cross[] = {
@@ -170,7 +179,7 @@ static void DrawPolygons(struct DemoContext *ctx)
             {470, 330}, {440, 330}, {440, 300}, {470, 300}
         };
         ZuneFillPolygon(rctx, cross, 12,
-                        ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(255, 255, 80, 80)));
+                    ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(255, 255, 80, 80))));
     }
 
     /* Texture-filled (from testimage.png) */
@@ -201,7 +210,8 @@ static void DrawPolygons(struct DemoContext *ctx)
                 hex[i].x = cx + (WORD)(40 * cosf(angle));
                 hex[i].y = cy + (WORD)(40 * sinf(angle));
             }
-            ZuneFillPolygon(rctx, hex, 6, &tex_brush);
+            ZuneFillPolygon(rctx, hex, 6,
+                    ZUNE_STYLE(.fill = &tex_brush));
 
             struct ZunePoint star[10];
             cx = 630; cy = 420;
@@ -211,7 +221,8 @@ static void DrawPolygons(struct DemoContext *ctx)
                 star[i].x = cx + (WORD)(r * cosf(angle));
                 star[i].y = cy + (WORD)(r * sinf(angle));
             }
-            ZuneFillPolygon(rctx, star, 10, &tex_brush);
+            ZuneFillPolygon(rctx, star, 10,
+                    ZUNE_STYLE(.fill = &tex_brush));
 
             ZuneDestroyTexture(rctx, img_tex);
         }

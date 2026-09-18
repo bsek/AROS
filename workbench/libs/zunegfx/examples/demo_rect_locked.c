@@ -31,11 +31,11 @@ static void DrawRectangles(struct DemoContext *ctx)
 
     /* Outlined rectangles */
     ZuneDrawRect(rctx, ZUNE_RECT_PTR(50, 150, 100, 80),
-                 ZUNE_STYLE(.border_color = ZUNE_YELLOW, .border_width = 1));
+                 ZUNE_STYLE(.stroke_color = ZUNE_YELLOW, .stroke_width = 1));
     ZuneDrawRect(rctx, ZUNE_RECT_PTR(170, 150, 100, 80),
-                 ZUNE_STYLE(.border_color = ZUNE_MAGENTA, .border_width = 1));
+                 ZUNE_STYLE(.stroke_color = ZUNE_MAGENTA, .stroke_width = 1));
     ZuneDrawRect(rctx, ZUNE_RECT_PTR(290, 150, 100, 80),
-                 ZUNE_STYLE(.border_color = ZUNE_CYAN, .border_width = 5));
+                 ZUNE_STYLE(.stroke_color = ZUNE_CYAN, .stroke_width = 5));
 
     /* Rounded filled rectangles */
     ZuneDrawRect(rctx, ZUNE_RECT_PTR(50, 250, 100, 80),
@@ -47,16 +47,16 @@ static void DrawRectangles(struct DemoContext *ctx)
 
     /* Rounded outlined rectangles */
     ZuneDrawRect(rctx, ZUNE_RECT_PTR(50, 350, 100, 80),
-                 ZUNE_STYLE(.border_color = ZUNE_RED,
-                            .border_width = 1,
+                 ZUNE_STYLE(.stroke_color = ZUNE_RED,
+                            .stroke_width = 1,
                             .corner_radius = 10));
     ZuneDrawRect(rctx, ZUNE_RECT_PTR(170, 350, 100, 80),
-                 ZUNE_STYLE(.border_color = ZUNE_GREEN,
-                            .border_width = 1,
+                 ZUNE_STYLE(.stroke_color = ZUNE_GREEN,
+                            .stroke_width = 1,
                             .corner_radius = 15));
     ZuneDrawRect(rctx, ZUNE_RECT_PTR(290, 350, 100, 80),
-                 ZUNE_STYLE(.border_color = ZUNE_BLUE,
-                            .border_width = 1,
+                 ZUNE_STYLE(.stroke_color = ZUNE_BLUE,
+                            .stroke_width = 1,
                             .corner_radius = 20));
 
     /* Semi-transparent overlapping rectangles */
@@ -112,8 +112,8 @@ static void DrawRectangles(struct DemoContext *ctx)
     /* Rounded styled (fill + border) */
     ZuneDrawRect(rctx, ZUNE_RECT_PTR(620, 50, 140, 80),
                  ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_LIGHTGRAY),
-                            .border_color = ZUNE_RED,
-                            .border_width = 3,
+                            .stroke_color = ZUNE_RED,
+                            .stroke_width = 3,
                             .corner_radius = 15));
 
     struct ZuneGradientStop styled_stops[] = {
@@ -132,14 +132,14 @@ static void DrawRectangles(struct DemoContext *ctx)
     };
     ZuneDrawRect(rctx, ZUNE_RECT_PTR(620, 150, 140, 80),
                  ZUNE_STYLE(.fill = &styled_brush,
-                            .border_color = ZUNE_WHITE,
-                            .border_width = 4,
+                            .stroke_color = ZUNE_WHITE,
+                            .stroke_width = 4,
                             .corner_radius = 20));
 
     ZuneDrawRect(rctx, ZUNE_RECT_PTR(620, 250, 140, 80),
                  ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(255, 255, 200, 100)),
-                            .border_color = ZUNE_COLOR_ARGB32(255, 150, 100, 50),
-                            .border_width = 1,
+                            .stroke_color = ZUNE_COLOR_ARGB32(255, 150, 100, 50),
+                            .stroke_width = 1,
                             .corner_radius = 25));
 }
 

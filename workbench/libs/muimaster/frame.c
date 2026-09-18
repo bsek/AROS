@@ -421,8 +421,8 @@ BOOL zune_frame_try_renderer(Object *obj, struct MUI_AreaData *data, const struc
             } else {
                 ZuneDrawRect(buffer_port, &buffer_rect,
                              ZUNE_STYLE(.fill = fill_brush,
-                                        .border_color = border_color,
-                                        .border_width = border_width,
+                                        .stroke_color = border_color,
+                                        .stroke_width = border_width,
                                         .corner_radius = radius,
                                         .flags = ZUNE_SHAPE_ANTIALIAS));
             }
@@ -455,8 +455,8 @@ BOOL zune_frame_try_renderer(Object *obj, struct MUI_AreaData *data, const struc
                 D(bug("Drawing frame with outline width: %d and radius: %d\n", border_width, radius));
                 ZuneDrawRect(port, &rect,
                              ZUNE_STYLE(.fill = fill_brush,
-                                        .border_color = border_color,
-                                        .border_width = border_width,
+                                        .stroke_color = border_color,
+                                        .stroke_width = border_width,
                                         .corner_radius = radius,
                                         .flags = use_aa ? ZUNE_SHAPE_ANTIALIAS : 0));
             }
@@ -581,8 +581,8 @@ void zune_frame_draw_deferred_outline(Object *obj, struct MUI_AreaData *data,
             };
 
             ZuneDrawRect(buffer_port, &buffer_rect,
-                         ZUNE_STYLE(.border_color = border_color,
-                                    .border_width = border_width,
+                         ZUNE_STYLE(.stroke_color = border_color,
+                                    .stroke_width = border_width,
                                     .corner_radius = radius,
                                     .flags = ZUNE_SHAPE_ANTIALIAS));
 
@@ -597,14 +597,14 @@ void zune_frame_draw_deferred_outline(Object *obj, struct MUI_AreaData *data,
     if (!use_drawbuffer) {
         if (use_aa)
             ZuneDrawRect(port, &rect,
-                         ZUNE_STYLE(.border_color = border_color,
-                                    .border_width = border_width,
+                         ZUNE_STYLE(.stroke_color = border_color,
+                                    .stroke_width = border_width,
                                     .corner_radius = radius,
                                     .flags = ZUNE_SHAPE_ANTIALIAS));
         else
             ZuneDrawRect(port, &rect,
-                         ZUNE_STYLE(.border_color = border_color,
-                                    .border_width = border_width,
+                         ZUNE_STYLE(.stroke_color = border_color,
+                                    .stroke_width = border_width,
                                     .corner_radius = radius));
     }
 
@@ -1085,7 +1085,7 @@ static BOOL rect_draw_with_zunegfx(struct MUI_RenderInfo *mri, int left,
     };
 
     ZuneDrawRect(mri->mri_RenderContext, &rect,
-                 ZUNE_STYLE(.border_color = border_color, .border_width = 1));
+                 ZUNE_STYLE(.stroke_color = border_color, .stroke_width = 1));
 
     return TRUE;
 }

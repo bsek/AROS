@@ -30,47 +30,47 @@ static void DrawAACircles(struct DemoContext *ctx)
 
     /* AA outlined circles with different widths */
     ZuneDrawCircle(rctx, ZUNE_POINT_PTR(120, 200), 40,
-                   ZUNE_STYLE(.border_color = ZUNE_YELLOW,
-                              .border_width = 1,
+                   ZUNE_STYLE(.stroke_color = ZUNE_YELLOW,
+                              .stroke_width = 1,
                               .flags = ZUNE_SHAPE_ANTIALIAS));
     ZuneDrawCircle(rctx, ZUNE_POINT_PTR(240, 200), 40,
-                   ZUNE_STYLE(.border_color = ZUNE_MAGENTA,
-                              .border_width = 3,
+                   ZUNE_STYLE(.stroke_color = ZUNE_MAGENTA,
+                              .stroke_width = 3,
                               .flags = ZUNE_SHAPE_ANTIALIAS));
     ZuneDrawCircle(rctx, ZUNE_POINT_PTR(360, 200), 40,
-                   ZUNE_STYLE(.border_color = ZUNE_CYAN,
-                              .border_width = 5,
+                   ZUNE_STYLE(.stroke_color = ZUNE_CYAN,
+                              .stroke_width = 5,
                               .flags = ZUNE_SHAPE_ANTIALIAS));
 
     /* AA filled + border (styled) */
     ZuneDrawCircle(rctx, ZUNE_POINT_PTR(480, 90), 30,
                    ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_WHITE),
-                              .border_color = ZUNE_LIGHTGRAY,
-                              .border_width = 1,
+                              .stroke_color = ZUNE_LIGHTGRAY,
+                              .stroke_width = 1,
                               .flags = ZUNE_SHAPE_ANTIALIAS));
     ZuneDrawCircle(rctx, ZUNE_POINT_PTR(480, 150), 25,
                    ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_YELLOW),
-                              .border_color = ZUNE_GRAY,
-                              .border_width = 3,
+                              .stroke_color = ZUNE_GRAY,
+                              .stroke_width = 3,
                               .flags = ZUNE_SHAPE_ANTIALIAS));
     ZuneDrawCircle(rctx, ZUNE_POINT_PTR(480, 210), 20,
                    ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_LIGHTGRAY),
-                              .border_color = ZUNE_RED,
-                              .border_width = 2,
+                              .stroke_color = ZUNE_RED,
+                              .stroke_width = 2,
                               .flags = ZUNE_SHAPE_ANTIALIAS));
 
     /* Various line widths */
     ZuneDrawCircle(rctx, ZUNE_POINT_PTR(120, 320), 35,
-                   ZUNE_STYLE(.border_color = ZUNE_RED,
-                              .border_width = 1,
+                   ZUNE_STYLE(.stroke_color = ZUNE_RED,
+                              .stroke_width = 1,
                               .flags = ZUNE_SHAPE_ANTIALIAS));
     ZuneDrawCircle(rctx, ZUNE_POINT_PTR(240, 320), 30,
-                   ZUNE_STYLE(.border_color = ZUNE_GREEN,
-                              .border_width = 4,
+                   ZUNE_STYLE(.stroke_color = ZUNE_GREEN,
+                              .stroke_width = 4,
                               .flags = ZUNE_SHAPE_ANTIALIAS));
     ZuneDrawCircle(rctx, ZUNE_POINT_PTR(360, 320), 25,
-                   ZUNE_STYLE(.border_color = ZUNE_BLUE,
-                              .border_width = 6,
+                   ZUNE_STYLE(.stroke_color = ZUNE_BLUE,
+                              .stroke_width = 6,
                               .flags = ZUNE_SHAPE_ANTIALIAS));
 
     /* Overlapping AA */
@@ -78,8 +78,8 @@ static void DrawAACircles(struct DemoContext *ctx)
                    ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(128, 255, 255, 0)),
                               .flags = ZUNE_SHAPE_ANTIALIAS));
     ZuneDrawCircle(rctx, ZUNE_POINT_PTR(500, 320), 40,
-                   ZUNE_STYLE(.border_color = ZUNE_COLOR_ARGB32(255, 255, 0, 0),
-                              .border_width = 4,
+                   ZUNE_STYLE(.stroke_color = ZUNE_COLOR_ARGB32(255, 255, 0, 0),
+                              .stroke_width = 4,
                               .flags = ZUNE_SHAPE_ANTIALIAS));
 
     /* Small AA circles */
@@ -87,13 +87,13 @@ static void DrawAACircles(struct DemoContext *ctx)
                    ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(200, 255, 128, 64)),
                               .flags = ZUNE_SHAPE_ANTIALIAS));
     ZuneDrawCircle(rctx, ZUNE_POINT_PTR(550, 390), 12,
-                   ZUNE_STYLE(.border_color = ZUNE_COLOR_ARGB32(200, 64, 255, 128),
-                              .border_width = 2,
+                   ZUNE_STYLE(.stroke_color = ZUNE_COLOR_ARGB32(200, 64, 255, 128),
+                              .stroke_width = 2,
                               .flags = ZUNE_SHAPE_ANTIALIAS));
     ZuneDrawCircle(rctx, ZUNE_POINT_PTR(580, 410), 18,
                    ZUNE_STYLE(.fill = ZUNE_BRUSH_SOLID(ZUNE_COLOR_ARGB32(200, 128, 64, 255)),
-                              .border_color = ZUNE_COLOR_ARGB32(255, 255, 255, 255),
-                              .border_width = 3,
+                              .stroke_color = ZUNE_COLOR_ARGB32(255, 255, 255, 255),
+                              .stroke_width = 3,
                               .flags = ZUNE_SHAPE_ANTIALIAS));
 }
 
