@@ -379,8 +379,23 @@ static int v3d_ioctl_dispatch(struct V3DData *sd, unsigned long request,
         case DRM_V3D_PARAM_V3D_CORE0_IDENT0: p->value = sd->core_ident[0]; break;
         case DRM_V3D_PARAM_V3D_CORE0_IDENT1: p->value = sd->core_ident[1]; break;
         case DRM_V3D_PARAM_V3D_CORE0_IDENT2: p->value = sd->core_ident[2]; break;
+        /* Every kick flushes L2, L2T and the slice caches, so the flag
+           Mesa sets off the back of this is redundant, not ignored. */
+        case DRM_V3D_PARAM_SUPPORTS_CACHE_FLUSH: p->value = 1; break;
+
+        /* Paired with the submit ioctls below, which refuse. */
         case DRM_V3D_PARAM_SUPPORTS_TFU:    p->value = 0; break;
         case DRM_V3D_PARAM_SUPPORTS_CSD:    p->value = 0; break;
+
+        /* No perfmon ioctls, no submit extensions, no CPU queue. */
+        case DRM_V3D_PARAM_SUPPORTS_PERFMON:       p->value = 0; break;
+        case DRM_V3D_PARAM_SUPPORTS_MULTISYNC_EXT: p->value = 0; break;
+        case DRM_V3D_PARAM_SUPPORTS_CPU_QUEUE:     p->value = 0; break;
+
+        /* Resets are not tracked, and 0 reads as "none have happened". */
+        case DRM_V3D_PARAM_GLOBAL_RESET_COUNTER:   p->value = 0; break;
+        case DRM_V3D_PARAM_CONTEXT_RESET_COUNTER:  p->value = 0; break;
+
         default:                            p->value = 0; break;
         }
         return 0;
@@ -640,8 +655,12 @@ void renderonly_scanout_destroy(struct renderonly_scanout *scanout,
 }
 
 /* driconf: mesa.cfg leaves xmlconfig.c out of libmesautil, so v3d_screen.c's
- * option handling has to be answered here. Every option reads as unset, which
- * is what Mesa itself falls back to without a config file. */
+ * option handling has to be answered here. The defaults are not "everything
+ * off" - they come from driinfo_gallium.h, and driParseConfigFiles is what
+ * applies them, so the four that default true have to be answered as such.
+ * allow_compressed_fallback is the one that matters: without it Mesa cannot
+ * offer RGTC through its software fallback, ARB_texture_compression_rgtc is
+ * missing, and the GL 3.0 check fails - leaving a 2.1 context. */
 void driParseConfigFiles(void *cache, const void *info,
                          int screenNum, const char *driverName,
                          const char *kernelDriverName,
@@ -663,7 +682,33 @@ unsigned char driCheckOption(const void *cache, const char *name, int type)
 
 unsigned char driQueryOptionb(const void *cache, const char *name)
 {
-    (void)cache; (void)name;
+    static const char * const default_true[] =
+    {
+        "allow_compressed_fallback",
+        "allow_draw_out_of_order",
+        "allow_rgb10_configs",
+        "allow_rgb16_configs",
+    };
+    unsigned int i;
+
+    (void)cache;
+
+    for (i = 0; i < sizeof(default_true) / sizeof(default_true[0]); i++)
+    {
+        /* Own compare: this file pulls in no libc, and str* through an
+           unset StdCBase has bitten other early modules. */
+        const char *a = name, *b = default_true[i];
+
+        while (*a && *a == *b)
+        {
+            a++;
+            b++;
+        }
+
+        if (*a == *b)
+            return 1;
+    }
+
     return 0;
 }
 
