@@ -57,6 +57,8 @@ struct vc4_bo_entry
     BOOL    is_shader;      /* Immutable shader BO */
     BOOL    external;       /* Wraps memory we don't own (scanout page) */
     BOOL    cpu_mapped;     /* MMAP_BO was called — CPU may hold dirty lines */
+    APTR    cached_base;    /* VC4_CACHED_BO: unaligned AllocMem base, 0 = VC pool */
+    ULONG   cached_size;    /* VC4_CACHED_BO: bytes handed to AllocMem */
     UQUAD   tiling_modifier;/* DRM_FORMAT_MOD_* — round-tripped via set/get_tiling */
     /* Shader metadata (set by QPU scanner on CREATE_SHADER_BO) */
     ULONG   uniforms_size;          /* Bytes of uniform data GPU reads */
@@ -255,6 +257,20 @@ LIBBASETYPE
 /* Per-frame timing. Flip to 0 to silence. Reads SYSTIMER_CLO (1 MHz).
  * Output format is one bug() line per measured stage, so a single grep
  * '[VC4Prof]' over a serial log gives a CSV of the bottleneck. */
+/* Take texture/vertex BOs from ordinary AROS RAM, which the boot MMU maps
+ * cacheable (arch/aarch64-raspi/boot/boot.c maps the VideoCore partition
+ * Normal-NC), cleaning each one before every submit instead.
+ *
+ * MEASURED SLOWER — keep this 0. glblitbench on a Pi 3B+, 376x287x32:
+ * upload 1991 -> 2371 us plain, 1175 -> 1647 us on the direct tiled store
+ * path. A texture upload is pure streaming, so the bytes must reach memory
+ * either way; caching them first only adds the writeback that CacheClearE
+ * then has to do, plus its own overhead. The write-combining buffer in front
+ * of Normal-NC is the better fit. The remaining cost is the scatter pattern
+ * of vc4_store_tiled_image, not cacheability. Left in place, and off, so the
+ * experiment does not get repeated. */
+#define VC4_CACHED_BO 0
+
 #define VC4G_PROFILE 0          /* periodic frame-budget summary (1 line / 120 frames) */
 #define VC4G_PROFILE_FRAME 0    /* per-frame submit_cl/display_blit dumps (serial-heavy) */
 
