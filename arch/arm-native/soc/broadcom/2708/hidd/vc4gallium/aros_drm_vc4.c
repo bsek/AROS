@@ -486,14 +486,44 @@ BOOL aros_drm_blit_resource(struct pipe_resource *src_pres,
                 /* Display the PREVIOUS frame; its jobs ran while this
                  * frame was being built, so this wait is normally a
                  * no-op. The just-rendered frame goes into the queue. */
+                /* Present-path budget: where swap time goes, 1 line / 128.
+                 * bug() is synchronous, so keep it behind the profile flag —
+                 * it lands inside a timed frame. */
+#if VC4G_PROFILE
+                static ULONG _pp_n, _pp_wait, _pp_ovl, _pp_wait_max, _pp_ovl_max;
+#endif
+                int64_t _pp_t0 = os_time_get();
+
                 vc4_wait_seqno(vscreen, aros_ovl.queued_seqno,
                                PIPE_TIMEOUT_INFINITE, "ovl-present");
 
-                if (aros_drm_bridge->set_overlay(aros_drm_bridge->ctx,
+                int64_t _pp_t1 = os_time_get();
+                int oret = aros_drm_bridge->set_overlay(aros_drm_bridge->ctx,
                         scr_bm_obj, aros_ovl.queued->handle, stride,
                         absX, absY, xSize, ySize,
                         xSize * mesa3dgl_render_scale,
-                        ySize * mesa3dgl_render_scale) == 0)
+                        ySize * mesa3dgl_render_scale);
+                int64_t _pp_t2 = os_time_get();
+
+#if VC4G_PROFILE
+                _pp_wait += (ULONG)(_pp_t1 - _pp_t0);
+                _pp_ovl  += (ULONG)(_pp_t2 - _pp_t1);
+                if ((ULONG)(_pp_t1 - _pp_t0) > _pp_wait_max) _pp_wait_max = (ULONG)(_pp_t1 - _pp_t0);
+                if ((ULONG)(_pp_t2 - _pp_t1) > _pp_ovl_max)  _pp_ovl_max  = (ULONG)(_pp_t2 - _pp_t1);
+                if (++_pp_n >= 128)
+                {
+                    bug("[vc4ovl] present diag %lu: wait_seqno=%lu us avg/%lu max "
+                        "set_overlay=%lu us avg/%lu max\n",
+                        (unsigned long)_pp_n,
+                        (unsigned long)(_pp_wait / _pp_n), (unsigned long)_pp_wait_max,
+                        (unsigned long)(_pp_ovl / _pp_n), (unsigned long)_pp_ovl_max);
+                    _pp_n = _pp_wait = _pp_ovl = _pp_wait_max = _pp_ovl_max = 0;
+                }
+#else
+                (void)_pp_t0; (void)_pp_t1; (void)_pp_t2;
+#endif
+
+                if (oret == 0)
                 {
                     /* Rotate: queued -> on plane; the page leaving the
                      * plane becomes the next render target (the GPU
@@ -798,6 +828,15 @@ IPTR vc4_aros_display_rp(APTR resource, LONG srcx, LONG srcy,
  * mid-render. */
 BOOL aros_drm_release_bridge(void)
 {
+    /* Take the plane down FIRST. Dropping the bookkeeping below leaves the
+     * HVS still programmed against a page that the hidd's BO sweep is about
+     * to hand back to the firmware, which is why the game's overlay stayed
+     * on screen after returning to the GUI. clear_overlay only touches hidd
+     * state (bitmap object and BO handles), so it is safe here even though
+     * the in-lib screen has already been destroyed. */
+    if (aros_drm_bridge && aros_ovl.shown)
+        aros_drm_bridge->clear_overlay(aros_drm_bridge->ctx, NULL);
+
     /* Just drop our in-lib bookkeeping pointers — the underlying firmware
      * BOs are freed by the hidd sweep below, not here (unreferencing the
      * vc4_bo structs would touch the just-freed in-lib screen). */

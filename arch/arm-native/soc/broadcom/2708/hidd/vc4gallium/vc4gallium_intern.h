@@ -227,6 +227,10 @@ struct vc4galliumstaticdata
      * was shown on, for clear_overlay(NULL) at context teardown. */
     ULONG                   overlay_pinned_handle;
     OOP_Object             *overlay_bm;
+    /* Page the last set_overlay took off the plane, still on scanout
+     * until vblank; submit_cl waits for the latch before a job writes
+     * it. 0 = nothing pending. */
+    ULONG                   overlay_displaced_handle;
 
     /* Polls the FLDONE -> CT1 handoff while a render kick is pending
      * (V3D IRQ is masked). See vc4_service_task_entry. */
@@ -289,6 +293,9 @@ void vc4_aros_dma_wait_idle(struct vc4galliumstaticdata *sd);
 /* Wait for all submitted V3D work and flush its L2. Defined in
  * vc4_galliumclass.c. */
 void vc4_aros_wait_idle(struct vc4galliumstaticdata *sd);
+void vc4_aros_overlay_latch_wait(struct vc4galliumstaticdata *sd);
+/* SYSTIMER_CLO (1 MHz) for diagnostics outside vc4_galliumclass.c. */
+ULONG gallium_now_us_ext(void);
 
 /* V3D service task (vc4_galliumclass.c): started at init, kicked by
  * submit_cl after CT0 is started, stopped at expunge. */
