@@ -346,6 +346,55 @@ static void initextensions()
     glGetShaderiv           = (PFNGLGETSHADERIVPROC)glAGetProcAddress("glGetShaderiv");
 }
 
+/* Mesa's compute_version() gates GL 3.0/3.1 on this exact extension list.
+ * Report which of them the driver failed to expose - that is what pins
+ * GL_VERSION at 2.1. */
+static void probe_gl3_requirements(void)
+{
+    static const char * const req_3_0[] =
+    {
+        "GL_ARB_color_buffer_float", "GL_ARB_depth_buffer_float",
+        "GL_ARB_half_float_vertex", "GL_ARB_map_buffer_range",
+        "GL_ARB_shader_texture_lod", "GL_ARB_texture_float",
+        "GL_ARB_texture_rg", "GL_ARB_texture_compression_rgtc",
+        "GL_EXT_draw_buffers2", "GL_ARB_framebuffer_object",
+        "GL_EXT_framebuffer_sRGB", "GL_EXT_packed_float",
+        "GL_EXT_texture_array", "GL_EXT_texture_integer",
+        "GL_EXT_texture_shared_exponent", "GL_EXT_transform_feedback",
+        "GL_NV_conditional_render", NULL
+    };
+    static const char * const req_3_1[] =
+    {
+        "GL_ARB_draw_instanced", "GL_ARB_uniform_buffer_object",
+        "GL_EXT_texture_snorm", "GL_NV_primitive_restart",
+        "GL_NV_texture_rectangle", NULL
+    };
+    /* not in AROS' GL 1.x gl.h */
+    #define PROBE_MAX_COLOR_ATTACHMENTS         0x8CDF
+    #define PROBE_MAX_SAMPLES                   0x8D57
+    #define PROBE_MAX_VERTEX_TEXTURE_IMAGE_UNITS 0x8B4C
+    const char *exts = (const char *)glGetString(GL_EXTENSIONS);
+    GLint atts = 0, samples = 0, vsunits = 0;
+    int i;
+
+    if (!exts) exts = "";
+
+    for (i = 0; req_3_0[i]; i++)
+        if (!strstr(exts, req_3_0[i]))
+            bug("[GLVerProbe] GL3.0 MISSING: %s\n", req_3_0[i]);
+
+    for (i = 0; req_3_1[i]; i++)
+        if (!strstr(exts, req_3_1[i]))
+            bug("[GLVerProbe] GL3.1 MISSING: %s\n", req_3_1[i]);
+
+    glGetIntegerv(PROBE_MAX_COLOR_ATTACHMENTS, &atts);
+    glGetIntegerv(PROBE_MAX_SAMPLES, &samples);
+    glGetIntegerv(PROBE_MAX_VERTEX_TEXTURE_IMAGE_UNITS, &vsunits);
+    bug("[GLVerProbe] MaxColorAttachments=%d MaxSamples=%d VSTextureUnits=%d (need >=4, >=4, >=16)\n",
+        (int)atts, (int)samples, (int)vsunits);
+    bug("[GLVerProbe] extensions: %s\n", exts);
+}
+
 /* Probe: does this driver's GLSL compiler accept a #version directive?
  * eduke32/Polymost shaders failed to compile on AROS/VC4 with any #version
  * line (identical shader without it compiled). This isolates that behaviour
@@ -367,6 +416,9 @@ static void probe_version_shaders(void)
     printf("[GLVerProbe] GL_VERSION                 : %s\n", (const char *)glGetString(GL_VERSION));
     printf("[GLVerProbe] GL_SHADING_LANGUAGE_VERSION: %s\n", (const char *)glGetString(GL_SHADING_LANGUAGE_VERSION));
     bug("[GLVerProbe] GLSL version: %s\n", (const char *)glGetString(GL_SHADING_LANGUAGE_VERSION));
+    bug("[GLVerProbe] GL version: %s\n", (const char *)glGetString(GL_VERSION));
+
+    probe_gl3_requirements();
 
     for (i = 0; i < 3; i++)
     {
