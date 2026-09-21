@@ -2015,7 +2015,7 @@ AROS_INTH1(uhwNakTimeoutInt, struct PCIUnit *,  unit)
                     if(cnt < 1) {
                         if(ioreq->iouh_Flags & UHFF_NAKTIMEOUT) {
                             if(ioreq->iouh_DriverPrivate1) {
-                                devadrep = (ioreq->iouh_DevAddr << 5) + ioreq->iouh_Endpoint + ((ioreq->iouh_Dir == UHDIR_IN) ? 0x10 : 0);
+                                devadrep = xhciDevEPKey(ioreq);
                                 if(framecnt > unit->hu_NakTimeoutFrame[devadrep]) {
                                     // give the thing the chance to exit gracefully
                                     KPRINTF(200, "xHCI: HC 0x%p NAK timeout %ld, IOReq=%p\n", hc, unit->hu_NakTimeoutFrame[devadrep], ioreq);
@@ -2024,8 +2024,12 @@ AROS_INTH1(uhwNakTimeoutInt, struct PCIUnit *,  unit)
                             }
                         }
                     } else {
-                        // Timeout failed pending transfers
-                        devadrep = (ioreq->iouh_DevAddr << 5) + ioreq->iouh_Endpoint + ((ioreq->iouh_Dir == UHDIR_IN) ? 0x10 : 0);
+                        /* Timeout failed pending transfers. The key has to be
+                           the one the scheduler armed: EP0 is a single slot
+                           there, so deriving it from iouh_Dir here would look
+                           at 0x10 for every IN control transfer and never see
+                           its timeout. */
+                        devadrep = xhciDevEPKey(ioreq);
                         if((unit->hu_NakTimeoutFrame[devadrep]) && (framecnt > unit->hu_NakTimeoutFrame[devadrep])) {
                             KPRINTF(200, "xHCI: HC 0x%p NAK timeout %ld, IOReq=%p\n", hc, unit->hu_NakTimeoutFrame[devadrep], ioreq);
                             ioreq->iouh_Req.io_Error = UHIOERR_NAKTIMEOUT;
