@@ -4,6 +4,7 @@ include $(SRCDIR)/config/aros.cfg
 
 GLTESTFILES 	    := \
         glsimplerendering \
+        glblitbench \
         glgetprocaddress \
         glclear \
         glcustomscreen \
@@ -12,12 +13,19 @@ GLTESTFILES 	    := \
 
 EXEDIR      := $(AROS_TESTS)/graphics/gl
 
-#MM- test : test-gl
+#MM- test : test-gl test-gl-fillbench
 
 #MM test-gl : includes linklibs workbench-libs-gl-includes
 
 %build_progs mmake=test-gl \
     targetdir=$(EXEDIR) \
     files="$(GLTESTFILES)" uselibs="GL"
+
+# One source for AROS and Linux, so it goes through SDL2 rather than gla
+#MM test-gl-fillbench : includes linklibs workbench-libs-gl-includes
+
+%build_prog mmake=test-gl-fillbench progname=glfillbench \
+    targetdir=$(EXEDIR) \
+    files="glfillbench" uselibs="SDL2 GL"
 
 %common
