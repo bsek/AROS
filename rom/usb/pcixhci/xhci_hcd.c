@@ -2521,10 +2521,12 @@ static inline void xhciIOErrfromCC(struct IOUsbHWReq *ioreq, ULONG cc)
         break;
 
     case TRB_CC_RING_UNDERRUN:
+    case TRB_CC_MISSED_SERVICE_ERROR:
         /*
-         * Ring Underrun (commonly observed on ISO OUT when no TD is
-         * available in time) is not fatal. Return success and 0 bytes so
-         * the client can continue streaming.
+         * Ring Underrun (no TD available in time) and Missed Service (the
+         * service interval passed before the TD was executed) are the two
+         * ways an ISO stream drops a packet. Neither is fatal - report
+         * success and 0 bytes so the client keeps streaming.
          */
         if(ioreq->iouh_Req.io_Command == UHCMD_ISOXFER) {
             ioreq->iouh_Req.io_Error = UHIOERR_NO_ERROR;
@@ -2988,9 +2990,13 @@ BOOL xhciIntWorkProcess(struct PCIController *hc, struct IOUsbHWReq *ioreq, ULON
 
         driprivate->dpCC = ccode;
 
+        /* A dropped ISO packet - underrun or a missed service interval */
+        BOOL isodropped = (ioreq->iouh_Req.io_Command == UHCMD_ISOXFER) &&
+                          ((ccode == TRB_CC_RING_UNDERRUN) ||
+                           (ccode == TRB_CC_MISSED_SERVICE_ERROR));
+
         /* Avoid log storms for expected ISO conditions and short packets */
-        if((ccode != TRB_CC_SUCCESS) && (ccode != TRB_CC_SHORT_PACKET) &&
-                !(ccode == TRB_CC_RING_UNDERRUN && (ioreq->iouh_Req.io_Command == UHCMD_ISOXFER))) {
+        if((ccode != TRB_CC_SUCCESS) && (ccode != TRB_CC_SHORT_PACKET) && !isodropped) {
             pciusbWarn("xHCI",
                        DEBUGWARNCOLOR_SET
                        "cc=%d for IOReq 0x%p"
@@ -3002,8 +3008,7 @@ BOOL xhciIntWorkProcess(struct PCIController *hc, struct IOUsbHWReq *ioreq, ULON
          * This is particularly useful to spot endpoints that remain HALTED /
          * STOPPED while new TDs are being submitted.
          */
-        if((ccode != TRB_CC_SUCCESS) && (ccode != TRB_CC_SHORT_PACKET) &&
-                !(ccode == TRB_CC_RING_UNDERRUN && (ioreq->iouh_Req.io_Command == UHCMD_ISOXFER))) {
+        if((ccode != TRB_CC_SUCCESS) && (ccode != TRB_CC_SHORT_PACKET) && !isodropped) {
             xhciDiagDumpEndpointBrief(hc, driprivate->dpDevice, (UBYTE)driprivate->dpEPID, "completion-error");
             xhciDumpEndpointCtx(hc, driprivate->dpDevice, driprivate->dpEPID, "completion-error");
         }
@@ -3013,12 +3018,10 @@ BOOL xhciIntWorkProcess(struct PCIController *hc, struct IOUsbHWReq *ioreq, ULON
                             : ioreq->iouh_Length;
 
         /*
-         * For periodic ISO OUT, Ring Underrun indicates that no data was
-         * serviced in time. Report 0 bytes to the client and continue.
+         * A dropped ISO packet moved no data - the TD was either never
+         * available (underrun) or skipped (missed service).
          */
-        if((ccode == TRB_CC_RING_UNDERRUN) &&
-                (ioreq->iouh_Req.io_Command == UHCMD_ISOXFER) &&
-                (ioreq->iouh_Dir == UHDIR_OUT)) {
+        if(isodropped) {
             transferred = 0;
             remaining   = ioreq->iouh_Length;
         }
@@ -3425,9 +3428,15 @@ static AROS_INTH1(xhciIntCode, struct PCIController *, hc)
                 if(have_idx) {
                     req = (struct IOUsbHWReq *)ring->ringio[last];
 
-                    /* Only advance ring on SUCCESS or recoverable short packets */
+                    /*
+                     * Advance on SUCCESS, recoverable short packets, and on
+                     * Missed Service: the controller skipped that TD and
+                     * left the endpoint Running, so nothing resets the ring
+                     * later and the entry would leak.
+                     */
                     if(trbe_ccode == TRB_CC_SUCCESS ||
-                            trbe_ccode == TRB_CC_SHORT_PACKET) {
+                            trbe_ccode == TRB_CC_SHORT_PACKET ||
+                            trbe_ccode == TRB_CC_MISSED_SERVICE_ERROR) {
                         ULONG new_end = ring_advance_idx(last);
                         ring->end = (ring->end & RINGENDCFLAG) | (new_end & ~RINGENDCFLAG);
                     }
@@ -3435,10 +3444,12 @@ static AROS_INTH1(xhciIntCode, struct PCIController *, hc)
                     pciusbXHCIDebugTRBV("xHCI",
                                         DEBUGCOLOR_SET "TRANSFER EVT idx=%lu ringio=%p ring=%p" DEBUGCOLOR_RESET" \n",
                                         (unsigned long)last, req, ring);
-                } else if(trbe_ccode == TRB_CC_RING_UNDERRUN) {
+                } else if((trbe_ccode == TRB_CC_RING_UNDERRUN) ||
+                          (trbe_ccode == TRB_CC_MISSED_SERVICE_ERROR)) {
                     /*
-                     * Ring Underrun does not reliably report a TRB pointer.
-                     * Complete the currently active request for this endpoint.
+                     * These are reported at endpoint level and do not
+                     * reliably carry a TRB pointer. Complete the currently
+                     * active request for this endpoint.
                      */
                     req = xhciBusyReqFromSlotEpid(hc, devCtx, trbe_epid);
                     if(req) {
@@ -3485,6 +3496,7 @@ static AROS_INTH1(xhciIntCode, struct PCIController *, hc)
 
                     if(!isotail &&
                        (trbe_ccode != TRB_CC_RING_UNDERRUN) &&
+                       (trbe_ccode != TRB_CC_MISSED_SERVICE_ERROR) &&
                        (trbe_ccode != TRB_CC_STOPPED) &&
                        (trbe_ccode != TRB_CC_STOPPED_LENGTH_INVALID) &&
                        (trbe_ccode != TRB_CC_STOPPED_SHORT_PACKET)) {

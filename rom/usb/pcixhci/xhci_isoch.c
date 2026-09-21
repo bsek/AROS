@@ -31,6 +31,9 @@
 #define LogResBase (base->hd_LogResBase)
 #endif
 
+/* Frame IDs are 11 bit; stay well inside the window the xHC accepts */
+#define XHCI_ISO_FRAMEID_LEAD_MAX   512
+
 static struct PTDNode *xhciNextIsoPTD(struct RTIsoNode *rtn)
 {
     if(!rtn || !rtn->rtn_PTDs || !rtn->rtn_PTDCount)
@@ -263,9 +266,24 @@ WORD xhciQueueIsochIO(struct PCIController *hc, struct RTIsoNode *rtn)
          */
         ULONG lead_uf = interval_uf * 2;
         ULONG lead_frames = (lead_uf + 7) >> 3;
-        ULONG base_frame = hc->hc_FrameCounter >> 3;
-        ULONG next = rtn->rtn_NextFrame ? rtn->rtn_NextFrame : (base_frame + lead_frames);
-        bufreq->ubr_Frame = next;
+        ULONG base_frame;
+        LONG ahead;
+
+        /* MFINDEX is only sampled from the interrupt handler otherwise */
+        xhciUpdateFrameCounter(hc);
+        base_frame = hc->hc_FrameCounter >> 3;
+
+        /*
+         * The running schedule drifts as soon as a completion is handled
+         * late, and a frame ID outside the controller's window is answered
+         * with Missed Service for every following TD. Resync when the
+         * schedule is no longer usable.
+         */
+        ahead = (LONG)(rtn->rtn_NextFrame - base_frame);
+        if(!rtn->rtn_NextFrame || (ahead < 1) || (ahead > XHCI_ISO_FRAMEID_LEAD_MAX))
+            rtn->rtn_NextFrame = base_frame + lead_frames;
+
+        bufreq->ubr_Frame = rtn->rtn_NextFrame;
     }
     rtn->rtn_NextFrame = bufreq->ubr_Frame + interval_frames;
 
