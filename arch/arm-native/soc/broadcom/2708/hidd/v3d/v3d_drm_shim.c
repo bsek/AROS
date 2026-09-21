@@ -144,8 +144,13 @@ void v3d_release_all_bos(struct V3DData *sd)
     if (leaked)
         bug("[V3D] session sweep: released %u leaked BOs\n", (unsigned)leaked);
 
-    /* Now that nothing is allocated from them, hand the arenas back. */
-    v3d_mem_release(sd);
+    /*
+     * The arenas stay. Handing them back means the next allocation pays
+     * AllocMem, a 32MB cache clean and a 32MB KrnMapGlobal to Normal-NC
+     * all over again - during texture loading, which is exactly when a
+     * game can least afford it. v3d_mem_release() is for the teardown
+     * that really is giving up, and DestroyPipeScreen calls it there.
+     */
 }
 
 /* ---- the dispatch ---- */

@@ -223,6 +223,11 @@ extern IPTR __arm_periiobase;
  * waits, so their budgets don't scale with the CPU clock. */
 #define V3D_SYSTIMER_CLO    (ARM_PERIIOBASE + 0x3004)
 
+static inline ULONG v3d_now_us(void)
+{
+    return AROS_LE2LONG(*(volatile ULONG *)V3D_SYSTIMER_CLO);
+}
+
 /* vcgfx bitmap interface, mirrored from vcgfx_bitmap.h */
 #define IID_Hidd_BitMap_VideoCore4  "hidd.bitmap.bcmvc4"
 #define aoVCGfxBM_Drawable      0   /* [G] front page phys addr */
@@ -455,6 +460,14 @@ struct V3DData
      * run when the last goes. */
     LONG            screen_count;
     ULONG           recoveries;     /* hang-recovery fuse, per session */
+
+    /* Apps exit without tearing GL down, so the session sweep in
+     * DestroyPipeScreen never runs. A gap since the last submission is
+     * what tells a new session from a second screen of the same one;
+     * swept is cleared by the next submission, so the probe screen a
+     * starting app opens cannot trigger a second sweep over itself. */
+    ULONG           last_submit_us;
+    BOOL            session_swept;
 
     /* The supply is pre-armed per bin job, so OUTOMEM means even that
      * ran out and the binner has stopped until BPOA/BPOS are refilled. */
