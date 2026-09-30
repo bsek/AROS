@@ -394,6 +394,10 @@ int main(int argc, char *argv[])
     backend_init(ldargs[0]);
     collect_sets(tempoutput, &setlist);
     collect_extra(tempoutput, &extralist);
+    /* Extra objects only join the final link, so their symbol sets (e.g.
+       libpthread's ADD2INIT) must be added to the tables explicitly. */
+    for (setnode *n = extralist; n; n = n->next)
+        collect_sets(n->secname, &setlist);
     collect_libs(tempoutput, &liblist);
 
     if (linkAddress != NULL)
