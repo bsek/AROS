@@ -36,6 +36,9 @@
 #include <omapip/omapip_p.h>
 #include <errno.h>
 #include <syslog.h>
+#ifdef __AROS__
+#include <aros/debug.h>
+#endif
 
 #ifdef DEBUG
 int log_perror = -1;
@@ -65,6 +68,9 @@ void log_fatal (const char * fmt, ... )
 
 #ifndef DEBUG
   syslog (LOG_ERR, "%s", mbuf);
+#endif
+#ifdef __AROS__
+  bug ("[dhclient] %s\n", mbuf);
 #endif
 
   /* Also log it to stderr? */
@@ -105,6 +111,9 @@ int log_error (const char * fmt, ...)
 #ifndef DEBUG
   syslog (LOG_ERR, "%s", mbuf);
 #endif
+#ifdef __AROS__
+  bug ("[dhclient] %s\n", mbuf);
+#endif
 
   if (log_perror) {
 	  IGNORE_RET (write (STDERR_FILENO, mbuf, strlen (mbuf)));
@@ -131,6 +140,9 @@ int log_info (const char *fmt, ...)
 
 #ifndef DEBUG
   syslog (LOG_INFO, "%s", mbuf);
+#endif
+#ifdef __AROS__
+  bug ("[dhclient] %s\n", mbuf);
 #endif
 
   if (log_perror) {
