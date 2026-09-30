@@ -1088,6 +1088,7 @@ struct mbuf *m0;
         case SO_REUSEADDR:
         case SO_REUSEPORT:
         case SO_OOBINLINE:
+        case SO_NOSIGPIPE:  /* stack never raises SIGPIPE; just record it */
             if(m == NULL || m->m_len < sizeof(int)) {
                 error = EINVAL;
                 goto bad;
@@ -1221,6 +1222,7 @@ struct mbuf **mp;
         case SO_REUSEPORT:
         case SO_BROADCAST:
         case SO_OOBINLINE:
+        case SO_NOSIGPIPE:
             *mtod(m, int *) = so->so_options & optname;
             break;
 
