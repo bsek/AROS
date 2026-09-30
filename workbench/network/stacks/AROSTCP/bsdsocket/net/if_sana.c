@@ -547,7 +547,11 @@ sana_run(struct sana_softc *ssc, int requests, struct ifaddr *ifa)
                 req->ioip_dispatch = sana_connect;
                 BeginIO((struct IORequest *)req);
                 ssc->ss_connectreq = req;
-            }
+                DSANA(bug("[AROSTCP:SANA] %s%d: connect listener armed\n",
+                          ssc->ss_if.if_name, ssc->ss_if.if_unit));
+            } else
+                DSANA(bug("[AROSTCP:SANA] %s%d: no connect listener\n",
+                          ssc->ss_if.if_name, ssc->ss_if.if_unit));
         }
     }
     splx(s);
@@ -1196,6 +1200,11 @@ sana_connect(struct sana_softc *ssc, struct IOIPReq *req)
 {
     LONG events = req->ioip_s2.ios2_WireError;
 
+    DSANA(bug("[AROSTCP:SANA] %s%d: event 0x%lx ioError %d usedhcp %d\n",
+              ssc->ss_if.if_name, ssc->ss_if.if_unit, (unsigned long)events,
+              req->ioip_s2.ios2_Req.io_Error,
+              ssc->ss_if.if_data.ifi_aros_usedhcp));
+
     if(req->ioip_s2.ios2_Req.io_Error == 0 &&
             events == S2EVENT_CONNECT) {
 
@@ -1216,6 +1225,8 @@ sana_connect(struct sana_softc *ssc, struct IOIPReq *req)
                                        | S2EVENT_DISCONNECT;
         BeginIO((struct IORequest *)req);
     } else {
+        DSANA(bug("[AROSTCP:SANA] %s%d: connect listener dropped\n",
+                  ssc->ss_if.if_name, ssc->ss_if.if_unit));
         ssc->ss_eventsent--;
     }
 }

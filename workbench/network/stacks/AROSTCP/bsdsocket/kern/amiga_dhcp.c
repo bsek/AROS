@@ -75,6 +75,7 @@ _update_dhclient(struct ifnet *exclude_ifp)
 
     /* Kill existing client if running */
     if(aros_dhcpv4.pid) {
+        D(bug("[AROSTCP](amiga_dhcp.c) _update_dhclient: CTRL-C to old dhclient 0x%p\n", aros_dhcpv4.pid));
         Signal((APTR)aros_dhcpv4.pid, SIGBREAKF_CTRL_C);
         aros_dhcpv4.pid = (pid_t)NULL;
     }
@@ -115,12 +116,19 @@ void run_dhclient(struct ifnet *ifp)
 {
     char new_args[AROS_DHCP_ARGS_LEN];
 
-    if(build_dhclient_args(new_args, sizeof(new_args), NULL, 0) == 0)
+    D(bug("[AROSTCP](amiga_dhcp.c) run_dhclient(%s%u): usedhcp=%d pid=0x%p args '%s'\n",
+          ifp->if_name, ifp->if_unit, ifp->if_data.ifi_aros_usedhcp,
+          aros_dhcpv4.pid, aros_dhcpv4.args));
+    if(build_dhclient_args(new_args, sizeof(new_args), NULL, 0) == 0) {
+        D(bug("[AROSTCP](amiga_dhcp.c) run_dhclient: no DHCPv4 interfaces\n"));
         return;
+    }
 
     /* Already running for the same set of interfaces — don't disturb it */
-    if(aros_dhcpv4.pid && strcmp(aros_dhcpv4.args, new_args) == 0)
+    if(aros_dhcpv4.pid && strcmp(aros_dhcpv4.args, new_args) == 0) {
+        D(bug("[AROSTCP](amiga_dhcp.c) run_dhclient: already running '%s'\n", new_args));
         return;
+    }
 
     _update_dhclient(NULL);
 }
@@ -128,6 +136,8 @@ void run_dhclient(struct ifnet *ifp)
 /* Kill DHCPv4 client for ifp going offline; restart for remaining interfaces. */
 void kill_dhclient(struct ifnet *ifp)
 {
+    D(bug("[AROSTCP](amiga_dhcp.c) kill_dhclient(%s%u): pid=0x%p\n",
+          ifp->if_name, ifp->if_unit, aros_dhcpv4.pid));
     _update_dhclient(ifp);
 }
 
