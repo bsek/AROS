@@ -1,8 +1,7 @@
 /*
-    Copyright (C) 1995-2010, The AROS Development Team. All rights reserved.
+    Copyright (C) 2026, The AROS Development Team. All rights reserved.
 */
 #include <aros/debug.h>
-#include <proto/exec.h>
 
 #include "cgxvideo_intern.h"
 
@@ -11,31 +10,35 @@
     NAME */
 #include <clib/cgxvideo_protos.h>
 
-        AROS_LH1(ULONG, UnlockVLayer,
+        AROS_LH1(void, SwapVLayerBuffer,
 
 /*  SYNOPSIS */
         AROS_LHA(struct VLayerHandle *, VLayerHandle, A0),
 
 /*  LOCATION */
-        struct Library *, CGXVideoBase, 11, Cgxvideo)
+        struct Library *, CGXVideoBase, 16, Cgxvideo)
 
 /*  FUNCTION
-        Unlocks a previouly locked video layer
+        Swaps the displayed and the rendering buffer of a double buffered
+        video layer at the next vertical blank. The next LockVLayer() may
+        wait for that vertical blank.
 
     INPUTS
         VLayerHandle - pointer to a previously created videolayer handle
 
     RESULT
-        result - always 0
+        none
 
     NOTES
+        Available since V50.
 
     EXAMPLE
 
     BUGS
+        No backend supports double buffering yet, so this does nothing.
 
     SEE ALSO
-        LockVLayer()
+        LockVLayer(), QueryVLayerAttr()
 
     INTERNALS
 
@@ -45,14 +48,5 @@
 {
     AROS_LIBFUNC_INIT
 
-    if (VLayerHandle)
-    {
-        ObtainSemaphore(&VLayerHandle->lock);
-        VLayerHandle->locked = FALSE;
-        ReleaseSemaphore(&VLayerHandle->lock);
-    }
-
-    return 0;
-
     AROS_LIBFUNC_EXIT
-} /* UnlockVLayer */
+} /* SwapVLayerBuffer */
