@@ -44,7 +44,6 @@
 /* fd.library base, opened once at api_init().  Shared (single instance). */
 struct Library *FDBase = NULL;
 
-LONG __CloseSocket(LONG fd, struct SocketBase *libPtr);
 
 /*
  * The fd.library data for a socket descriptor is the struct socket * itself.
@@ -54,7 +53,8 @@ LONG __CloseSocket(LONG fd, struct SocketBase *libPtr);
 
 /*
  * Return the SocketBase to use as the sleep/lock context for a blocking
- * operation on behalf of the calling task.
+ * operation on behalf of the calling task. fdh_task_done() closes it again
+ * when it was opened just for this call.
  *
  * A blocking socket operation sleeps (tsleep) on the base passed as its
  * process context, and the matching wakeup() signals that base's owner task.
@@ -65,33 +65,70 @@ LONG __CloseSocket(LONG fd, struct SocketBase *libPtr);
  * worker thread reading an inherited socket descriptor reaches us through
  * fd.library without ever opening bsdsocket.library.  Sleeping such a task on
  * the socket owner's base (so->so_pgid) would let two tasks share one base's
- * sleep state and corrupt the sleep queue.  Give the task its own base
- * instead; a plain OpenLibrary() creates and registers a per-task base, and
- * FindSocketBase() returns it on every later call.
+ * sleep state and corrupt the sleep queue.  Give the task a base of its own
+ * for the call. It is not kept: nothing would close it when the thread ends,
+ * and a later task at the same address would inherit it.
  */
-static struct SocketBase *fdh_task_base(struct socket *so)
+static struct SocketBase *fdh_task_base(BOOL *temp)
 {
     struct SocketBase *p = FindSocketBase(FindTask(NULL));
 
-    if (p == NULL)
-        p = (struct SocketBase *)OpenLibrary("bsdsocket.library", 0);
-    if (p == NULL && so != NULL)
-        p = (struct SocketBase *)so->so_pgid; /* last resort */
+    *temp = FALSE;
+    if (p == NULL &&
+        (p = (struct SocketBase *)OpenLibrary("bsdsocket.library", 0)) != NULL)
+        *temp = TRUE;
 
+    return p;
+}
+
+static void fdh_task_done(struct SocketBase *p, BOOL temp)
+{
+    if (temp)
+        CloseLibrary((struct Library *)p);
+}
+
+/* Drop the reference a hook took; the owner may have closed meanwhile */
+static void fdh_unhold(struct socket *so)
+{
+    if (--so->so_refcnt <= 0)
+        soclose(so);
+}
+
+/* The base whose table holds fd; so_pgid need not be it (FIOSETOWN) */
+static struct SocketBase *fdh_fd_base(LONG fd, struct socket *so)
+{
+    extern struct List socketBaseList;
+    struct Node *n;
+    struct SocketBase *p = NULL;
+
+    ObtainSemaphoreShared(&baselist_semaphore);
+    for (n = socketBaseList.lh_Head; n->ln_Succ; n = n->ln_Succ)
+    {
+        struct SocketBase *b = (struct SocketBase *)n;
+
+        if ((ULONG)fd < b->dTableSize && b->dTable[fd] == so)
+        {
+            p = b;
+            break;
+        }
+    }
+    ReleaseSemaphore(&baselist_semaphore);
     return p;
 }
 
 static SIPTR fdh_sock_read(APTR data, APTR buf, IPTR nbytes, LONG *perror)
 {
     struct socket *so = (struct socket *)data;
-    struct SocketBase *p = fdh_task_base(so);
+    struct SocketBase *p;
     struct uio auio;
     struct iovec aiov;
     struct mbuf *from = NULL, *control = NULL;
     LONG error, flags = 0, len;
+    BOOL temp;
 
     if (so == NULL) { *perror = EBADF; return -1; }  /* fd without a socket */
     if (nbytes < 0) { *perror = EINVAL; return -1; }
+    if ((p = fdh_task_base(&temp)) == NULL) { *perror = ENOMEM; return -1; }
 
     aiov.iov_base = buf;
     aiov.iov_len = nbytes;
@@ -102,11 +139,14 @@ static SIPTR fdh_sock_read(APTR data, APTR buf, IPTR nbytes, LONG *perror)
     len = nbytes;
 
     ObtainSyscallSemaphore(p);
+    so->so_refcnt++;        /* the owner may close it while we sleep */
     error = soreceive(so, &from, &auio, (struct mbuf **)0, &control, (int *)&flags);
     if (error && auio.uio_resid != len &&
         (error == ERESTART || error == EINTR || error == EWOULDBLOCK))
         error = 0;
+    fdh_unhold(so);
     ReleaseSyscallSemaphore(p);
+    fdh_task_done(p, temp);
 
     if (from)
         m_freem(from);
@@ -120,13 +160,15 @@ static SIPTR fdh_sock_read(APTR data, APTR buf, IPTR nbytes, LONG *perror)
 static SIPTR fdh_sock_write(APTR data, CONST_APTR buf, IPTR nbytes, LONG *perror)
 {
     struct socket *so = (struct socket *)data;
-    struct SocketBase *p = fdh_task_base(so);
+    struct SocketBase *p;
     struct uio auio;
     struct iovec aiov;
     LONG error, len;
+    BOOL temp;
 
     if (so == NULL) { *perror = EBADF; return -1; }  /* fd without a socket */
     if (nbytes < 0) { *perror = EINVAL; return -1; }
+    if ((p = fdh_task_base(&temp)) == NULL) { *perror = ENOMEM; return -1; }
 
     aiov.iov_base = (caddr_t)buf;
     aiov.iov_len = nbytes;
@@ -137,11 +179,14 @@ static SIPTR fdh_sock_write(APTR data, CONST_APTR buf, IPTR nbytes, LONG *perror
     len = nbytes;
 
     ObtainSyscallSemaphore(p);
+    so->so_refcnt++;        /* the owner may close it while we sleep */
     error = sosend(so, (struct mbuf *)0, &auio, (struct mbuf *)0, (struct mbuf *)0, 0);
     if (error && auio.uio_resid != len &&
         (error == ERESTART || error == EINTR || error == EWOULDBLOCK))
         error = 0;
+    fdh_unhold(so);
     ReleaseSyscallSemaphore(p);
+    fdh_task_done(p, temp);
 
     if (error) { *perror = error; return -1; }
     return (SIPTR)(len - auio.uio_resid);
@@ -154,14 +199,17 @@ static LONG fdh_sock_close(APTR data, LONG fd, LONG *perror)
     LONG error;
 
     if (so == NULL) { *perror = EBADF; return -1; }  /* fd without a socket */
-    p = (struct SocketBase *)so->so_pgid;
 
     /* Close exactly this descriptor.  With dup()'d descriptors several fds
        share one socket, so closing must target the requested fd (which
-       __CloseSocket() drops from the table, decrements the socket refcount
-       and frees the fd.library reservation) - not just any fd for the
-       socket. */
-    error = __CloseSocket(fd, p);
+       closeSocketLocked() drops from the table, decrements the socket
+       refcount and frees the fd.library reservation) - not just any fd for
+       the socket.  The caller may be another thread than the owner, so
+       CloseSocket()'s own-task check and priority boost do not apply. */
+    ObtainSemaphore(&syscall_semaphore);
+    p = fdh_fd_base(fd, so);
+    error = p ? closeSocketLocked(fd, p) : EBADF;
+    ReleaseSemaphore(&syscall_semaphore);
     if (error) { *perror = error; return -1; }
     return 0;
 }
@@ -173,19 +221,25 @@ static LONG fdh_sock_dup(APTR data, LONG newfd, LONG *perror)
     LONG error;
 
     if (so == NULL) { *perror = EBADF; return -1; }  /* fd without a socket */
-    p = (struct SocketBase *)so->so_pgid;
     if (FDBase == NULL) { *perror = EBADF; return -1; }
 
     /* Claim newfd for this socket in the system-wide table. */
     error = FD_Reserve(newfd, FD_OWNER_BSDSOCKET, so);
     if (error) { *perror = error; return -1; }
 
-    ObtainSyscallSemaphore(p);
+    /* Not ObtainSyscallSemaphore(p): p may be another task's base */
+    ObtainSemaphore(&syscall_semaphore);
+    if ((p = (struct SocketBase *)so->so_pgid) == NULL) {
+        ReleaseSemaphore(&syscall_semaphore);
+        FD_Free(newfd, FD_OWNER_BSDSOCKET);
+        *perror = EBADF;
+        return -1;
+    }
     /* Numbers are system-wide: grow the table as sdFind() does */
     if ((ULONG)newfd >= p->dTableSize && newfd < 0xFFC0)
         setdtablesize(p, (newfd / 64 + 1) * 64);
     if ((ULONG)newfd >= p->dTableSize) {
-        ReleaseSyscallSemaphore(p);
+        ReleaseSemaphore(&syscall_semaphore);
         FD_Free(newfd, FD_OWNER_BSDSOCKET);
         *perror = EMFILE;
         return -1;
@@ -193,7 +247,7 @@ static LONG fdh_sock_dup(APTR data, LONG newfd, LONG *perror)
     p->dTable[newfd] = so;
     FD_SET(newfd, (fd_set *)(p->dTable + p->dTableSize));
     so->so_refcnt++;
-    ReleaseSyscallSemaphore(p);
+    ReleaseSemaphore(&syscall_semaphore);
 
     return 0;
 }
