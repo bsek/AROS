@@ -158,6 +158,7 @@ calls into bitmap object operations.
 | 17 | `WriteSPLine` | V50 |
 | 18 | `QueryVLayerAttr` | V50 |
 
+The library is version 50, the first with all of these entry points.
 `UnlockVLayer()` returns `ULONG` (always 0) as in the MorphOS prototypes.
 `GetVLayerAttr()` returns `IPTR` so that `VOA_BaseAddress` fits on 64-bit.
 
