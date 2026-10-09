@@ -530,17 +530,19 @@ void bcm27xx_fiq_process()
             if (fiq & (0x10 << mbno))
             {
                 fiq_data = rd32le(BCM2836_MAILBOX0_CLR0 + 4 * mbno + (16 * cpunum));
-                (void)fiq_data;
                 DFIQ(bug("[Kernel:BCM27xx] %s: Mailbox%d: FIQ Data %08x\n", __PRETTY_FUNCTION__, mbno, fiq_data));
+                /* Acknowledge before handling, and only the bits read: the
+                 * same bit set again while we work must raise a new FIQ.
+                 * Cleared afterwards, an IPI_CALL_HOOK queued after the
+                 * drain found the queue empty was lost - its sender could
+                 * then wait for a free entry for good. */
+                wr32le(BCM2836_MAILBOX0_CLR0 + 4 * mbno + (16 * cpunum), fiq_data);
 #if defined(__AROSEXEC_SMP__)
                 /* Pairs with the sender's dsb. */
                 dsb();
                 if (bcm27xx_cpuipid[cpunum])
                     handle_ipi(fiq_data, bcm27xx_cpuipid[cpunum]->ipi_data[mbno]);
 #endif
-                /* Only the bits read: a bit set in between must stay
-                 * pending, or the IPI is lost. */
-                wr32le(BCM2836_MAILBOX0_CLR0 + 4 * mbno + (16 * cpunum), fiq_data);
             }
         }
     }

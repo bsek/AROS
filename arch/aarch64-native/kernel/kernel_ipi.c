@@ -59,6 +59,27 @@ static struct MinList      ipi_call_queue[4];
 static spinlock_t          ipi_call_queue_lock[4];   /* guards both lists for this target */
 static BOOL                ipi_call_inited = FALSE;
 
+/*
+ * The queue locks are taken with IRQ and FIQ masked. Held with them open,
+ * the holder could be preempted on its core by a task that then spins on
+ * the same lock with interrupts off (RemTask() -> core_CancelCallIPIs()),
+ * and the holder never ran again to release it.
+ */
+static inline uint64_t ipiq_lock(int cpu)
+{
+    uint64_t daif;
+
+    asm volatile("mrs %0, daif\n\tmsr daifset, #3" : "=r"(daif) :: "memory");
+    EXEC_SPINLOCK_LOCK(&ipi_call_queue_lock[cpu], NULL, SPINLOCK_MODE_WRITE);
+    return daif;
+}
+
+static inline void ipiq_unlock(int cpu, uint64_t daif)
+{
+    EXEC_SPINLOCK_UNLOCK(&ipi_call_queue_lock[cpu]);
+    asm volatile("msr daif, %0" :: "r"(daif) : "memory");
+}
+
 /* What the drain is running now, so a canceller can wait out a call it
  * can no longer find queued. Single writer per CPU. */
 static volatile APTR       ipi_call_exec_func[4];
@@ -89,25 +110,36 @@ void core_IPIInit(void)
  *
  * Under Disable() this CPU cannot drain its own inbound queue, so two
  * Disable()d CPUs cross-signalling with empty pools would wait on each
- * other. Break that by draining ours inline while we spin.
+ * other. Break that by draining ours inline while we spin. The same holds
+ * in an interrupt handler (e.g. timer.device replying from its tick):
+ * exception entry masks FIQ while IDNestCnt stays as the task left it.
  *
  * Call with NO task spinlock held: the drain runs hooks that take them.
  */
+static inline int core_FIQMasked(void)
+{
+    uint64_t daif;
+
+    asm volatile("mrs %0, daif" : "=r"(daif));
+    return (daif & (1 << 6)) != 0;
+}
+
 struct CallIPIEntry *core_ClaimCallIPI(int cpu)
 {
     struct CallIPIEntry *cie;
     int srcCpu = GetCPUNumber();
+    uint64_t daif;
 
     for (;;)
     {
-        EXEC_SPINLOCK_LOCK(&ipi_call_queue_lock[cpu], NULL, SPINLOCK_MODE_WRITE);
+        daif = ipiq_lock(cpu);
         cie = (struct CallIPIEntry *)REMHEAD((struct List *)&ipi_call_free[cpu]);
-        EXEC_SPINLOCK_UNLOCK(&ipi_call_queue_lock[cpu]);
+        ipiq_unlock(cpu, daif);
 
         if (cie)
             return cie;
 
-        if (IDNESTCOUNT_GET >= 0)
+        if (IDNESTCOUNT_GET >= 0 || core_FIQMasked())
             core_HandleCallHookIPI(srcCpu);
     }
 }
@@ -117,6 +149,7 @@ void core_CommitCallIPI(struct CallIPIEntry *cie, int cpu,
 {
     int srcCpu = GetCPUNumber();
     int i;
+    uint64_t daif;
 
     if (nargs > IPI_CALL_HOOK_MAX_ARGS)
         nargs = IPI_CALL_HOOK_MAX_ARGS;
@@ -125,9 +158,9 @@ void core_CommitCallIPI(struct CallIPIEntry *cie, int cpu,
     for (i = 0; i < nargs; i++)
         cie->cie_IPIH.ih_Args[i] = args[i];
 
-    EXEC_SPINLOCK_LOCK(&ipi_call_queue_lock[cpu], NULL, SPINLOCK_MODE_WRITE);
+    daif = ipiq_lock(cpu);
     ADDTAIL((struct List *)&ipi_call_queue[cpu], (struct Node *)&cie->cie_Node);
-    EXEC_SPINLOCK_UNLOCK(&ipi_call_queue_lock[cpu]);
+    ipiq_unlock(cpu, daif);
 
     if (__arm_arosintern.ARMI_SendIPI)
     {
@@ -139,9 +172,10 @@ void core_CommitCallIPI(struct CallIPIEntry *cie, int cpu,
 
 void core_AbortCallIPI(struct CallIPIEntry *cie, int cpu)
 {
-    EXEC_SPINLOCK_LOCK(&ipi_call_queue_lock[cpu], NULL, SPINLOCK_MODE_WRITE);
+    uint64_t daif;
+    daif = ipiq_lock(cpu);
     ADDTAIL((struct List *)&ipi_call_free[cpu], (struct Node *)&cie->cie_Node);
-    EXEC_SPINLOCK_UNLOCK(&ipi_call_queue_lock[cpu]);
+    ipiq_unlock(cpu, daif);
 }
 
 /*
@@ -153,6 +187,7 @@ void core_AbortCallIPI(struct CallIPIEntry *cie, int cpu)
 void core_CancelCallIPIs(APTR hookEntry, IPTR matchArg)
 {
     int cpu;
+    uint64_t daif;
 
     if (!ipi_call_inited)
         return;
@@ -161,7 +196,7 @@ void core_CancelCallIPIs(APTR hookEntry, IPTR matchArg)
     {
         struct MinNode *node, *next;
 
-        EXEC_SPINLOCK_LOCK(&ipi_call_queue_lock[cpu], NULL, SPINLOCK_MODE_WRITE);
+        daif = ipiq_lock(cpu);
         for (node = ipi_call_queue[cpu].mlh_Head; (next = node->mln_Succ) != NULL; node = next)
         {
             struct CallIPIEntry *cie = (struct CallIPIEntry *)node;
@@ -173,7 +208,7 @@ void core_CancelCallIPIs(APTR hookEntry, IPTR matchArg)
                 ADDTAIL((struct List *)&ipi_call_free[cpu], (struct Node *)node);
             }
         }
-        EXEC_SPINLOCK_UNLOCK(&ipi_call_queue_lock[cpu]);
+        ipiq_unlock(cpu, daif);
 
         while (ipi_call_exec_func[cpu] == hookEntry &&
                ipi_call_exec_arg1[cpu] == matchArg)
@@ -230,6 +265,7 @@ int core_DoCallIPI(struct Hook *hook, void *cpu_mask, int async,
 
 static void core_HandleCallHookIPI(int cpu)
 {
+    uint64_t daif;
     /* Block dispatch across the drain: the hooks call Enable()/Reschedule(),
      * which would switch tasks from inside this FIQ handler. */
     EXEC_BLOCK_DISPATCH_INC;
@@ -238,7 +274,7 @@ static void core_HandleCallHookIPI(int cpu)
     {
         struct CallIPIEntry *cie;
 
-        EXEC_SPINLOCK_LOCK(&ipi_call_queue_lock[cpu], NULL, SPINLOCK_MODE_WRITE);
+        daif = ipiq_lock(cpu);
         cie = (struct CallIPIEntry *)REMHEAD((struct List *)&ipi_call_queue[cpu]);
         if (cie)
         {
@@ -247,7 +283,7 @@ static void core_HandleCallHookIPI(int cpu)
             ipi_call_exec_func[cpu] = (APTR)cie->cie_IPIH.ih_Hook.h_Entry;
             ipi_call_exec_arg1[cpu] = cie->cie_IPIH.ih_Args[1];
         }
-        EXEC_SPINLOCK_UNLOCK(&ipi_call_queue_lock[cpu]);
+        ipiq_unlock(cpu, daif);
 
         if (!cie)
             break;
@@ -262,9 +298,9 @@ static void core_HandleCallHookIPI(int cpu)
         EXEC_MEMORY_BARRIER();
         ipi_call_exec_func[cpu] = NULL;
 
-        EXEC_SPINLOCK_LOCK(&ipi_call_queue_lock[cpu], NULL, SPINLOCK_MODE_WRITE);
+        daif = ipiq_lock(cpu);
         ADDTAIL((struct List *)&ipi_call_free[cpu], (struct Node *)&cie->cie_Node);
-        EXEC_SPINLOCK_UNLOCK(&ipi_call_queue_lock[cpu]);
+        ipiq_unlock(cpu, daif);
     }
 
     EXEC_BLOCK_DISPATCH_DEC;
