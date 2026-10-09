@@ -1604,7 +1604,9 @@ static BPTR load_seg_elf_int
     struct SRBuffer srb = { 0 };
     UBYTE *arena = NULL;
     UBYTE *arena_cursor = NULL;
+    UBYTE *arena_data_cursor = NULL;
     IPTR   arena_size = 0;
+    IPTR   arena_exec_size = 0;
     ULONG  arena_flags = 0;
 
     /* load and validate ELF header */
@@ -1699,6 +1701,10 @@ static BPTR load_seg_elf_int
      * relocations (which can only encode addresses below 2GB) and the
      * arena was placed higher, the relocation pass fails with
      * reloc_out_of_range set and the caller retries with force31.
+     *
+     * Code hunks are carved first, side by side, and data after them:
+     * branches (e.g. AArch64 CALL26, +/-128MB) only target code, so they
+     * then reach across the code alone rather than across the whole module.
      */
     for (i = 0; i < int_shnum; i++)
     {
@@ -1714,7 +1720,10 @@ static BPTR load_seg_elf_int
             }
 
             do_align = (exec_hunk_seen && sh[i].addralign >= 2) ? TRUE : FALSE;
-            arena_size += AROS_ROUNDUP2(elf_hunk_size(&sh[i], do_align), AROS_WORSTALIGN) + AROS_WORSTALIGN;
+            IPTR size = AROS_ROUNDUP2(elf_hunk_size(&sh[i], do_align), AROS_WORSTALIGN) + AROS_WORSTALIGN;
+            arena_size += size;
+            if (sh[i].flags & SHF_EXECINSTR)
+                arena_exec_size += size;
         }
     }
     exec_hunk_seen = FALSE;
@@ -1742,6 +1751,7 @@ static BPTR load_seg_elf_int
         {
             /* Leave room for the container hunk at the start */
             arena_cursor = arena + sizeof(struct hunk);
+            arena_data_cursor = arena_cursor + arena_exec_size;
         }
     }
 #endif
@@ -1767,7 +1777,7 @@ static BPTR load_seg_elf_int
 
                 do_align = (exec_hunk_seen && sh[i].addralign >= 2) ? TRUE : FALSE;
                 if (!load_hunk(file, &next_hunk_ptr, &sh[i], strtab ? strtab->addr : NULL, funcarray, do_align,
-                               arena ? &arena_cursor : NULL,
+                               arena ? ((sh[i].flags & SHF_EXECINSTR) ? &arena_cursor : &arena_data_cursor) : NULL,
                                force31 ? MEMF_31BIT : 0, &srb, DOSBase))
                     goto error;
             }
