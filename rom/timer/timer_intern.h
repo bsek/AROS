@@ -38,6 +38,11 @@
 #define TL_WAITVBL	2
 #define NUM_LISTS	3
 
+/* io_Flags: completed and out of the lists, ReplyMsg() still to come.
+ * Replies are sent after the list lock is dropped: Signal() may wait on
+ * other cores, which can be spinning on that lock with interrupts off. */
+#define TIMERF_REPLYING	0x40
+
 struct TimerBase
 {
     /* Required by the system */
