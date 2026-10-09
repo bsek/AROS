@@ -174,6 +174,7 @@ BOOL pciInit(struct PCIDevice *hd)
 
     NewList(&hd->hd_TempHCIList);
 
+    hd->hd_PCIHiddBase = OpenLibrary("pci.hidd", 0);
     if((hd->hd_PCIHidd = OOP_NewObject(NULL, (STRPTR) CLID_Hidd_PCI, NULL))) {
         struct TagItem tags[] = {
             { tHidd_PCI_Class,    (PCI_CLASS_SERIAL_USB >> 8) & 0xff },
@@ -456,6 +457,9 @@ void pciExpunge(struct PCIDevice *hd)
     }
     if(hd->hd_PCIHidd) {
         OOP_DisposeObject(hd->hd_PCIHidd);
+    }
+    if(hd->hd_PCIHiddBase) {
+        CloseLibrary(hd->hd_PCIHiddBase);
     }
 }
 /* \\\ */

@@ -283,6 +283,7 @@ struct PCIDevice {
     APTR                        hd_LogRHandle;
 #endif
     struct UtilityBase          *hd_UtilityBase;                    /* for tags etc */
+    struct Library              *hd_PCIHiddBase;                    /* keeps pci.hidd (and hd_PCIHidd) from being expunged first */
 #if defined(__OOP_NOLIBBASE__)
     struct Library              *hd_OOPBase;
 #endif
