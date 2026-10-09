@@ -55,14 +55,22 @@ tree, as for the other crosstools.
   environment through `__stdcio_get_environptr()`, `arc4random_buf` for
   randomness, `pthread_setname_np` for thread names, `T:` as the temporary
   directory, argv[0] as the current executable, positional reads emulated
-  with lseek, and the platform lists of `sys/fs` and `sys/fd` extended for
+  with lseek, aligned allocations through stdc's `aligned_alloc` (posixc's
+  `posix_memalign` would use a pthread's own heap; `canonicalize` passes
+  `realpath` a buffer for the same reason), `available_parallelism`
+  through `sysconf`, and the platform lists of `sys/fs` and `sys/fd` extended for
   what the AROS C library lacks (`readdir_r`, `futimens`, vectored I/O, ...).
+* `std::net` TCP/UDP over bsdsocket.library (`sys/net/connection/aros.rs`),
+  calling its jump table directly, so no C glue is needed. Not on m68k and
+  i386, whose library calls are not plain C calls.
 
 ## Known limitations
 
-* `std::process::Command` and `std::net` compile but fail at run time
-  (there is no `fork`, and sockets live in bsdsocket.library behind its
-  library base).
+* `std::process::Command` compiles but fails at run time (there is no
+  `fork`), as do Unix domain sockets.
+* One bsdsocket base is opened per process, and its sockets belong to the
+  task that opened it: use `std::net` from one thread. DNS is
+  `gethostbyname`, so IPv4 only.
 * Binaries carry std and must not be fully stripped (the AROS loader needs
   the relocations' symbols).
 * Verified on hosted AROS x86_64: threads, channels, mutexes, time, HashMap,
