@@ -500,7 +500,13 @@ long urndis_encap(struct NepClassEth *ncp, BYTE *m,LONG len )
 }
 
 
-void urndis_decap(struct NepClassEth *ncp, const UBYTE *buf, const LONG datalen)
+/*
+ * Messages may be concatenated in one transfer, and a device that sends no
+ * short packet after a message of a multiple of wMaxPacketSize (QEMU usb-net)
+ * lets the next message run into the same read. Returns the length of an
+ * incomplete trailing message, to be completed by the next read.
+ */
+LONG urndis_decap(struct NepClassEth *ncp, const UBYTE *buf, const LONG datalen)
 {
 
     struct urndis_packet_msg    *msg;
@@ -514,14 +520,8 @@ void urndis_decap(struct NepClassEth *ncp, const UBYTE *buf, const LONG datalen)
         msg = (struct urndis_packet_msg *)(buf + offset);
         DB(bug("%s: urndis_decap buffer size left %u\n", DEVNAME,len));
 
-        if (len < sizeof(*msg)) {
-            bug("%s: urndis_decap invalid buffer len %u < "
-                "minimum header %u\n",
-                DEVNAME,
-                len,
-                sizeof(*msg));
-            return;
-        }
+        if (len < sizeof(*msg))
+            return len;
 
         DB(bug("%s: urndis_decap len %u data(off:%u len:%u) "
             "oobdata(off:%u len:%u nb:%u) perpacket(off:%u len:%u)\n",
@@ -540,22 +540,24 @@ void urndis_decap(struct NepClassEth *ncp, const UBYTE *buf, const LONG datalen)
                 DEVNAME,
                 letoh32(msg->rm_type),
                 REMOTE_NDIS_PACKET_MSG);
-            return;
+            return 0;
         }
         if (letoh32(msg->rm_len) < sizeof(*msg)) {
             bug("%s: urndis_decap invalid msg len %u < %u\n",
                 DEVNAME,
                 letoh32(msg->rm_len),
                 sizeof(*msg));
-            return;
+            return 0;
         }
         if (letoh32(msg->rm_len) > len) {
+            if (letoh32(msg->rm_len) <= RNDIS_SLOTSZ)
+                return len;
             bug("%s: urndis_decap invalid msg len %u > buffer "
                 "len %u\n",
                 DEVNAME,
                 letoh32(msg->rm_len),
                 len);
-            return;
+            return 0;
         }
 
         if (letoh32(msg->rm_dataoffset) +
@@ -570,7 +572,7 @@ void urndis_decap(struct NepClassEth *ncp, const UBYTE *buf, const LONG datalen)
                 letoh32(msg->rm_dataoffset) +
                 letoh32(msg->rm_datalen) + RNDIS_HEADER_OFFSET,
                 letoh32(msg->rm_len));
-            return;
+            return 0;
         }
 
         if (letoh32(msg->rm_datalen) < sizeof(struct EtherPacketHeader)) {
@@ -579,7 +581,7 @@ void urndis_decap(struct NepClassEth *ncp, const UBYTE *buf, const LONG datalen)
                 DEVNAME,
                 letoh32(msg->rm_datalen),
                 sizeof(struct EtherPacketHeader));
-            return;
+            return 0;
         }
 
         DB(bug("%s: urndis_decap ethernet packet OK,size %d,offset %d\n",DEVNAME, letoh32(msg->rm_datalen),offset));
@@ -588,6 +590,31 @@ void urndis_decap(struct NepClassEth *ncp, const UBYTE *buf, const LONG datalen)
 
         offset += letoh32(msg->rm_len);
         len -= letoh32(msg->rm_len);
+    }
+    return 0;
+}
+
+void urndis_rx(struct NepClassEth *ncp, UBYTE *buf, LONG len)
+{
+    LONG left;
+
+    if (ncp->ncp_RxCarryLen > 0) {
+        if (ncp->ncp_RxCarryLen + len <= RNDIS_SLOTSZ * 2) {
+            CopyMem(buf, ncp->ncp_RxCarry + ncp->ncp_RxCarryLen, len);
+            buf = ncp->ncp_RxCarry;
+            len += ncp->ncp_RxCarryLen;
+        }
+        ncp->ncp_RxCarryLen = 0;
+    }
+
+    left = urndis_decap(ncp, buf, len);
+    if (left > 0) {
+        /* Forward byte copy: the source never lies below the destination */
+        UBYTE *src = buf + len - left;
+        LONG i;
+        for (i = 0; i < left; i++)
+            ncp->ncp_RxCarry[i] = src[i];
+        ncp->ncp_RxCarryLen = left;
     }
 }
 
