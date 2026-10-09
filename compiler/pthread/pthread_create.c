@@ -22,6 +22,7 @@
 
 #include <proto/exec.h>
 #include <proto/dos.h>
+#include <proto/kernel.h>
 #include <exec/semaphores.h>
 #include <exec/lists.h>
 
@@ -221,12 +222,36 @@ static void StarterFunc(void)
         Signal(waiter, SIGF_PARENT);
 }
 
+/*
+ * AROS has no load balancing: a task runs on the CPUs in its affinity mask
+ * and inherits its parent's, which is CPU 0 for anything started from the
+ * Shell or Workbench, and a wider mask still ends up on whichever CPU wakes
+ * it. Threads are dealt round-robin to the other CPUs, so they run beside
+ * the main task and each other. NULL (inherit) on a single CPU.
+ */
+static void *ThreadAffinity(void)
+{
+    static unsigned int next;
+    struct Library *KernelBase = OpenResource("kernel.resource");
+    unsigned int count;
+    void *mask;
+
+    if (!KernelBase || (count = KrnGetCPUCount()) < 2)
+        return NULL;
+    if (!(mask = KrnAllocCPUMask()))
+        return NULL;
+    // thread_sem is held, so next needs no further locking
+    KrnGetCPUMask(1 + next++ % (count - 1), mask);
+    return mask;
+}
+
 int pthread_create(pthread_t *thread, const pthread_attr_t *attr, void *(*start)(void *), void *arg)
 {
     ThreadInfo *inf;
     char name[NAMELEN];
     size_t oldlen;
     pthread_t threadnew;
+    void *affinity;
 
     D(bug("%s(%p, %p, %p, %p)\n", __FUNCTION__, thread, attr, start, arg));
 
@@ -275,8 +300,10 @@ int pthread_create(pthread_t *thread, const pthread_attr_t *attr, void *(*start)
     memset(name + oldlen, ' ', sizeof(name) - oldlen - 1);
     name[sizeof(name) - 1] = '\0';
 
-    // start the child thread
+    // start the child thread; the affinity mask becomes the system's
+    affinity = ThreadAffinity();
     inf->task = (struct Task *)CreateNewProcTags(NP_Entry, (IPTR)StarterFunc,
+        affinity ? NP_Affinity : TAG_IGNORE, (IPTR)affinity,
 #ifdef __MORPHOS__
         NP_CodeType, CODETYPE_PPC,
         (inf->attr.stackaddr == NULL && inf->attr.stacksize > 0) ? NP_PPCStackSize : TAG_IGNORE, inf->attr.stacksize,
