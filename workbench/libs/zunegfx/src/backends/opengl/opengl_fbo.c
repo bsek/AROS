@@ -167,10 +167,6 @@ OpenGLFBOData *OpenGL_CreateFBO(UWORD width, UWORD height)
     fbo->valid = TRUE;
     fbo->dirty = FALSE;
 
-    if (g_opengl_priv) {
-        g_opengl_priv->fbos_created++;
-    }
-
     return fbo;
 }
 
@@ -226,10 +222,6 @@ BOOL OpenGL_BindFBO(OpenGLFBOData *fbo)
      * expensive glReadPixels + WritePixelArray operations.
      */
     fbo->dirty = TRUE;
-
-    if (g_opengl_priv) {
-        g_opengl_priv->fbo_switches++;
-    }
 
     return TRUE;
 }

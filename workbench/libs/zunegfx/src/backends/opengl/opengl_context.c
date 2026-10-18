@@ -86,7 +86,6 @@ BOOL OpenGL_CreateMasterContext(struct Window *window)
      */
     if (!g_shaders_available) {
         if (OpenGL_InitShaders()) {
-            g_opengl_priv->has_shaders = TRUE;
             D(bug("[ZuneGfx:OpenGL] CreateMasterContext: Shaders compiled successfully\n"));
         } else {
             D(bug("[ZuneGfx:OpenGL] CreateMasterContext: Shader compilation failed (stack too small?)\n"));
@@ -189,7 +188,6 @@ BOOL OpenGL_PreInitializeShaders(void)
     if (g_opengl_priv) {
         g_opengl_priv->master_context = preinit_ctx;
         g_opengl_priv->master_context_created = TRUE;
-        g_opengl_priv->has_shaders = g_shaders_available;
 
         D(bug("[ZuneGfx:OpenGL] PreInitializeShaders: Stored as master context %p\n", preinit_ctx));
     }
@@ -342,7 +340,6 @@ BOOL OpenGL_EnsureGlobalContext(struct Window *window)
     setrast_tags[5].ti_Data = 0;
 
     glASetRast((GLAContext)g_opengl_priv->gl_context, setrast_tags);
-    g_opengl_priv->setrast_calls++;
 
     g_opengl_priv->current_target_type = OPENGL_TARGET_WINDOW;
     g_opengl_priv->current_window = window;
@@ -357,9 +354,7 @@ BOOL OpenGL_EnsureGlobalContext(struct Window *window)
     OpenGL_SetupOrthoProjection(g_opengl_priv->current_width, g_opengl_priv->current_height);
 
     /* Initialize shaders now that we have a context */
-    if (OpenGL_InitShaders()) {
-        g_opengl_priv->has_shaders = TRUE;
-    }
+    OpenGL_InitShaders();
 
     /* Initialize FBO functions now that we have a context */
     if (OpenGL_LoadFBOFunctions()) {
@@ -403,11 +398,9 @@ BOOL OpenGL_EnsureGlobalContext(struct Window *window)
         }
 
         if (fbo_works) {
-            g_opengl_priv->has_framebuffers = TRUE;
             D(bug("[ZuneGfx:OpenGL] EnsureGlobalContext: FBO test PASSED\n"));
         } else {
             g_fbo_available = FALSE;
-            g_opengl_priv->has_framebuffers = FALSE;
             D(bug("[ZuneGfx:OpenGL] EnsureGlobalContext: FBO test FAILED\n"));
         }
     } else {

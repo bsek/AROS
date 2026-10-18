@@ -155,8 +155,6 @@ void OpenGL_BlitToRastPortDirect(struct RastPort *dst_rp, WORD dst_x, WORD dst_y
 
     glFlush();
     glASwapBuffers((GLAContext)g_opengl_priv->gl_context);
-
-    g_opengl_priv->setrast_calls++;
 }
 
 /*****************************************************************************/

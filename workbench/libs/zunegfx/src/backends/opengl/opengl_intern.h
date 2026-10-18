@@ -315,8 +315,6 @@ void OpenGLClearRenderContext(struct RenderContext *rctx,
 /*****************************************************************************/
 
 BOOL OpenGL_CheckLibrary(OpenGLPrivateData *priv);
-BOOL OpenGL_CheckCapabilities(OpenGLPrivateData *priv);
-void OpenGL_DumpDebugInfo(OpenGLPrivateData *priv);
 
 BOOL OpenGL_SwitchToWindow(struct RenderContext *rctx);
 BOOL OpenGL_SwitchToDrawingBoard(struct RenderContext *rctx);

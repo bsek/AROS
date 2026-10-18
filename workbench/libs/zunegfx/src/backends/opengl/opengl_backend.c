@@ -50,75 +50,6 @@ BOOL OpenGL_CheckLibrary(OpenGLPrivateData *priv)
     return FALSE;
 }
 
-/*
- * OpenGL_CheckCapabilities - Query GL capabilities
- *
- * Must be called after a GL context is current!
- * Queries the GL implementation for its capabilities.
- */
-BOOL OpenGL_CheckCapabilities(OpenGLPrivateData *priv)
-{
-    if (!priv || !priv->gl_available) {
-        return FALSE;
-    }
-
-    /*
-     * Note: We can't query GL capabilities until we have a valid context.
-     * This function should be called after the first context is created.
-     * For now, we set reasonable defaults.
-     */
-    priv->gl_version_major = 1;
-    priv->gl_version_minor = 1;
-    priv->max_texture_size = 1024;
-    priv->has_npot_textures = FALSE;
-    priv->has_framebuffers = FALSE;
-    priv->has_shaders = FALSE;
-
-    return TRUE;
-}
-
-/*****************************************************************************/
-/* Debug/Info Functions                                                      */
-/*****************************************************************************/
-
-void OpenGL_DumpDebugInfo(OpenGLPrivateData *priv)
-{
-    D(bug("=== OpenGL Backend Debug Info ===\n"));
-
-    if (!priv) {
-        D(bug("  Status: Not initialized (NULL priv)\n"));
-        D(bug("=== End OpenGL Debug Info ===\n"));
-        return;
-    }
-
-    D(bug("  Status: %s\n", priv->initialized ? "Initialized" : "Not initialized"));
-    D(bug("  GL Available: %s\n", priv->gl_available ? "Yes" : "No"));
-
-    if (priv->GLBase) {
-        D(bug("  gl.library: v%ld.%ld\n",
-              priv->GLBase->lib_Version, priv->GLBase->lib_Revision));
-    } else {
-        D(bug("  gl.library: Not open\n"));
-    }
-
-    D(bug("  Global Context: %s (ptr=%p)\n",
-          priv->context_created ? "Created" : "Not created",
-          priv->gl_context));
-    D(bug("  Current Window: %p (%dx%d)\n",
-          priv->current_window, priv->current_width, priv->current_height));
-    D(bug("  GL Version: %ld.%ld\n",
-          priv->gl_version_major, priv->gl_version_minor));
-    D(bug("  Max Texture Size: %ld\n", priv->max_texture_size));
-    D(bug("  NPOT Textures: %s\n", priv->has_npot_textures ? "Yes" : "No"));
-    D(bug("  Framebuffers: %s\n", priv->has_framebuffers ? "Yes" : "No"));
-    D(bug("  Shaders: %s\n", priv->has_shaders ? "Yes" : "No"));
-    D(bug("  Draw Calls: %ld\n", priv->draw_calls));
-    D(bug("  SetRast Calls: %ld\n", priv->setrast_calls));
-    D(bug("  Capabilities: 0x%08lx\n", OpenGLGetCapabilities()));
-
-    D(bug("=== End OpenGL Debug Info ===\n"));
-}
-
 /*****************************************************************************/
 /* Backend Lifecycle                                                         */
 /*****************************************************************************/
@@ -143,9 +74,6 @@ static BOOL OpenGLInitBackend(ZuneBackendContext *ctx)
         return FALSE;
     }
 
-    /* Set default capabilities */
-    OpenGL_CheckCapabilities(priv);
-
     /* Initialize global context state */
     priv->gl_context = NULL;
     priv->context_created = FALSE;
@@ -155,8 +83,6 @@ static BOOL OpenGLInitBackend(ZuneBackendContext *ctx)
 
     /* Mark as initialized */
     priv->initialized = TRUE;
-    priv->draw_calls = 0;
-    priv->setrast_calls = 0;
 
     /* Store private data in context AND global pointer */
     ctx->private_data = priv;
@@ -398,7 +324,6 @@ BOOL OpenGL_SwitchToWindow(struct RenderContext *rctx)
         g_opengl_priv->current_board = NULL;
         g_opengl_priv->current_width = width;
         g_opengl_priv->current_height = height;
-        g_opengl_priv->setrast_calls++;
 
         /* Make context current (may be needed after SetRast) */
         glAMakeCurrent((GLAContext)g_opengl_priv->gl_context);

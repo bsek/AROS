@@ -21,7 +21,6 @@ struct DrawingBoard;
 /* OpenGL Backend Constants                                                  */
 /*****************************************************************************/
 
-#define OPENGL_MIN_VERSION      20  /* Minimum gl.library version required */
 #define OPENGL_BACKEND_NAME     "OpenGL"
 
 /*****************************************************************************/
@@ -108,22 +107,6 @@ typedef struct OpenGLPrivateData {
     UWORD       current_width;              /* Current framebuffer width */
     UWORD       current_height;             /* Current framebuffer height */
     BOOL        needs_sync;                 /* Need to sync from RastPort before drawing */
-
-    /* GL capabilities detected at init */
-    ULONG       gl_version_major;   /* OpenGL major version */
-    ULONG       gl_version_minor;   /* OpenGL minor version */
-    ULONG       max_texture_size;   /* Maximum texture dimension */
-    BOOL        has_npot_textures;  /* Non-power-of-two texture support */
-    BOOL        has_framebuffers;   /* Framebuffer object support (FBO) */
-    BOOL        has_shaders;        /* Shader support (GLSL) */
-
-    /* Statistics */
-    ULONG       contexts_created;   /* Number of GL contexts created */
-    ULONG       fbos_created;       /* Number of FBOs created */
-    ULONG       draw_calls;         /* Total draw calls (for debugging) */
-    ULONG       context_switches;   /* Number of context switches */
-    ULONG       fbo_switches;       /* Number of FBO switches */
-    ULONG       setrast_calls;      /* Number of glASetRast calls */
 
 } OpenGLPrivateData;
 
