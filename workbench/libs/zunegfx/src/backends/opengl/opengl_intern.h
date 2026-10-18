@@ -245,7 +245,7 @@ void OpenGLCopyFromRastPort(struct RenderContext *rctx, struct RastPort *src_rp,
                             UWORD width, UWORD height);
 void OpenGL_BlitToRastPortDirect(struct RastPort *dst_rp, WORD dst_x, WORD dst_y,
                                  UWORD width, UWORD height);
-void OpenGL_BlitFBOToRastPort(struct DrawingBoard *board, struct RastPort *dst_rp,
+BOOL OpenGL_BlitFBOToRastPort(struct DrawingBoard *board, struct RastPort *dst_rp,
                               WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
                               UWORD width, UWORD height);
 BOOL OpenGL_SyncFBOToBitmap(struct RenderContext *rctx);

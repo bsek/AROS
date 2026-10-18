@@ -505,6 +505,11 @@ void OpenGLDrawText(struct RenderContext *rctx, WORD x, WORD y,
         return;
     }
 
+    /* Text never joins the geometry batch, so flush it or the glyphs end up
+     * underneath quads that were recorded before this call. */
+    if (OpenGL_BatchIsActive(rctx))
+        OpenGL_BatchFlush(rctx);
+
     if (!OpenGL_SwitchToTarget(rctx)) {
         ZuneFallback_DrawText(rctx, x, y, string, count, fg_color, bg_color);
         return;
@@ -628,6 +633,9 @@ void OpenGLFillPolygon(struct RenderContext *rctx, struct ZunePoint *points,
     if (!rctx || !points || count < 3 || !brush) {
         return;
     }
+
+    if (OpenGL_BatchIsActive(rctx))
+        OpenGL_BatchFlush(rctx);
 
     if (!OpenGL_SwitchToTarget(rctx)) {
         ZuneFallback_FillPolygon(rctx, points, count, brush, antialias);

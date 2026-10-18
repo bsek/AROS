@@ -162,6 +162,16 @@ void OpenGLDrawRectangle(struct RenderContext *rctx, WORD x, WORD y,
     if (corner_radius > width / 2) corner_radius = width / 2;
     if (corner_radius > height / 2) corner_radius = height / 2;
 
+    /* Only a square, borderless, solid fill can join the batch. Everything
+     * else draws immediately, so the pending batch has to go out first or it
+     * would be painted on top of what follows. */
+    if (OpenGL_BatchIsActive(rctx) &&
+        !(corner_radius == 0 && border_width == 0 && filled && fill_brush &&
+          fill_brush->type == ZUNE_BRUSH_TYPE_SOLID))
+    {
+        OpenGL_BatchFlush(rctx);
+    }
+
     /* Simple rectangle (no rounded corners) */
     if (corner_radius == 0) {
         /* Handle fill */
@@ -561,6 +571,9 @@ void OpenGLDrawCircle(struct RenderContext *rctx, WORD center_x, WORD center_y,
         return;
     }
 
+    if (OpenGL_BatchIsActive(rctx))
+        OpenGL_BatchFlush(rctx);
+
     if (!OpenGL_SwitchToTarget(rctx)) {
         ZuneFallback_DrawCircle(rctx, center_x, center_y, radius, border_width,
                                 fill_brush, border_color, filled, antialias);
@@ -652,6 +665,11 @@ void OpenGLClearRenderContext(struct RenderContext *rctx,
         ZuneFallback_ClearRenderContext(rctx, color);
         return;
     }
+
+    /* Draw what was batched before this call - glClear honours the scissor
+     * box, so discarding instead would lose geometry outside it. */
+    if (OpenGL_BatchIsActive(rctx))
+        OpenGL_BatchFlush(rctx);
 
     /* Clear overwrites everything, no need to sync from RastPort */
     if (g_opengl_priv) {

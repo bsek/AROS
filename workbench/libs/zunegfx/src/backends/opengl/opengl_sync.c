@@ -167,31 +167,32 @@ void OpenGL_BlitToRastPortDirect(struct RastPort *dst_rp, WORD dst_x, WORD dst_y
  * Reads pixels from an FBO using glReadPixels and writes them to the
  * destination RastPort using WritePixelArray.
  */
-void OpenGL_BlitFBOToRastPort(struct DrawingBoard *board, struct RastPort *dst_rp,
+BOOL OpenGL_BlitFBOToRastPort(struct DrawingBoard *board, struct RastPort *dst_rp,
                               WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
                               UWORD width, UWORD height)
 {
     OpenGLFBOData *fbo;
     UBYTE *pixelbuffer;
+    LONG w, h;
 
     D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: board=%p, dst_rp=%p, src=%d,%d dst=%d,%d %dx%d\n",
           board, dst_rp, src_x, src_y, dst_x, dst_y, width, height));
 
     if (!board || !board->backend_data || !dst_rp) {
         D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: invalid params\n"));
-        return;
+        return FALSE;
     }
 
     if (!g_fbo_available || !glBindFramebuffer_ptr || !CyberGfxBase) {
         D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: FBO not available\n"));
-        return;
+        return FALSE;
     }
 
     fbo = (OpenGLFBOData *)board->backend_data;
 
     if (!fbo->valid) {
         D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: FBO not valid\n"));
-        return;
+        return FALSE;
     }
 
     D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: fbo_id=%u, fbo size=%dx%d\n",
@@ -214,19 +215,24 @@ void OpenGL_BlitFBOToRastPort(struct DrawingBoard *board, struct RastPort *dst_r
         }
     } else {
         D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: no GL context!\n"));
-        return;
+        return FALSE;
     }
 
-    /* Clamp dimensions to FBO size */
-    if (src_x < 0) { dst_x -= src_x; width += src_x; src_x = 0; }
-    if (src_y < 0) { dst_y -= src_y; height += src_y; src_y = 0; }
-    if (src_x + width > fbo->width) width = fbo->width - src_x;
-    if (src_y + height > fbo->height) height = fbo->height - src_y;
+    /* Clamp to the FBO. Signed throughout: a negative source origin shrinks
+     * the extent, which wraps if computed in UWORD. */
+    w = (LONG)width;
+    h = (LONG)height;
+    if (src_x < 0) { dst_x -= src_x; w += src_x; src_x = 0; }
+    if (src_y < 0) { dst_y -= src_y; h += src_y; src_y = 0; }
+    if (src_x + w > fbo->width) w = (LONG)fbo->width - src_x;
+    if (src_y + h > fbo->height) h = (LONG)fbo->height - src_y;
 
-    if (width <= 0 || height <= 0) {
+    if (w <= 0 || h <= 0) {
         D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: invalid dimensions after clamping\n"));
-        return;
+        return FALSE;
     }
+    width = (UWORD)w;
+    height = (UWORD)h;
 
     /* Bind the FBO for reading */
     D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: binding FBO %u for reading\n", fbo->fbo_id));
@@ -250,7 +256,7 @@ void OpenGL_BlitFBOToRastPort(struct DrawingBoard *board, struct RastPort *dst_r
 
     if (!pixelbuffer) {
         D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: ReadPixelsToBuffer FAILED!\n"));
-        return;
+        return FALSE;
     }
 
     D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: writing to RastPort at %d,%d\n", dst_x, dst_y));
@@ -261,6 +267,7 @@ void OpenGL_BlitFBOToRastPort(struct DrawingBoard *board, struct RastPort *dst_r
                     width, height, RECTFMT_RGBA);
 
     FreeVec(pixelbuffer);
+    return TRUE;
 }
 
 /*****************************************************************************/
@@ -303,9 +310,12 @@ BOOL OpenGL_SyncFBOToBitmap(struct RenderContext *rctx)
         return TRUE;
     }
 
-    OpenGL_BlitFBOToRastPort(board, board->rastport,
-                              0, 0, 0, 0,
-                              board->width, board->height);
+    if (!OpenGL_BlitFBOToRastPort(board, board->rastport,
+                                  0, 0, 0, 0,
+                                  board->width, board->height)) {
+        /* Leave the FBO dirty so the next sync tries again */
+        return FALSE;
+    }
 
     fbo->dirty = FALSE;
 
@@ -361,21 +371,25 @@ BOOL OpenGL_SyncRegionFBOToBitmap(struct RenderContext *rctx,
         return TRUE;
     }
 
-    /* Clamp region to FBO bounds */
-    if (x < 0) { width += x; x = 0; }
-    if (y < 0) { height += y; y = 0; }
-    if (x + width > board->width) width = board->width - x;
-    if (y + height > board->height) height = board->height - y;
+    /* Clamp region to FBO bounds, signed for the same reason as above */
+    {
+        LONG w = (LONG)width, h = (LONG)height;
 
-    if (width <= 0 || height <= 0) {
-        return TRUE;
+        if (x < 0) { w += x; x = 0; }
+        if (y < 0) { h += y; y = 0; }
+        if (x + w > board->width) w = (LONG)board->width - x;
+        if (y + h > board->height) h = (LONG)board->height - y;
+
+        if (w <= 0 || h <= 0) {
+            return TRUE;
+        }
+        width = (UWORD)w;
+        height = (UWORD)h;
     }
 
-    OpenGL_BlitFBOToRastPort(board, board->rastport,
-                              x, y, x, y,
-                              width, height);
-
-    return TRUE;
+    return OpenGL_BlitFBOToRastPort(board, board->rastport,
+                                    x, y, x, y,
+                                    width, height);
 }
 
 /*****************************************************************************/

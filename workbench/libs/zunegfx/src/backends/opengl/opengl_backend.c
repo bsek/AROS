@@ -501,9 +501,29 @@ BOOL OpenGL_SwitchToTarget(struct RenderContext *rctx)
         return FALSE;
     }
 
-    /* Check if this is a DrawingBoard target */
+    /*
+     * Batched geometry carries no target of its own - it lands in whatever
+     * framebuffer is bound when the flush happens. Draw it into the target it
+     * was recorded for before binding a different one.
+     */
     if (rctx->target_board) {
+        if (g_opengl_priv->current_target_type != OPENGL_TARGET_DRAWINGBOARD ||
+            g_opengl_priv->current_board != rctx->target_board) {
+            OpenGL_BatchFlush(rctx);
+        }
         return OpenGL_SwitchToDrawingBoard(rctx);
+    }
+
+    {
+        struct Window *window = NULL;
+
+        if (rctx->target_rastport && rctx->target_rastport->Layer) {
+            window = (struct Window *)rctx->target_rastport->Layer->Window;
+        }
+        if (g_opengl_priv->current_target_type != OPENGL_TARGET_WINDOW ||
+            g_opengl_priv->current_window != window) {
+            OpenGL_BatchFlush(rctx);
+        }
     }
 
     /* Otherwise it's a Window-based RastPort */
