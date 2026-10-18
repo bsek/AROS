@@ -19,8 +19,11 @@ BOOL OpenGL_LoadFBOFunctions(void)
     glRenderbufferStorage_ptr = (PFNGLRENDERBUFFERSTORAGEPROC)glAGetProcAddress("glRenderbufferStorage");
     glFramebufferRenderbuffer_ptr = (PFNGLFRAMEBUFFERRENDERBUFFERPROC)glAGetProcAddress("glFramebufferRenderbuffer");
 
-    /* If core functions not available, try EXT versions */
-    if (!glGenFramebuffers_ptr) {
+    /* If any core function is missing, take the whole EXT set instead -
+     * mixing the two leaves a half-filled table */
+    if (!glGenFramebuffers_ptr || !glDeleteFramebuffers_ptr ||
+        !glBindFramebuffer_ptr || !glCheckFramebufferStatus_ptr ||
+        !glFramebufferTexture2D_ptr) {
         glGenFramebuffers_ptr = (PFNGLGENFRAMEBUFFERSPROC)glAGetProcAddress("glGenFramebuffersEXT");
         glDeleteFramebuffers_ptr = (PFNGLDELETEFRAMEBUFFERSPROC)glAGetProcAddress("glDeleteFramebuffersEXT");
         glBindFramebuffer_ptr = (PFNGLBINDFRAMEBUFFERPROC)glAGetProcAddress("glBindFramebufferEXT");
@@ -113,8 +116,8 @@ OpenGLFBOData *OpenGL_CreateFBO(UWORD width, UWORD height)
     /* Set texture parameters */
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
     /* Create texture storage */
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
@@ -241,39 +244,6 @@ void OpenGL_UnbindFBO(void)
 /*****************************************************************************/
 
 /*
- * OpenGL_GetFBOAsTexture - Get a DrawingBoard's FBO texture for compositing
- *
- * Returns the OpenGL texture ID of the FBO's color attachment, which can be
- * used directly as a texture input in another rendering operation. This
- * enables zero-copy compositing - the GPU never transfers data to the CPU.
- *
- * Prerequisites:
- * - DrawingBoard must have been rendered to via OpenGL
- * - Caller should call glFlush() on the source context before using texture
- *
- * Returns texture ID, or 0 if not available.
- */
-GLuint OpenGL_GetFBOAsTexture(struct DrawingBoard *board)
-{
-    OpenGLFBOData *fbo;
-
-    if (!board || !board->backend_data) {
-        return 0;
-    }
-
-    fbo = (OpenGLFBOData *)board->backend_data;
-
-    if (!fbo->valid || fbo->texture_id == 0) {
-        return 0;
-    }
-
-    /* Ensure all rendering to this FBO is complete */
-    glFlush();
-
-    return fbo->texture_id;
-}
-
-/*
  * OpenGL_BlitFBOToFBO - Blit from one DrawingBoard's FBO to another
  *
  * This is the key zero-copy compositing function. It renders the source
@@ -367,6 +337,8 @@ void OpenGL_BlitFBOToFBO(struct DrawingBoard *src, struct DrawingBoard *dst,
     glEnd();
 
     glDisable(GL_TEXTURE_2D);
+    glDisable(GL_BLEND);
+    glBindTexture(GL_TEXTURE_2D, 0);
 
     /* Mark destination as dirty */
     dst_fbo->dirty = TRUE;

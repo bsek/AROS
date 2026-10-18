@@ -219,7 +219,6 @@ OpenGLFBOData *OpenGL_CreateFBO(UWORD width, UWORD height);
 void OpenGL_DestroyFBO(OpenGLFBOData *fbo);
 BOOL OpenGL_BindFBO(OpenGLFBOData *fbo);
 void OpenGL_UnbindFBO(void);
-GLuint OpenGL_GetFBOAsTexture(struct DrawingBoard *board);
 void OpenGL_BlitFBOToFBO(struct DrawingBoard *src, struct DrawingBoard *dst,
                           WORD src_x, WORD src_y, WORD dst_x, WORD dst_y,
                           UWORD width, UWORD height);
@@ -267,7 +266,6 @@ BOOL OpenGL_BatchAddPoint(struct RenderContext *rctx,
                           WORD x, WORD y,
                           UBYTE r, UBYTE g, UBYTE b, UBYTE a);
 
-void OpenGL_SyncIfNeeded(struct RenderContext *rctx);
 void OpenGL_FlushIfNotBatching(struct RenderContext *rctx);
 
 /*****************************************************************************/

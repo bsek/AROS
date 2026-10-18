@@ -330,9 +330,6 @@ BOOL OpenGL_SwitchToWindow(struct RenderContext *rctx)
 
         /* Re-setup orthographic projection for new dimensions */
         OpenGL_SetupOrthoProjection(width, height);
-
-        /* Mark that we need to sync from RastPort before drawing */
-        g_opengl_priv->needs_sync = TRUE;
     }
 
     return TRUE;
@@ -462,9 +459,6 @@ BOOL OpenGL_SwitchToDrawingBoard(struct RenderContext *rctx)
         g_opengl_priv->current_window = NULL;
         g_opengl_priv->current_width = board->width;
         g_opengl_priv->current_height = board->height;
-
-        /* DrawingBoards don't need sync - they start fresh */
-        g_opengl_priv->needs_sync = FALSE;
     } else {
         D(bug("[ZuneGfx:OpenGL] SwitchToDrawingBoard: Already on same board, just reset projection\n"));
         /*
@@ -634,7 +628,6 @@ static void OpenGLEndBatch(struct RenderContext *rctx)
         glFlush();
         if (g_opengl_priv->current_target_type == OPENGL_TARGET_WINDOW) {
             glASwapBuffers((GLAContext)g_opengl_priv->gl_context);
-            g_opengl_priv->needs_sync = TRUE;
         }
     }
 }
@@ -653,7 +646,6 @@ static void OpenGLFlushBatch(struct RenderContext *rctx)
         glFlush();
         if (g_opengl_priv->current_target_type == OPENGL_TARGET_WINDOW) {
             glASwapBuffers((GLAContext)g_opengl_priv->gl_context);
-            g_opengl_priv->needs_sync = TRUE;
         }
     }
 }
@@ -790,7 +782,6 @@ static void OpenGLBlitToScreen(struct RenderContext *source,
         glBindFramebuffer_ptr(GL_FRAMEBUFFER, fbo->fbo_id);
 
         /* Ensure GL operations are complete */
-        glFlush();
         glFinish();
 
         /* Read pixels from FBO */

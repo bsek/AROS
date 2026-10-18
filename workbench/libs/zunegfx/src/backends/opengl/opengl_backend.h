@@ -62,10 +62,6 @@ typedef struct OpenGLFBOData {
     UWORD       height;             /* FBO height */
     BOOL        valid;              /* FBO is valid and complete */
     BOOL        dirty;              /* FBO content modified, needs sync to bitmap */
-
-    /* Zero-copy compositing support */
-    APTR        pipe_resource;      /* Gallium pipe_resource for zero-copy access */
-    BOOL        resource_valid;     /* pipe_resource is valid for texture use */
 } OpenGLFBOData;
 
 /*****************************************************************************/
@@ -106,7 +102,6 @@ typedef struct OpenGLPrivateData {
     struct DrawingBoard *current_board;     /* Currently bound DrawingBoard (if DRAWINGBOARD) */
     UWORD       current_width;              /* Current framebuffer width */
     UWORD       current_height;             /* Current framebuffer height */
-    BOOL        needs_sync;                 /* Need to sync from RastPort before drawing */
 
 } OpenGLPrivateData;
 

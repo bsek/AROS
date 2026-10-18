@@ -72,7 +72,6 @@ void OpenGLDrawPixel(struct RenderContext *rctx, WORD x, WORD y,
         return;
     }
 
-    OpenGL_SyncIfNeeded(rctx);
 
     /* Try geometry batch path */
     if (OpenGL_BatchIsActive(rctx) &&
@@ -101,7 +100,6 @@ void OpenGLDrawLine(struct RenderContext *rctx, WORD startX, WORD startY,
         return;
     }
 
-    OpenGL_SyncIfNeeded(rctx);
 
     /* Batch simple 1px non-AA lines */
     if (width <= 1 && !antialias && OpenGL_BatchIsActive(rctx) &&
@@ -156,7 +154,6 @@ void OpenGLDrawRectangle(struct RenderContext *rctx, WORD x, WORD y,
         return;
     }
 
-    OpenGL_SyncIfNeeded(rctx);
 
     /* Clamp corner radius to half of smallest dimension */
     if (corner_radius > width / 2) corner_radius = width / 2;
@@ -580,7 +577,6 @@ void OpenGLDrawCircle(struct RenderContext *rctx, WORD center_x, WORD center_y,
         return;
     }
 
-    OpenGL_SyncIfNeeded(rctx);
 
     angle_step = 2.0f * 3.14159265f / CIRCLE_SEGMENTS;
 
@@ -670,11 +666,6 @@ void OpenGLClearRenderContext(struct RenderContext *rctx,
      * box, so discarding instead would lose geometry outside it. */
     if (OpenGL_BatchIsActive(rctx))
         OpenGL_BatchFlush(rctx);
-
-    /* Clear overwrites everything, no need to sync from RastPort */
-    if (g_opengl_priv) {
-        g_opengl_priv->needs_sync = FALSE;
-    }
 
     glClearColor(
         color->r / 255.0f,

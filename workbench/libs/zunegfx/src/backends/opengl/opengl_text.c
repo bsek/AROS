@@ -323,8 +323,8 @@ static struct GlyphAtlas *BuildGlyphAtlas(struct TextFont *font)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     }
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
     glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, tex_w, tex_h, 0,
                  GL_ALPHA, GL_UNSIGNED_BYTE, pixels);
@@ -530,7 +530,6 @@ void OpenGLDrawText(struct RenderContext *rctx, WORD x, WORD y,
         return;
     }
 
-    OpenGL_SyncIfNeeded(rctx);
 
     inv_w = 1.0f / (float)atlas->tex_width;
     inv_h = 1.0f / (float)atlas->tex_height;
@@ -642,7 +641,6 @@ void OpenGLFillPolygon(struct RenderContext *rctx, struct ZunePoint *points,
         return;
     }
 
-    OpenGL_SyncIfNeeded(rctx);
 
     /* Set color from brush */
     if (brush->type == ZUNE_BRUSH_TYPE_SOLID) {

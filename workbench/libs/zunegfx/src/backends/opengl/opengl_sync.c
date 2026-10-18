@@ -27,6 +27,7 @@ void OpenGLCopyFromRastPort(struct RenderContext *rctx, struct RastPort *src_rp,
 {
     UBYTE *pixelbuffer;
     GLuint texture;
+    GLboolean blend_was_on;
 
     if (!rctx || !src_rp || !g_opengl_priv || !CyberGfxBase) {
         return;
@@ -73,6 +74,8 @@ void OpenGLCopyFromRastPort(struct RenderContext *rctx, struct RastPort *src_rp,
     D(bug("[ZuneGfx:OpenGL] CopyFromRastPort: Texture created, id=%u\n", texture));
 
     /* Draw texture to framebuffer (replace, not blend) */
+    blend_was_on = glIsEnabled(GL_BLEND);
+
     glEnable(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, texture);  /* Explicitly bind the texture! */
     glDisable(GL_BLEND);
@@ -102,11 +105,14 @@ void OpenGLCopyFromRastPort(struct RenderContext *rctx, struct RastPort *src_rp,
     glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
     OpenGL_DrawTexturedQuad(dst_x, dst_y, width, height, FALSE);
 
-    glFlush();
     glFinish();
 
-    glEnable(GL_BLEND);
     glDisable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    /* Restore the blend state this function turned off above */
+    if (blend_was_on)
+        glEnable(GL_BLEND);
 
     glDeleteTextures(1, &texture);
 }
@@ -202,7 +208,6 @@ BOOL OpenGL_BlitFBOToRastPort(struct DrawingBoard *board, struct RastPort *dst_r
      * Make the correct GL context current for FBO access.
      * FBOs are NOT shared between GL contexts in Mesa.
      */
-    glFlush();
     glFinish();
 
     if (g_opengl_priv && g_opengl_priv->gl_context) {
@@ -237,7 +242,6 @@ BOOL OpenGL_BlitFBOToRastPort(struct DrawingBoard *board, struct RastPort *dst_r
     /* Bind the FBO for reading */
     D(bug("[ZuneGfx:OpenGL] BlitFBOToRastPort: binding FBO %u for reading\n", fbo->fbo_id));
     glBindFramebuffer_ptr(GL_FRAMEBUFFER, fbo->fbo_id);
-    glFlush();
     glFinish();
 
     /* Read pixels from FBO (Y-flipped for screen coordinates) */
@@ -471,15 +475,6 @@ void OpenGL_SyncFromRastPort(struct RenderContext *rctx)
     glDeleteTextures(1, &texture);
 }
 
-void OpenGL_SyncIfNeeded(struct RenderContext *rctx)
-{
-    if (!g_opengl_priv || !g_opengl_priv->needs_sync) {
-        return;
-    }
-
-    g_opengl_priv->needs_sync = FALSE;
-}
-
 /*
  * OpenGL_FlushIfNotBatching - Flush OpenGL rendering to make it visible
  *
@@ -510,6 +505,5 @@ void OpenGL_FlushIfNotBatching(struct RenderContext *rctx)
     if (g_opengl_priv->current_target_type == OPENGL_TARGET_WINDOW) {
         glFlush();
         glASwapBuffers((GLAContext)g_opengl_priv->gl_context);
-        g_opengl_priv->needs_sync = TRUE;
     }
 }
