@@ -312,58 +312,32 @@ BOOL vcgfx_yuv_ok(struct VideoCoreGfx_staticdata *xsd, ULONG videofmt)
         && vcgfx_planes_supported(xsd);
 }
 
-/* num/den in Q22, rounded; num and den positive */
-static LONG q22(QUAD num, QUAD den)
-{
-    return (LONG)(((num << 22) + den / 2) / den);
-}
+/* A 10-bit S2.8 coefficient: 0 to 2.996, or -1 to just under 0 */
+#define CSC_COEF(v)     ((ULONG)((v) < 0 ? 1024 + (v) : (v)) & 0x3ff)
 
-/* BT.601, BT.709 or BT.2020 from Kr and Kb (in 1/10000), limited or full
- * range. Integer only, as the driver runs without the FPU. */
-void vcgfx_yuv_matrix(ULONG colorspace, ULONG range, struct vcgfx_yuvm *m)
+/* The three CSC words of a YUV entry: limited range BT.601 or BT.709, in
+ * 1/256. Cb and Cr come centred already; Y loses its 16. */
+void vcgfx_yuv_csc(ULONG colorspace, ULONG csc[3])
 {
-    QUAD kr = 2990, kb = 1140, kg, cn = 255, cd = 224;
+    LONG y = 298, crr, cbg, crg, cbb;
 
     if (colorspace == vHidd_ColorSpace_BT709)
     {
-        kr = 2126;
-        kb = 722;
+        crr = 459;
+        cbg = -55;
+        crg = -136;
+        cbb = 541;
     }
-    else if (colorspace == vHidd_ColorSpace_BT2020)
+    else
     {
-        kr = 2627;
-        kb = 593;
+        crr = 409;
+        cbg = -100;
+        crg = -208;
+        cbb = 517;
     }
-    kg = 10000 - kr - kb;
-    if (range == vHidd_ColorRange_Full)
-        cn = cd = 1;
-
-    m->y0  = (range == vHidd_ColorRange_Full) ? 0 : 16;
-    m->ky  = (range == vHidd_ColorRange_Full) ? (1L << 22) : q22(255, 219);
-    m->rcr = q22(2 * (10000 - kr) * cn, 10000 * cd);
-    m->bcb = q22(2 * (10000 - kb) * cn, 10000 * cd);
-    m->gcb = -q22(2 * kb * (10000 - kb) * cn, kg * 10000 * cd);
-    m->gcr = -q22(2 * kr * (10000 - kr) * cn, kg * 10000 * cd);
-}
-
-/* A 10-bit S2.8 coefficient from Q22: 0 to 2.996, or -1 to just under 0 */
-static ULONG csc_coef(LONG q)
-{
-    LONG v = (q >= 0) ? (q + (1 << 13)) >> 14 : -((-q + (1 << 13)) >> 14);
-
-    return (ULONG)(v < 0 ? 1024 + v : v) & 0x3ff;
-}
-
-/* The three CSC words of a VideoCore IV / HVS5 YUV entry. Cb and Cr come
- * centred already; Y loses its offset. */
-void vcgfx_yuv_csc(ULONG colorspace, ULONG range, ULONG csc[3])
-{
-    struct vcgfx_yuvm m;
-
-    vcgfx_yuv_matrix(colorspace, range, &m);
-    csc[0] = (ULONG)(-m.y0 & 0xff) << 16;
-    csc[1] = (csc_coef(m.gcb) << 22) | (csc_coef(m.gcr) << 12) | (csc_coef(m.ky) << 2);
-    csc[2] = (csc_coef(m.rcr) << 10) | csc_coef(m.bcb);
+    csc[0] = (ULONG)(-16 & 0xff) << 16;
+    csc[1] = (CSC_COEF(cbg) << 22) | (CSC_COEF(crg) << 12) | (CSC_COEF(y) << 2);
+    csc[2] = (CSC_COEF(crr) << 10) | CSC_COEF(cbb);
 }
 
 /* The backdrop is the fb; a mode set leaves it holding anything. */
@@ -679,28 +653,6 @@ void vcgfx_plane_moved(struct VideoCoreGfx_staticdata *xsd, OOP_Object *bm)
         }
     }
     VC4_MBOX_UNLOCK(xsd);
-}
-
-/* The colour of a bitmap changed: the list of a plane showing it is built
- * again, which loads what its entry needs. */
-void vcgfx_plane_restyle(struct VideoCoreGfx_staticdata *xsd, OOP_Object *bm)
-{
-    BOOL shown;
-
-    if (!xsd->vcsd_PlanesMode)
-        return;
-
-    VC4_MBOX_LOCK(xsd);
-    shown = (plane_find(xsd, bm) != NULL);
-    if (shown)
-    {
-        planes_stack(xsd);
-        planes_commit(xsd);
-    }
-    VC4_MBOX_UNLOCK(xsd);
-
-    if (shown)
-        vc4_hvs_latch_wait(xsd);
 }
 
 /* A bitmap going away must be off the display, and out of the list the
