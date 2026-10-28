@@ -350,10 +350,20 @@ void    vcgfx_mirror_rect(struct VideoCoreGfx_staticdata *xsd, OOP_Object *bm,
 BOOL    vcgfx_planes_commit(struct VideoCoreGfx_staticdata *xsd,
                             struct HIDD_PlaneState *states, ULONG count, ULONG flags);
 void    vcgfx_plane_moved(struct VideoCoreGfx_staticdata *xsd, OOP_Object *bm);
+void    vcgfx_plane_restyle(struct VideoCoreGfx_staticdata *xsd, OOP_Object *bm);
 void    vcgfx_plane_forget(struct VideoCoreGfx_staticdata *xsd, OOP_Object *bm);
 BOOL    vcgfx_plane_page(OOP_Class *cl, OOP_Object *bm, ULONG page, BOOL wait);
 BOOL    vcgfx_plane_shows(struct VideoCoreGfx_staticdata *xsd, OOP_Object *bm);
-void    vcgfx_yuv_csc(ULONG colorspace, ULONG csc[3]);
+/* YCbCr to RGB in 8-bit units, factors in Q22 (1.0 = 1 << 22):
+ * R = ky*(Y-y0) + rcr*Cr, G = ky*(Y-y0) + gcb*Cb + gcr*Cr, B = ky*(Y-y0) + bcb*Cb,
+ * Cb and Cr centred on 128. */
+struct vcgfx_yuvm
+{
+    LONG ky, rcr, gcb, gcr, bcb;
+    LONG y0;
+};
+void    vcgfx_yuv_matrix(ULONG colorspace, ULONG range, struct vcgfx_yuvm *m);
+void    vcgfx_yuv_csc(ULONG colorspace, ULONG range, ULONG csc[3]);
 BOOL    vcgfx_yuv_ok(struct VideoCoreGfx_staticdata *xsd, ULONG videofmt);
 
 #endif /* _VIDEOCOREGFX_CLASS_H */

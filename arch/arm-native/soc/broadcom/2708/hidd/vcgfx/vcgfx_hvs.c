@@ -707,7 +707,7 @@ static void hvs_plane_src(struct VideoCoreGfx_staticdata *xsd, struct vcgfx_plan
         s->cphys[0] = base + d->planeoff[0] + cy * d->cpitch
                     + cx * ((s->yuv == HVS_PXF_YUV420_2PLANE) ? 2 : 1);
         s->cphys[1] = base + d->planeoff[1] + cy * d->cpitch + cx;
-        vcgfx_yuv_csc(d->colorspace, s->csc);
+        vcgfx_yuv_csc(d->colorspace, d->colorrange, s->csc);
     }
 }
 
