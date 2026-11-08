@@ -218,10 +218,13 @@ BPTR parsekeymapseg(BPTR km_seg)
                COPYPTR(kmptr, *hkptr);
                D(bug("[KMS] %s: %02u: hk descr @ %p\n", __func__, i, keym);)
                tmpptr = (UBYTE *)keym;
+               /* padded to even as when copied below, as for the low keys */
                if (keyval & KCF_STRING)
-                  kmsegsize += countstrdescr(tmpptr, __builtin_popcount(keyval));
+                  size = countstrdescr(tmpptr, __builtin_popcount(keyval));
                else
-                  kmsegsize += countdkdescr(tmpptr, __builtin_popcount(keyval));
+                  size = countdkdescr(tmpptr, __builtin_popcount(keyval));
+               if (size & 0x1) size += 1;
+               kmsegsize += size;
             }
          }
       COPYPTR(ptr, tmp_nativekm.kn_KeyMap.km_HiCapsable);
