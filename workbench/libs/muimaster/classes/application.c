@@ -1239,6 +1239,8 @@ static IPTR Application__OM_NEW(struct IClass *cl, Object *obj,
     if (!obj)
         return FALSE;
 
+    zune_utf8_update();
+
     /* Initial local instance data */
     data = INST_DATA(cl, obj);
 

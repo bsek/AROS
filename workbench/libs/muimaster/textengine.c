@@ -80,6 +80,15 @@ char *zune_text_iso_string(ZText * text);
 void zune_text_destroy(ZText * text);
 void zune_text_chunk_new(struct zune_context *zc);
 static int strlenlf(const char *str);
+
+/* The underlined character is a whole UTF-8 sequence in UTF-8 mode */
+static CONST_STRPTR zune_text_next_char(CONST_STRPTR s)
+{
+    if (*s++ && zune_utf8())
+        while ((*s & 0xC0) == 0x80)
+            s++;
+    return s;
+}
 static CONST_STRPTR parse_escape_code(ZTextLine * ztl,
     struct zune_context *zc, CONST_STRPTR s);
 static ZTextLine *zune_text_parse_line(CONST_STRPTR * s,
@@ -518,7 +527,8 @@ static ZTextLine *zune_text_parse_line(CONST_STRPTR * s_ptr,
             zune_text_chunk_new(zc);
             zc->style |= FSF_UNDERLINED;
             zc->text_start = s;
-            zc->text = ++s;
+            s = zune_text_next_char(s);
+            zc->text = s;
             zune_text_chunk_new(zc);
             zc->text_start = s;
             zc->style = styleback;
@@ -533,7 +543,8 @@ static ZTextLine *zune_text_parse_line(CONST_STRPTR * s_ptr,
             zune_text_chunk_new(zc);
             zc->style |= FSF_UNDERLINED;
             zc->text_start = ++s;
-            zc->text = ++s;
+            s = zune_text_next_char(s);
+            zc->text = s;
             zune_text_chunk_new(zc);
             zc->text_start = s;
             zc->style = styleback;

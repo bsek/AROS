@@ -44,6 +44,12 @@ struct Library;
 int isRegionWithinBounds(struct Region *r, int left, int top, int width,
     int height);
 ULONG ConvertKey(struct IntuiMessage *imsg);
+LONG ConvertKeyUTF8(struct IntuiMessage *imsg, UBYTE *buf, LONG len);
+
+/* Strings are UTF-8 when ENV:UTF8 is set, for all of Zune */
+extern BOOL zune_utf8_mode;
+#define zune_utf8() (zune_utf8_mode)
+void zune_utf8_update(void);
 
 #define _between(a,x,b) ((x)>=(a) && (x)<=(b))
 #define _isinobject(obj, x, y) (_between(_mleft(obj), (x), _mright(obj)) \

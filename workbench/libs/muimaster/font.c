@@ -12,12 +12,31 @@
 
 #include "muimaster_intern.h"
 #include "font.h"
+#include "support.h"
 #include "prefs.h"
 
 /*  #define MYDEBUG 1 */
 #include "debug.h"
 
 extern struct Library *MUIMasterBase;
+
+/* In UTF-8 mode fonts are opened as UTF-8 instances */
+static struct TextFont *zune_open_font(struct TextAttr *ta)
+{
+    struct TagItem tags[] = { { TA_CharSet, CHARSET_UTF8 }, { TAG_DONE, 0 } };
+    struct TTextAttr tta;
+
+    if (!zune_utf8())
+        return OpenDiskFont(ta);
+
+    tta.tta_Name = ta->ta_Name;
+    tta.tta_YSize = ta->ta_YSize;
+    tta.tta_Style = ta->ta_Style | FSF_TAGGED;
+    tta.tta_Flags = ta->ta_Flags;
+    tta.tta_Tags = tags;
+
+    return OpenDiskFont((struct TextAttr *)&tta);
+}
 
 /* Returns a given text font, if necessary it opens the font.
  * Must be called after Area's MUIM_Setup.
@@ -64,7 +83,7 @@ struct TextFont *zune_font_get(Object *obj, IPTR font)
                 if ((p = PathPart(ta.ta_Name)))
                     strcpy(p, ".font");
                 D(bug("zune_font_get : OpenDiskFont(%s)\n", ta.ta_Name));
-                mri->mri_Fonts[-preset] = OpenDiskFont(&ta);
+                mri->mri_Fonts[-preset] = zune_open_font(&ta);
 
                 FreeVec(ta.ta_Name);
             }
@@ -92,7 +111,7 @@ struct TextFont *zune_font_get(Object *obj, IPTR font)
                 scr_attr.ta_Flags = 0;
                 D(bug("zune_font_get : OpenDiskFont(%s) (screen font)\n",
                         scr_attr.ta_Name));
-                mri->mri_Fonts[-preset] = OpenDiskFont(&scr_attr);
+                mri->mri_Fonts[-preset] = zune_open_font(&scr_attr);
             }
             else                /* MUIV_Font_Fixed */
             {
@@ -104,7 +123,7 @@ struct TextFont *zune_font_get(Object *obj, IPTR font)
                 def_attr.ta_Flags = GfxBase->DefaultFont->tf_Flags;
                 D(bug("zune_font_get : OpenDiskFont(%s) (system font)\n",
                         def_attr.ta_Name));
-                mri->mri_Fonts[-preset] = OpenDiskFont(&def_attr);
+                mri->mri_Fonts[-preset] = zune_open_font(&def_attr);
             }
         }
         return mri->mri_Fonts[-preset];

@@ -220,6 +220,67 @@ static inline VOID CleanVisualBuffer(struct MUI_StringData *data)
 }
 
 /**************************************************************************
+ One character before or after pos; UTF-8 characters take several bytes
+**************************************************************************/
+static ULONG Buffer_PrevChar(struct MUI_StringData *data, ULONG pos)
+{
+    if (pos > 0)
+        pos--;
+    if (zune_utf8())
+        while (pos > 0 && (data->Buffer[pos] & 0xC0) == 0x80)
+            pos--;
+    return pos;
+}
+
+static ULONG Buffer_NextChar(struct MUI_StringData *data, ULONG pos)
+{
+    if (pos < data->NumChars)
+        pos++;
+    if (zune_utf8())
+        while (pos < data->NumChars && (data->Buffer[pos] & 0xC0) == 0x80)
+            pos++;
+    return pos;
+}
+
+/* Clipboard text can still come from an 8-bit program */
+static BOOL String_IsUTF8(CONST_STRPTR s)
+{
+    while (*s)
+    {
+        ULONG n = (*s < 0x80) ? 0 : (*s >= 0xC2 && *s <= 0xDF) ? 1 :
+            (*s >= 0xE0 && *s <= 0xEF) ? 2 : (*s >= 0xF0 && *s <= 0xF4) ? 3 : 4;
+
+        if (n == 4)
+            return FALSE;
+        for (s++; n; n--, s++)
+            if ((*s & 0xC0) != 0x80)
+                return FALSE;
+    }
+    return TRUE;
+}
+
+/* A keymap char (Latin-1) as UTF-8, returns its length */
+static ULONG String_EncodeChar(unsigned char code, UBYTE *seq)
+{
+    if (code < 0x80 || !zune_utf8())
+    {
+        seq[0] = code;
+        return 1;
+    }
+    seq[0] = 0xC0 | (code >> 6);
+    seq[1] = 0x80 | (code & 0x3F);
+    return 2;
+}
+
+static BOOL String_CharInList(CONST_STRPTR list, unsigned char code)
+{
+    UBYTE seq[3];
+
+    seq[String_EncodeChar(code, seq)] = 0;
+    return strstr(list, seq) != NULL;
+}
+
+/**************************************************************************
  Buffer_SetNewContents
  Initialize buffer with a string, replace former content if any. Returns
  TRUE if value actually changed.
@@ -243,9 +304,13 @@ static BOOL Buffer_SetNewContents(struct MUI_StringData *data,
         data->NumChars = strlen(str);
         if (data->NumChars >= data->BufferSize)
             data->NumChars = data->BufferSize - 1;
+        if (zune_utf8())
+            while (data->NumChars > 0 && (str[data->NumChars] & 0xC0) == 0x80)
+                data->NumChars--;
 
         strncpy(data->Buffer, str, data->BufferSize);
         data->Buffer[data->BufferSize - 1] = 0;
+        data->Buffer[data->NumChars] = 0;
     }
 
     // avoid to BufferPos jumps to end of string if characters are inserted
@@ -258,30 +323,42 @@ static BOOL Buffer_SetNewContents(struct MUI_StringData *data,
 }
 
 /**************************************************************************
- Buffer_AddChar
- Add a char on cursor position
+ Buffer_AddBytes
+ Add bytes on cursor position
 **************************************************************************/
-static BOOL Buffer_AddChar(struct MUI_StringData *data, unsigned char code)
+static BOOL Buffer_AddBytes(struct MUI_StringData *data, CONST_STRPTR bytes,
+    ULONG n)
 {
     STRPTR dst;
 
     if (data->Buffer == NULL)
         return FALSE;
 
-    if (data->NumChars + 1 >= data->BufferSize)
+    if (data->NumChars + n >= data->BufferSize)
         return FALSE;
 
-    dst = &data->Buffer[data->BufferPos + 1];
+    dst = &data->Buffer[data->BufferPos + n];
 
     memmove(dst, &data->Buffer[data->BufferPos],
         data->NumChars - data->BufferPos);
 
     dst[data->NumChars - data->BufferPos] = 0;
-    dst[-1] = code;
+    memcpy(dst - n, bytes, n);
 
-    data->BufferPos++;
-    data->NumChars++;
+    data->BufferPos += n;
+    data->NumChars += n;
     return TRUE;
+}
+
+/**************************************************************************
+ Buffer_AddChar
+ Add a keymap char on cursor position
+**************************************************************************/
+static BOOL Buffer_AddChar(struct MUI_StringData *data, unsigned char code)
+{
+    UBYTE seq[2];
+
+    return Buffer_AddBytes(data, seq, String_EncodeChar(code, seq));
 }
 
 static WORD Buffer_GetWordStartIndex(struct MUI_StringData *data,
@@ -987,21 +1064,23 @@ static void UpdateDisp(struct IClass *cl, Object *obj)
     else        /* Cursor equal to the right of disppos [ 2) or 3) ] */
     {
         UWORD strsize;
+        ULONG cursorend = (data->BufferPos < data->NumChars)
+            ? Buffer_NextChar(data, data->BufferPos) : data->BufferPos + 1;
 
         /* How many pixels are there from current 1st displayed to cursor? */
         strsize = TextLength(_rp(obj),
             data->VisualBuffer + data->DispPos,
-            data->BufferPos - data->DispPos + 1);
+            cursorend - data->DispPos);
 
         /* 2) More than fits into the gadget ? */
         if (strsize > _mwidth(obj))
         {
             /* Compute new DispPos such that the cursor is at the right */
-            data->DispPos = data->BufferPos
+            data->DispPos = cursorend
                 - TextFit(_rp(obj),
-                &(data->VisualBuffer[data->BufferPos]),
-                data->NumChars, &te, NULL, -1,
-                _mwidth(obj), _mheight(obj)) + 1;
+                &(data->VisualBuffer[cursorend - 1]),
+                cursorend, &te, NULL, -1,
+                _mwidth(obj), _mheight(obj));
 
 /*              D(bug("cursor right of visible area, new disppos: %d\n", */
 /*                  data->DispPos)); */
@@ -1237,9 +1316,11 @@ IPTR String__MUIM_Draw(struct IClass *cl, Object *obj,
         data->msd_RedrawReason == DO_ADDCHAR &&
         data->msd_Align == MUIV_String_Format_Left && data->DispPos == 0)
     {
-        text_left += TextLength(_rp(obj), dispstr, data->BufferPos - 1);
-        dispstr += data->BufferPos - 1;
-        dispstrlen -= data->BufferPos - 1;
+        ULONG prev = Buffer_PrevChar(data, data->BufferPos);
+
+        text_left += TextLength(_rp(obj), dispstr, prev);
+        dispstr += prev;
+        dispstrlen -= prev;
         DoMethod(obj, MUIM_DrawBackground, text_left, _mtop(obj),
             _mwidth(obj) - text_left + _mleft(obj), _mheight(obj),
             text_left, _mtop(obj), 0);
@@ -1277,9 +1358,11 @@ IPTR String__MUIM_Draw(struct IClass *cl, Object *obj,
 
 
             Move(_rp(obj), text_left, text_top);
-            Text(_rp(obj),
-                ((data->BufferPos < data->NumChars)
-                    ? dispstr + cursoroffset : (STRPTR) " "), 1);
+            if (data->BufferPos < data->NumChars)
+                Text(_rp(obj), dispstr + cursoroffset,
+                    Buffer_NextChar(data, data->BufferPos) - data->BufferPos);
+            else
+                Text(_rp(obj), " ", 1);
         }
     }
 
@@ -1324,7 +1407,7 @@ static int String_HandleVanillakey(struct IClass *cl, Object *obj,
             }
             else
             {
-                shift = 1;
+                shift = data->BufferPos - Buffer_PrevChar(data, data->BufferPos);
                 data->msd_RedrawReason = DO_BACKSPACE;
             }
 
@@ -1376,12 +1459,15 @@ static int String_HandleVanillakey(struct IClass *cl, Object *obj,
             {
                 if (data->BufferPos < data->NumChars)
                 {
+                    ULONG n = Buffer_NextChar(data, data->BufferPos)
+                        - data->BufferPos;
+
                     D(bug("[MUI:String] HandleVanillakey: 'Delete' count=%d"
                         " pos=%d\n", data->NumChars, data->BufferPos));
                     memmove(&data->Buffer[data->BufferPos],
-                        &data->Buffer[data->BufferPos + 1],
-                        data->NumChars - data->BufferPos);
-                    data->NumChars--;
+                        &data->Buffer[data->BufferPos + n],
+                        data->NumChars - data->BufferPos - n + 1);
+                    data->NumChars -= n;
                 }
 
                 data->msd_RedrawReason = DO_DELETE;
@@ -1467,14 +1553,28 @@ static int String_HandleVanillakey(struct IClass *cl, Object *obj,
         if ((text = clipboard_read_text()))
         {
             STRPTR text2 = text;
+            BOOL utf8 = zune_utf8() && String_IsUTF8(text);
             UBYTE c;
 
-            while ((c = *text2++))
+            while ((c = *text2))
             {
-                if (!IsPrint(locale, c))
-                    break;
-                if (!(Buffer_AddChar(data, c)))
-                    break;
+                ULONG n = 1;
+
+                if (c < 0x80 || !utf8)
+                {
+                    if (!IsPrint(locale, c))
+                        break;
+                    if (!(Buffer_AddChar(data, c)))
+                        break;
+                }
+                else
+                {
+                    while ((text2[n] & 0xC0) == 0x80)
+                        n++;
+                    if (!Buffer_AddBytes(data, text2, n))
+                        break;
+                }
+                text2 += n;
                 if (!retval)
                     retval = 1;
             }
@@ -1490,7 +1590,7 @@ static int String_HandleVanillakey(struct IClass *cl, Object *obj,
     if (data->msd_Accept != NULL)
     {
         /* Check if character is accepted */
-        if (NULL == strchr(data->msd_Accept, code))
+        if (!String_CharInList(data->msd_Accept, code))
         {
             DisplayBeep(NULL);
             *retval = MUI_EventHandlerRC_Eat;
@@ -1501,7 +1601,7 @@ static int String_HandleVanillakey(struct IClass *cl, Object *obj,
     if (data->msd_Reject != NULL)
     {
         /* Check if character is rejected */
-        if (NULL != strchr(data->msd_Reject, code))
+        if (String_CharInList(data->msd_Reject, code))
         {
             DisplayBeep(NULL);
             *retval = MUI_EventHandlerRC_Eat;
@@ -1513,7 +1613,9 @@ static int String_HandleVanillakey(struct IClass *cl, Object *obj,
     {
         struct Locale *locale = OpenLocale(NULL);
 
-        if (!(code >= 0x09 && code <= 0x0D) && IsPrint(locale, code))
+        /* UTF-8 mode takes bytes above ASCII only decoded, see HandleEvent */
+        if (!(code >= 0x09 && code <= 0x0D) && IsPrint(locale, code)
+            && !(code >= 0x80 && zune_utf8()))
         {
             Buffer_KillMarked(data);
             if (Buffer_AddChar(data, code))
@@ -1530,6 +1632,41 @@ static int String_HandleVanillakey(struct IClass *cl, Object *obj,
     return 0;
 }
 
+
+/**************************************************************************
+ A typed character above ASCII, as UTF-8 from keymap.library. Returns
+ whether the object needs redrawing.
+**************************************************************************/
+static int String_InsertUTF8(struct IClass *cl, Object *obj,
+    CONST_STRPTR seq, LONG n, IPTR *retval)
+{
+    struct MUI_StringData *data = INST_DATA(cl, obj);
+    UBYTE s[8];
+
+    if ((data->msd_Flags & MSDF_NOINPUT) || n <= 0 || n >= sizeof(s))
+        return 0;
+
+    /* U+0080-U+009F are control characters */
+    if (seq[0] == 0xC2 && seq[1] < 0xA0)
+        return 0;
+
+    memcpy(s, seq, n);
+    s[n] = 0;
+    if ((data->msd_Accept && !strstr(data->msd_Accept, s)) ||
+        (data->msd_Reject && strstr(data->msd_Reject, s)))
+    {
+        DisplayBeep(NULL);
+        *retval = MUI_EventHandlerRC_Eat;
+        return 0;
+    }
+
+    Buffer_KillMarked(data);
+    if (!Buffer_AddBytes(data, s, n))
+        return 0;
+
+    data->msd_RedrawReason = DO_ADDCHAR;
+    return 2;
+}
 
 /**************************************************************************
  MUIM_HandleEvent
@@ -1617,7 +1754,7 @@ IPTR String__MUIM_HandleEvent(struct IClass *cl, Object *obj,
                 update = 1;
                 data->BufferPos = MIN(data->BufferPos, data->MarkPos);
                 if (data->BufferPos > 0)
-                    data->BufferPos--;
+                    data->BufferPos = Buffer_PrevChar(data, data->BufferPos);
 
                 data->msd_Flags &= ~MSDF_MARKING;
             }
@@ -1625,7 +1762,7 @@ IPTR String__MUIM_HandleEvent(struct IClass *cl, Object *obj,
             {
                 update = 1;
 
-                data->BufferPos--;
+                data->BufferPos = Buffer_PrevChar(data, data->BufferPos);
                 data->msd_RedrawReason = DO_CURSOR_LEFT;
             }
             break;
@@ -1639,7 +1776,7 @@ IPTR String__MUIM_HandleEvent(struct IClass *cl, Object *obj,
             else if (data->BufferPos < data->NumChars)
             {
                 update = 1;
-                data->BufferPos++;
+                data->BufferPos = Buffer_NextChar(data, data->BufferPos);
                 data->msd_RedrawReason = DO_CURSOR_RIGHT;
             }
             break;
@@ -1975,14 +2112,14 @@ IPTR String__MUIM_HandleEvent(struct IClass *cl, Object *obj,
                 }
                 else if ((x < text_left) && (data->BufferPos > 0))
                 {
-                    data->BufferPos--;
+                    data->BufferPos = Buffer_PrevChar(data, data->BufferPos);
                     update = 1;
                     data->msd_RedrawReason = DO_CURSOR_LEFT;
                 }
                 else if ((x > text_right)
                     && (data->BufferPos < data->NumChars))
                 {
-                    data->BufferPos++;
+                    data->BufferPos = Buffer_NextChar(data, data->BufferPos);
                     update = 1;
                     data->msd_RedrawReason = DO_CURSOR_RIGHT;
                 }
@@ -2023,6 +2160,27 @@ IPTR String__MUIM_HandleEvent(struct IClass *cl, Object *obj,
                         break;
 
                     }
+                }
+
+                /* In UTF-8 mode a character above ASCII is decoded from
+                   the keymap's charset instead of taken as a raw byte */
+                if (code >= 0x80 && zune_utf8())
+                {
+                    UBYTE utf8[16];
+                    LONG n = ConvertKeyUTF8(msg->imsg, utf8, sizeof(utf8));
+
+                    if (n > 0 && utf8[0] >= 0x80)
+                    {
+                        update = String_InsertUTF8(cl, obj, utf8, n, &retval);
+                        if (update)
+                        {
+                            retval = MUI_EventHandlerRC_Eat;
+                            edited = TRUE;
+                        }
+                        code = 0;
+                    }
+                    else if (n > 0)
+                        code = 0;
                 }
 
                 if (code)

@@ -13,6 +13,7 @@
 #include <proto/graphics.h>
 #include <proto/keymap.h>
 #include <proto/utility.h>
+#include <proto/dos.h>
 
 #include "mui.h"
 #include "support.h"
@@ -49,6 +50,25 @@ ULONG ConvertKey(struct IntuiMessage * imsg)
     event.ie_EventAddress = (APTR *) * ((IPTR *) imsg->IAddress);
     MapRawKey(&event, &code, 1, NULL);
     return code;
+}
+
+/* The key as UTF-8, decoded by keymap.library from the keymap's charset */
+LONG ConvertKeyUTF8(struct IntuiMessage *imsg, UBYTE *buf, LONG len)
+{
+    struct InputEvent event;
+    UBYTE raw[2];
+
+    event.ie_NextEvent = NULL;
+    event.ie_Class = IECLASS_RAWKEY;
+    event.ie_SubClass = 0;
+    event.ie_Code = imsg->Code;
+    event.ie_Qualifier = imsg->Qualifier;
+    event.ie_EventAddress = (APTR *) * ((IPTR *) imsg->IAddress);
+
+    /* A key string such as a cursor key's CSI sequence is no character */
+    if (MapRawKey(&event, raw, sizeof(raw), NULL) != 1)
+        return 0;
+    return MapRawKeyUTF8(&event, buf, len, NULL);
 }
 
 /**************************************************************************
@@ -223,4 +243,19 @@ ULONG IsObjectVisible(Object * child, struct Library * MUIMasterBase)
             return FALSE;
     }
     return TRUE;
+}
+
+/**************************************************************************
+ ENV:UTF8 turns UTF-8 strings on for all of Zune; ENV:CHARSET stays the
+ 8-bit set of keymaps and names. Read again whenever an application is
+ created.
+**************************************************************************/
+BOOL zune_utf8_mode;
+
+void zune_utf8_update(void)
+{
+    char value[8];
+
+    zune_utf8_mode = GetVar("UTF8", value, sizeof(value), 0) > 0
+        && Stricmp(value, "0") && Stricmp(value, "no") && Stricmp(value, "off");
 }
