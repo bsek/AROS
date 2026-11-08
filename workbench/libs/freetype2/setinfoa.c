@@ -6,7 +6,10 @@
 #include "glyph.h"
 
 #include <aros/libcall.h>
+#include <exec/memory.h>
+#include <proto/exec.h>
 #include <proto/utility.h>
+#include <string.h>
 #include <aros/debug.h>
 #include <utility/tagitem.h>
 #include <diskfont/oterrors.h>
@@ -39,8 +42,28 @@ static void scantags(FT_GlyphEngine *ge, struct TagItem *tags)
             strcpy(ge->base_filename, (char *)otagdata);
             /* clear all other names */
             ge->afm_filename[0] = '\0';
+            FreeRanges(ge);
             switch_family(ge);
             break;
+
+        case OT_Spec10_FontRange:
+        {
+            UBYTE *p = (UBYTE *)otagdata;
+            struct FontRange *r;
+
+            if (ge->num_ranges == MAX_FONTRANGES)
+                break;
+            r = AllocVec(sizeof(struct FontRange), MEMF_ANY | MEMF_CLEAR);
+            if (!r)
+                break;
+            r->first = (p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3];
+            r->last  = (p[4] << 24) | (p[5] << 16) | (p[6] << 8) | p[7];
+            strncpy(r->filename, (char *)p + 8, sizeof(r->filename) - 1);
+            r->instance = -1;
+            D(bug("SetInfo: Tag=OT_Spec10 %lx-%lx %s\n", r->first, r->last, r->filename));
+            ge->ranges[ge->num_ranges++] = r;
+            break;
+        }
 
         case OT_Spec2_DefCodePage:	/* direct = use default */
             D(bug("SetInfo: Tag=OT_Spec2 Default Code Page\n"));

@@ -21,6 +21,20 @@
 									// 0 == scalable
 #define OT_GlyphMap8Bit_Old	(OT_Level1 | 0x108)
 #define OT_Spec9_Hinter		(OT_Level1 | 0x109)
+#define OT_Spec10_FontRange	(OT_Level1 | OT_Indirect | 0x10A)	// may repeat: ULONG first,
+									// last (big endian), file name;
+									// codes in [first, last] come
+									// from that file before Spec1
+
+#define MAX_FONTRANGES		16
+
+struct FontRange {
+    ULONG			first, last;
+    FT_Face			face;
+    int				state;		/* 0 unopened, 1 open, -1 failed */
+    int				instance;	/* ge->instance it is sized for */
+    char			filename[256];
+};
 
 // Values for OT_Spec4_Metric
 #define METRIC_GLOBALBBOX	0	// default
@@ -51,7 +65,11 @@ struct FT_GlyphEngine_ {
     FT_Library			engine;
 
     FT_Face			face;
+    FT_Face			glyph_face;	/* face of glyph_code */
     FT_CharMap			char_map;
+
+    int				num_ranges;
+    struct FontRange		*ranges[MAX_FONTRANGES];
 
     /* freetype.library current request/state */
     int				last_error;
@@ -72,6 +90,8 @@ struct FT_GlyphEngine_ {
     int				glyph_code;
 
     int				instance_changed;
+    int				instance;	/* bumped by SetInstance() */
+    long			alt_point;	/* pixel size from SetInstance() */
     int				point_size;
     int				corrected_upem;
     int				metric_source;
@@ -104,6 +124,7 @@ typedef struct FT_GlyphEngine_ FT_GlyphEngine ;
 int set_last_error(FT_GlyphEngine *, int);
 void set_default_codepage(FT_GlyphEngine *);
 void FreeGE(FT_GlyphEngine *);
+void FreeRanges(FT_GlyphEngine *);
 FT_GlyphEngine *AllocGE(void);
 
 /* flag that we need to pick an encoding table */

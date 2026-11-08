@@ -23,19 +23,24 @@
 #define F266Floor(x) ((((x) + 0x10000000) >> 6)         - 0x00400000)
 #define F266Ceil(x)  ((((x) + 0x10000000 + 63) >> 6)    - 0x00400000)
 
-void set_transform(FT_GlyphEngine *ge)
+static void apply_transform(FT_GlyphEngine *ge, FT_Face face)
 {
     if (ge->do_shear) {
         if (ge->do_rotate) {
             ge->matrix = ge->shear_matrix;
             FT_Matrix_Multiply(&ge->rotate_matrix, &ge->matrix);
-            FT_Set_Transform(ge->face, &ge->matrix, NULL);
+            FT_Set_Transform(face, &ge->matrix, NULL);
         } else
-            FT_Set_Transform(ge->face, &ge->shear_matrix, NULL);
+            FT_Set_Transform(face, &ge->shear_matrix, NULL);
     } else if (ge->do_rotate)
-        FT_Set_Transform(ge->face, &ge->rotate_matrix, NULL);
+        FT_Set_Transform(face, &ge->rotate_matrix, NULL);
     else
-        FT_Set_Transform(ge->face, NULL, NULL);
+        FT_Set_Transform(face, NULL, NULL);
+}
+
+void set_transform(FT_GlyphEngine *ge)
+{
+    apply_transform(ge, ge->face);
 }
 
 int char_to_glyph(FT_GlyphEngine *ge, int charcode)
@@ -43,13 +48,44 @@ int char_to_glyph(FT_GlyphEngine *ge, int charcode)
     return FT_Get_Char_Index(ge->face, charcode & 0xffffff00 ? charcode : ge->codepage[charcode]);
 }
 
+/* open a range face on first use and give it the primary face's pixel size */
+static int prepare_range(FT_GlyphEngine *ge, struct FontRange *r)
+{
+    if (r->state == 0) {
+        r->state = FT_New_Face(ge->engine, r->filename, 0, &r->face) ? -1 : 1;
+        D(bug("range face %s: %d\n", r->filename, r->state));
+    }
+    if (r->state < 0)
+        return FALSE;
+
+    if (r->instance != ge->instance) {
+        if (FT_Set_Pixel_Sizes(r->face, ge->alt_point, 0))
+            return FALSE;
+        r->instance = ge->instance;
+    }
+    apply_transform(ge, r->face);
+
+    return TRUE;
+}
+
 int UnicodeToGlyphIndex(FT_GlyphEngine *ge)
 {
-    ge->glyph_code = FT_Get_Char_Index(ge->face,
-                                       ge->request_char & 0xffffff00 ? ge->request_char : ge->codepage[ge->request_char]);
-    D(bug("Unicode(%d)=index(%d)=%d\n", ge->request_char,
-          ge->request_char & 0xffffff00 ? ge->request_char : ge->codepage[ge->request_char],
-          ge->glyph_code));
+    ULONG code = ge->request_char & 0xffffff00 ? ge->request_char : ge->codepage[ge->request_char];
+    int i;
+
+    for (i = 0; i < ge->num_ranges; i++) {
+        struct FontRange *r = ge->ranges[i];
+
+        if (code >= r->first && code <= r->last && prepare_range(ge, r) &&
+            (ge->glyph_code = FT_Get_Char_Index(r->face, code))) {
+            ge->glyph_face = r->face;
+            return ge->glyph_code;
+        }
+    }
+
+    ge->glyph_face = ge->face;
+    ge->glyph_code = FT_Get_Char_Index(ge->face, code);
+    D(bug("Unicode(%d)=index(%d)=%d\n", ge->request_char, code, ge->glyph_code));
 
     return ge->glyph_code;
 }
@@ -192,6 +228,9 @@ int SetInstance(FT_GlyphEngine *ge)
         return set_last_error(ge, OTERR_Failure);
     }
 
+    ge->alt_point = alt_point;
+    ge->instance++;
+
     //FT_Get_Instance_Metrics(ge->instance, &ge->imetrics );
 
     set_transform(ge);
@@ -223,20 +262,20 @@ void RenderGlyph(FT_GlyphEngine *ge, int glyph_8bits)
 
     D(bug("RenderGlyph(%d, %d, %d)\n", ge->request_char, ge->glyph_code, glyph_8bits));
 
-    error = FT_Load_Glyph(ge->face,
+    error = FT_Load_Glyph(ge->glyph_face,
                           ge->glyph_code,
                           FT_LOAD_NO_BITMAP);
     /*TTLOAD_SCALE_GLYPH); */ /* test disable hinting */
 
-    if (error || ge->face->glyph->format != ft_glyph_format_outline) {
+    if (error || ge->glyph_face->glyph->format != ft_glyph_format_outline) {
         D(bug("Error loading glyph %ld  code = %ld.\n",
               (LONG)ge->request_char, (LONG)error ));
         return;
     }
 
-    FT_Outline_Get_CBox(&ge->face->glyph->outline, &bbox);
+    FT_Outline_Get_CBox(&ge->glyph_face->glyph->outline, &bbox);
 
-    metrics = &ge->face->glyph->metrics;
+    metrics = &ge->glyph_face->glyph->metrics;
 
     /* how big is glyph */
     bitmap.width = F266Ceil(bbox.xMax) - F266Floor(bbox.xMin);
@@ -274,11 +313,11 @@ void RenderGlyph(FT_GlyphEngine *ge, int glyph_8bits)
     offset.x = -F266Floor(bbox.xMin) << 6;
     offset.y = -F266Floor(bbox.yMin) << 6;
 
-    FT_Outline_Translate(&ge->face->glyph->outline, offset.x, offset.y);
+    FT_Outline_Translate(&ge->glyph_face->glyph->outline, offset.x, offset.y);
 
     params.target = &bitmap;
 
-    error = FT_Outline_Render(ge->engine, &ge->face->glyph->outline, &params);
+    error = FT_Outline_Render(ge->engine, &ge->glyph_face->glyph->outline, &params);
     if (error) {
         D(bug("Error rendering glyph %ld  code = %ld.\n",
               (LONG)ge->request_char, (LONG) error ));
@@ -296,8 +335,8 @@ void RenderGlyph(FT_GlyphEngine *ge, int glyph_8bits)
     GMap->glm_YOrigin     = F266toFX(bbox.yMax);
     GMap->glm_X0          = offset.x >> 6;//F266Ceil(-bbox.xMin);
     GMap->glm_Y0          = F266Ceil(bbox.yMax);
-    GMap->glm_X1          = F266Ceil(ge->face->glyph->advance.x - bbox.xMin);
-    GMap->glm_Y1          = F266Ceil(-ge->face->glyph->advance.y + bbox.yMax);
+    GMap->glm_X1          = F266Ceil(ge->glyph_face->glyph->advance.x - bbox.xMin);
+    GMap->glm_Y1          = F266Ceil(-ge->glyph_face->glyph->advance.y + bbox.yMax);
 
 #if 0
     if (GMap->glm_X0 < 0) {
@@ -573,10 +612,10 @@ static void RenderColorGlyph(FT_GlyphEngine *ge, struct ColorGlyphMap *CMap)
     LONG advance, left, top, strike, want_x, want_y;
     FIXED em_width;
 
-    if (FT_Load_Glyph(ge->face, ge->glyph_code, FT_LOAD_DEFAULT | FT_LOAD_COLOR))
+    if (FT_Load_Glyph(ge->glyph_face, ge->glyph_code, FT_LOAD_DEFAULT | FT_LOAD_COLOR))
         return;
 
-    slot = ge->face->glyph;
+    slot = ge->glyph_face->glyph;
     if (slot->format != ft_glyph_format_bitmap &&
         FT_Render_Glyph(slot, FT_RENDER_MODE_NORMAL))
         return;

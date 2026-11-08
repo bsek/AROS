@@ -49,10 +49,23 @@ void set_default_codepage(FT_GlyphEngine *ge)
     CloseLibrary(CodesetsBase);
 }
 
+void FreeRanges(FT_GlyphEngine *ge)
+{
+    while (ge->num_ranges > 0) {
+        struct FontRange *r = ge->ranges[--ge->num_ranges];
+
+        if (r->state > 0)
+            FT_Done_Face(r->face);
+        FreeVec(r);
+    }
+}
+
 /* close down and dispose of GlyphEngine */
 void FreeGE(FT_GlyphEngine *ge)
 {
     if (ge == NULL) return;
+
+    FreeRanges(ge);
 
     if (ge->face_established)
         FT_Done_Face( ge->face );

@@ -93,12 +93,12 @@ struct MinList *GetWidthList(FT_GlyphEngine *ge)
             continue;
         }
 
-        if (FT_Load_Glyph(ge->face, j, FT_LOAD_DEFAULT)) {
+        if (FT_Load_Glyph(ge->glyph_face, j, FT_LOAD_DEFAULT)) {
             D(bug("Error loading glyph %ld.\n", (LONG)j));
             howwide = 0;
         } else {
             //FT_Get_Glyph_Metrics( ge->glyph, &ge->metrics );
-            metrics = &ge->face->glyph->metrics;
+            metrics = &ge->glyph_face->glyph->metrics;
 #if 0
             howwide = ((metrics->horiAdvance)<<16) / units_per_em;
 #else
