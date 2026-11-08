@@ -59,7 +59,7 @@ BOOL writeKeyMap(struct config *cfg)
 {
     FILE *out;
     struct Node *stNode;
-    ULONG stdtsize = 0, hunksize, reloccnt = 0, reloctmp;
+    ULONG stdtsize = 0, hunksize, reloccnt = 0, reloctmp, kmcssize = 0;
     BOOL doverbose = cfg->verbose;
     D(doverbose = TRUE;)
     ULONG tmp;
@@ -109,7 +109,11 @@ BOOL writeKeyMap(struct config *cfg)
         CONSOUT("creating %u relocations\n", reloccnt + 9);
     }
 
-    hunksize = (sizeof(struct AmiKMap_Hunk) + stdtsize + strlen(kmname) + 1 + MKAKM_HUNKALIGN) & ~MKAKM_HUNKALIGN;
+    /* "KMCS" and the charset follow the name, for keymap.library's MapRawKeyUTF8() */
+    if (cfg->charset)
+        kmcssize = 4 + strlen(cfg->charset) + 1;
+
+    hunksize = (sizeof(struct AmiKMap_Hunk) + stdtsize + strlen(kmname) + 1 + kmcssize + MKAKM_HUNKALIGN) & ~MKAKM_HUNKALIGN;
 
     hunkRaw = malloc(hunksize);
     hunkRaw->Hunk = htonl(HUNK_CODE);
@@ -129,6 +133,12 @@ BOOL writeKeyMap(struct config *cfg)
     hunkRaw->kh_KeyMapNode.kn_Node.ln_Name = htonl(((IPTR)hunkData - (IPTR)&hunkRaw->kh_KeyMapNode.kn_Node));
     relocData[r++] = htonl(((IPTR)&hunkRaw->kh_KeyMapNode.kn_Node.ln_Name - (IPTR)&hunkRaw->kh_KeyMapNode.kn_Node));
     hunkData = (APTR)((IPTR)hunkData + strlen(kmname) + 1);
+    if (kmcssize)
+    {
+        memcpy(hunkData, "KMCS", 4);
+        strcpy((char *)hunkData + 4, cfg->charset);
+        hunkData = (APTR)((IPTR)hunkData + kmcssize);
+    }
 
     hunkRaw->kh_KeyMapNode.kn_KeyMap.km_LoKeyMapTypes = htonl(((IPTR)&hunkRaw->kh_LoKeyMapTypes[0] - (IPTR)&hunkRaw->kh_KeyMapNode.kn_Node));
     relocData[r++] = htonl(((IPTR)&hunkRaw->kh_KeyMapNode.kn_KeyMap.km_LoKeyMapTypes - (IPTR)&hunkRaw->kh_KeyMapNode.kn_Node));

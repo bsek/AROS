@@ -7,7 +7,7 @@ include $(SRCDIR)/config/aros.cfg
 #MM- core-linklibs : linklibs-keymap
 
 FILES := defaultkeymap support
-FUNCS := askkeymapdefault mapansi maprawkey setkeymapdefault
+FUNCS := askkeymapdefault mapansi maprawkey maprawkeyutf8 setkeymapdefault
 
 USER_CFLAGS := $(CFLAGS_NO_BUILTIN)
 USER_CPPFLAGS := \

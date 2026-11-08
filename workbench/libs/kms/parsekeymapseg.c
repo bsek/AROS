@@ -137,7 +137,7 @@ BPTR parsekeymapseg(BPTR km_seg)
    D(bug("[KMS] %s(0x%p)\n", __func__, km_seg);)
    if (km_seg && (IPTR)BADDR(km_seg) < UINT_MAX)
    {
-      ULONG kmsegsize = sizeof(BPTR) + sizeof(struct KeyMapNode);
+      ULONG kmsegsize = sizeof(BPTR) + sizeof(struct KeyMapNode), namesize;
       APTR alloctmp;
       UBYTE *ptr, *kmptr, *tmpptr, keyval;
       int i, size;
@@ -154,9 +154,11 @@ BPTR parsekeymapseg(BPTR km_seg)
       CONVBYTE(ptr, tmp_nativekm.kn_Node.ln_Pri);   /* kn_Node.ln_Pri	*/
       COPYPTR(ptr, tmp_nativekm.kn_Node.ln_Name);   /* kn_Node.ln_Name	*/
       D(bug("[KMS] %s: keymap name @ 0x%p = '%s'\n", __func__, tmp_nativekm.kn_Node.ln_Name, tmp_nativekm.kn_Node.ln_Name);)
-      kmsegsize += strlen(tmp_nativekm.kn_Node.ln_Name) + 1;
-      if (!strlen(tmp_nativekm.kn_Node.ln_Name) & 0x1)
-         kmsegsize += 1;
+      /* The name may be followed by "KMCS" and the keymap's charset */
+      namesize = strlen(tmp_nativekm.kn_Node.ln_Name) + 1;
+      if (!memcmp(tmp_nativekm.kn_Node.ln_Name + namesize, "KMCS", 4))
+         namesize += 4 + strlen(tmp_nativekm.kn_Node.ln_Name + namesize + 4) + 1;
+      kmsegsize += namesize + 1;
 
       COPYPTR(ptr, tmp_nativekm.kn_KeyMap.km_LoKeyMapTypes);
       D(bug("[KMS] %s: km_LoKeyMapTypes @ 0x%p\n", __func__, tmp_nativekm.kn_KeyMap.km_LoKeyMapTypes);)
@@ -243,10 +245,10 @@ BPTR parsekeymapseg(BPTR km_seg)
          D(bug("[KMS] %s: data starts @ 0x%p\n", __func__, ptr);)
          kmnative->kn_Node.ln_Pri = tmp_nativekm.kn_Node.ln_Pri;
          kmnative->kn_Node.ln_Type = tmp_nativekm.kn_Node.ln_Type;
-         kmnative->kn_Node.ln_Name = (char *)((IPTR)alloctmp + kmsegsize - (strlen(tmp_nativekm.kn_Node.ln_Name) + 1));
+         kmnative->kn_Node.ln_Name = (char *)((IPTR)alloctmp + kmsegsize - namesize);
          if ((IPTR)kmnative->kn_Node.ln_Name & 0x1)
             kmnative->kn_Node.ln_Name -= 1;
-         strlcpy(kmnative->kn_Node.ln_Name, tmp_nativekm.kn_Node.ln_Name, strlen(tmp_nativekm.kn_Node.ln_Name) + 1);
+         CopyMem(tmp_nativekm.kn_Node.ln_Name, kmnative->kn_Node.ln_Name, namesize);
          kmnative->kn_KeyMap.km_LoKeyMapTypes = ptr;
          CopyMem(tmp_nativekm.kn_KeyMap.km_LoKeyMapTypes, (APTR)kmnative->kn_KeyMap.km_LoKeyMapTypes, 0x40);
          ptr += 0x40;

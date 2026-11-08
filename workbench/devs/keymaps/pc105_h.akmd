@@ -4,6 +4,7 @@
 
 ## begin config
 keymap: pc105_h
+charset: ISO-8859-2
 ## end config
 
 ## begin lokeymaptypes

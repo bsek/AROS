@@ -108,6 +108,13 @@ BOOL processSectConfig(struct config *cfg, FILE *descf)
                 D(CONSOUT("using keymap name '%s'\n", cfg->keymap);)
             }
         }
+        if (strncmp(line, "charset:", 8)==0)
+        {
+            s = line + 8;
+            while (isspace(*s)) s++;
+            cfg->charset = strdup(s);
+            D(CONSOUT("keymap charset '%s'\n", cfg->charset);)
+        }
         if (strncmp(line, "bitorder:", 9)==0)
         {
             if (strncmp(&line[9], "lsb", 3)==0)

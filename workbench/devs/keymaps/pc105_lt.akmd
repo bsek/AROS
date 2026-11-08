@@ -4,6 +4,7 @@
 
 ## begin config
 keymap: pc105_lt
+charset: windows-1257
 ## end config
 
 # the "types" must come before "string", "deadkey", and "map"  sections.

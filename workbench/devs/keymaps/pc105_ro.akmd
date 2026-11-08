@@ -4,6 +4,7 @@
 
 ## begin config
 keymap: pc105_ro
+charset: ISO-8859-16
 ## end config
 
 # the "types" must come before "string", "deadkey", and "map"  sections.

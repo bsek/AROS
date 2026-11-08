@@ -4,6 +4,7 @@
 
 ## begin config
 keymap: pc104_il
+charset: windows-1255
 ## end config
 
 ## begin lokeymaptypes

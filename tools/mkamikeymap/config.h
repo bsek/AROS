@@ -21,6 +21,7 @@ struct config
 {
     char        *descriptor;
     char        *keymap;
+    char        *charset;   /* charset of the keymap's bytes, NULL: the system's */
     int         verbose;
     int         bitorder; 
     UBYTE       LoKeyMapTypes[0x40];

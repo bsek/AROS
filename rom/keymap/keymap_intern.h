@@ -72,12 +72,23 @@ WORD GetDeadKeyIndex(UWORD code, UWORD qual, struct KeyMap *km);
 #define KMBase(x) ((struct KeymapBase *)x)
 
 
+#define KM_CHARSETLEN 32
+
+struct codeset;
+
 /* Librarybase struct */
 struct KeymapBase
 {
     struct Library               LibNode;
     struct KeyMap               *DefaultKeymap;
     struct KeyMapResource        KeymapResource;
+
+    /* MapRawKeyUTF8() */
+    struct Library              *DOSBase;
+    struct Library              *CodesetsBase;
+    char                         SysCharset[KM_CHARSETLEN];   /* ENV:CHARSET */
+    char                         CachedName[KM_CHARSETLEN];
+    struct codeset              *CachedCodeset;
 };
 
 
