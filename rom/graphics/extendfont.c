@@ -105,6 +105,11 @@
             tfe->tfe_BackPtr            = font;
             tfe->tfe_OrigReplyPort      = font->tf_Message.mn_ReplyPort;
 
+            ((struct TextFontExtension_intern *)tfe)->utf8 =
+                GetTagData(TA_CharSet, 0, fontTags) == CHARSET_UTF8;
+            ((struct TextFontExtension_intern *)tfe)->glyphhook =
+                (struct Hook *)GetTagData(TA_GlyphHook, 0, fontTags);
+
             BOOL ok = TRUE;
 
             if((font->tf_Style & FSF_COLORFONT) &&

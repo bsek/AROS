@@ -154,6 +154,7 @@ STRPTR OTAG_MakeFileName(CONST_STRPTR, struct DiskfontBase *);
 VOID OTAG_FreeFileName(STRPTR, struct DiskfontBase *);
 struct OTagList *OTAG_GetFile(CONST_STRPTR, struct DiskfontBase *);
 VOID OTAG_KillFile(struct OTagList *, struct DiskfontBase *);
+VOID OTAG_FreeGlyphSource(struct TextFont *, struct DiskfontBase *);
 UBYTE OTAG_GetFontStyle(struct OTagList *, struct DiskfontBase *);
 UBYTE OTAG_GetSupportedStyles(struct OTagList *, struct DiskfontBase *);
 UBYTE OTAG_GetFontFlags(struct OTagList *, struct DiskfontBase *);
@@ -205,6 +206,8 @@ struct DiskfontBase
     /* dosstreamhandler hook neede for endian io funcs */
     struct Hook		   dsh;
     struct List		   diskfontlist;
+    /* UTF-8 outline fonts that keep their glyph engine open */
+    struct MinList         glyphsources;
     
     struct MinList         fontsdirentrylist;
     struct SignalSemaphore fontssemaphore;

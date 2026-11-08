@@ -502,7 +502,7 @@ struct AADiskFontHeader *OTAG_AllocFontStruct(STRPTR name, UWORD numchars, LONG 
     BOOL                     ok = FALSE;
 
     dfh = prevsegment = AllocSegment(prevsegment,
-                                     sizeof(*dfh) + sizeof(struct TagItem) * 5,
+                                     sizeof(*dfh) + sizeof(struct TagItem) * 6,
                                      MEMF_ANY | MEMF_CLEAR,
                                      DiskfontBase);
 
@@ -895,6 +895,195 @@ static VOID OTAG_MakeAAData(struct GlyphMap **gm, struct ColorTextFont *tf,
 
 /****************************************************************************************/
 
+/* freetype2.library's code page; the identity makes 0-255 Latin-1 */
+#define OT_Spec2_CodePage   (OT_Level1 | OT_Indirect | 0x102)
+
+#define GLYPHHASHSIZE       64
+
+struct GlyphCacheEntry
+{
+    struct GlyphCacheEntry  *next;
+    ULONG                    code;
+    struct TextGlyph        *glyph;     /* NULL if the font has none */
+};
+
+/* Glyphs above 255 of a UTF-8 outline font, rendered on first use */
+struct GlyphSource
+{
+    struct MinNode           node;
+    struct Hook              hook;
+    struct SignalSemaphore   sem;
+    struct TextFont         *tf;
+    struct Library          *BulletBase;
+    struct GlyphEngine      *ge;
+    struct DiskfontBase     *DiskfontBase;
+    BOOL                     antialias;
+    struct GlyphCacheEntry  *hash[GLYPHHASHSIZE];
+};
+
+static struct GlyphCacheEntry *OTAG_MakeGlyph(struct GlyphSource *gs, ULONG code)
+{
+    struct Library          *BulletBase = gs->BulletBase;
+    struct TextFont         *tf = gs->tf;
+    struct GlyphMap         *gm = NULL, *aagm = NULL;
+    struct GlyphCacheEntry  *e;
+    ULONG                    modulo = 0, planesize = 0, size;
+    struct TagItem settags[] =
+    {
+        {OT_GlyphCode, code },
+        {TAG_DONE           }
+    };
+    struct TagItem gmtags[] =
+    {
+        {OT_GlyphMap, (IPTR)&gm },
+        {TAG_DONE               }
+    };
+    struct TagItem aatags[] =
+    {
+        {OT_GlyphMap8Bits, (IPTR)&aagm  },
+        {TAG_DONE                       }
+    };
+
+    SetInfoA(gs->ge, settags);
+    if (ObtainInfoA(gs->ge, gmtags) != OTERR_Success)
+        gm = NULL;
+    if (gm && gs->antialias && ObtainInfoA(gs->ge, aatags) != OTERR_Success)
+        aagm = NULL;
+
+    size = sizeof(*e);
+    if (gm)
+    {
+        /* +2: text rendering reads a byte past the end of a row */
+        modulo = ((gm->glm_BlackWidth + 15) & ~15) / 8;
+        planesize = modulo * tf->tf_YSize + 2;
+        size += sizeof(struct TextGlyph) + planesize * (aagm ? 9 : 1);
+    }
+
+    e = AllocVec(size, MEMF_ANY | MEMF_CLEAR);
+    if (e)
+    {
+        e->code = code;
+
+        if (gm)
+        {
+            struct TextGlyph     *tg = (struct TextGlyph *)(e + 1);
+            struct ColorTextFont  ctf;
+            LONG                  ypos = (LONG)tf->tf_Baseline + 1 - gm->glm_Y0;
+
+            tg->tg_CharData = tg + 1;
+            tg->tg_Modulo   = modulo;
+            tg->tg_Width    = gm->glm_BlackWidth;
+            tg->tg_Kern     = ((WORD)gm->glm_BlackLeft) - gm->glm_X0;
+            tg->tg_Space    = gm->glm_X1 - (WORD)gm->glm_BlackLeft;
+
+            /* Placed as in the font's own tables, in this glyph's planes */
+            ctf.ctf_TF = *tf;
+            ctf.ctf_TF.tf_CharData = tg->tg_CharData;
+            ctf.ctf_TF.tf_Modulo   = modulo;
+            OTAG_BlitGlyph(gm, &ctf.ctf_TF, 0, ypos, gs->DiskfontBase);
+
+            if (aagm)
+            {
+                tg->tg_AAData = (UBYTE *)tg->tg_CharData + planesize;
+                ctf.ctf_CharData[0] = tg->tg_AAData;
+                OTAG_BlitAAGlyph(aagm, &ctf, 0, ypos, gs->DiskfontBase);
+            }
+
+            e->glyph = tg;
+        }
+
+        e->next = gs->hash[code % GLYPHHASHSIZE];
+        gs->hash[code % GLYPHHASHSIZE] = e;
+    }
+
+    if (gm)
+    {
+        struct TagItem releasetags[] =
+        {
+            {OT_GlyphMap, (IPTR)gm  },
+            {TAG_DONE               }
+        };
+
+        ReleaseInfoA(gs->ge, releasetags);
+    }
+    if (aagm)
+    {
+        struct TagItem releasetags[] =
+        {
+            {OT_GlyphMap8Bits, (IPTR)aagm   },
+            {TAG_DONE                       }
+        };
+
+        ReleaseInfoA(gs->ge, releasetags);
+    }
+
+    return e;
+}
+
+/****************************************************************************************/
+
+/* TA_GlyphHook: called by graphics.library from any task */
+static AROS_UFH3(IPTR, OTAG_GlyphHook,
+    AROS_UFHA(struct Hook *,     hook, A0),
+    AROS_UFHA(struct TextFont *, tf,   A2),
+    AROS_UFHA(ULONG *,           code, A1))
+{
+    AROS_USERFUNC_INIT
+
+    struct GlyphSource      *gs = hook->h_Data;
+    struct GlyphCacheEntry  *e;
+
+    ObtainSemaphore(&gs->sem);
+
+    for (e = gs->hash[*code % GLYPHHASHSIZE]; e && e->code != *code; e = e->next)
+        ;
+    if (!e)
+        e = OTAG_MakeGlyph(gs, *code);
+
+    ReleaseSemaphore(&gs->sem);
+
+    return e ? (IPTR)e->glyph : 0;
+
+    AROS_USERFUNC_EXIT
+}
+
+/****************************************************************************************/
+
+/* Called with the font unlinked and unused */
+VOID OTAG_FreeGlyphSource(struct TextFont *tf, struct DiskfontBase *DiskfontBase)
+{
+    struct GlyphSource      *gs;
+    struct GlyphCacheEntry  *e, *next;
+    struct Library          *BulletBase;
+    UWORD                    i;
+
+    ForeachNode(&DiskfontBase->glyphsources, gs)
+    {
+        if (gs->tf == tf)
+            break;
+    }
+    if (!gs->node.mln_Succ)
+        return;
+
+    REMOVE(&gs->node);
+
+    for (i = 0; i < GLYPHHASHSIZE; i++)
+    {
+        for (e = gs->hash[i]; e; e = next)
+        {
+            next = e->next;
+            FreeVec(e);
+        }
+    }
+
+    BulletBase = gs->BulletBase;
+    CloseEngine(gs->ge);
+    CloseLibrary(BulletBase);
+    FreeVec(gs);
+}
+
+/****************************************************************************************/
+
 struct TextFont *OTAG_ReadOutlineFont(struct TTextAttr *attr, struct TTextAttr *reqattr,
                                       struct OTagList *otag, struct DiskfontBase *DiskfontBase)
 {
@@ -906,7 +1095,12 @@ struct TextFont *OTAG_ReadOutlineFont(struct TTextAttr *attr, struct TTextAttr *
 
     LONG                    gfxwidth, spacewidth, xdpi, ydpi;
     WORD                    lochar, hichar, baseline;
+    BOOL                    utf8;
     UBYTE                   fontstyle, supportedstyle;
+    struct GlyphSource     *gs = NULL;
+
+    utf8 = (reqattr->tta_Style & FSF_TAGGED) &&
+           GetTagData(TA_CharSet, 0, reqattr->tta_Tags) == CHARSET_UTF8;
 
     enginename = (STRPTR)GetTagData(OT_Engine, (IPTR) NULL, otag->tags);
     if (!enginename) return NULL;
@@ -969,6 +1163,21 @@ struct TextFont *OTAG_ReadOutlineFont(struct TTextAttr *attr, struct TTextAttr *
         {
             fontstyle |= FSF_ITALIC;
         }
+    }
+
+    if (utf8)
+    {
+        UWORD codepage[256];
+        struct TagItem cptags[] =
+        {
+            {OT_Spec2_CodePage, (IPTR)codepage  },
+            {TAG_DONE                           }
+        };
+        WORD i;
+
+        for (i = 0; i < 256; i++)
+            codepage[i] = i;
+        SetInfoA(ge, cptags);
     }
 
     gm = (struct GlyphMap **)AllocVec(sizeof(struct GlyhpMap *) * 257, MEMF_ANY | MEMF_CLEAR);
@@ -1045,8 +1254,30 @@ struct TextFont *OTAG_ReadOutlineFont(struct TTextAttr *attr, struct TTextAttr *
     }
 
     FreeVec(gm);
-    CloseEngine(ge);
-    CloseLibrary(BulletBase);
+
+    /* A UTF-8 font keeps its engine for the glyphs above 255 */
+    if (utf8)
+        gs = AllocVec(sizeof(struct GlyphSource), MEMF_ANY | MEMF_CLEAR);
+    if (gs)
+    {
+        gs->hook.h_Entry  = (HOOKFUNC)AROS_ASMSYMNAME(OTAG_GlyphHook);
+        gs->hook.h_Data   = gs;
+        InitSemaphore(&gs->sem);
+        gs->tf            = &dfh->dfh_TF.ctf_TF;
+        gs->BulletBase    = BulletBase;
+        gs->ge            = ge;
+        gs->DiskfontBase  = DiskfontBase;
+        gs->antialias     = (dfh->dfh_TF.ctf_TF.tf_Style & FSF_COLORFONT) != 0;
+
+        Forbid();
+        ADDTAIL(&DiskfontBase->glyphsources, &gs->node);
+        Permit();
+    }
+    else
+    {
+        CloseEngine(ge);
+        CloseLibrary(BulletBase);
+    }
 
     {
         /* TagItems were allocated in OTAG_AllocFontStruct */
@@ -1059,8 +1290,12 @@ struct TextFont *OTAG_ReadOutlineFont(struct TTextAttr *attr, struct TTextAttr *
         tags[1].ti_Data = (xdpi << 16) | ydpi;
         tags[2].ti_Tag  = OT_DotSize;
         tags[2].ti_Data = (100 << 16) | 100;
-        tags[3].ti_Tag  = TAG_DONE;
-        tags[3].ti_Data = 0;
+        tags[3].ti_Tag  = TA_CharSet;
+        tags[3].ti_Data = utf8 ? CHARSET_UTF8 : 0;
+        tags[4].ti_Tag  = gs ? TA_GlyphHook : TAG_IGNORE;
+        tags[4].ti_Data = (IPTR)(gs ? &gs->hook : NULL);
+        tags[5].ti_Tag  = TAG_DONE;
+        tags[5].ti_Data = 0;
 
         ExtendFont(&dfh->dfh_TF.ctf_TF, tags);
     }

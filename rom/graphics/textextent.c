@@ -68,6 +68,7 @@
     AROS_LIBFUNC_INIT
 
     struct TextFont *tf = rp->Font;
+    struct TextFontExtension_intern *utf8 = utf8_font(tf);
 
     textExtent->te_Width = TextLength(rp, string, count);
     textExtent->te_Height = tf->tf_YSize;
@@ -77,7 +78,25 @@
     /* MinX/MaxX can be a bit more complicated if there are kerning/space
      * tables */
 
-    if((tf->tf_Flags & FPF_PROPORTIONAL) || tf->tf_CharKern
+    if(utf8) {
+        struct fontglyph g;
+        WORD x = 0, minx = 0, maxx = 0;
+        ULONG n;
+
+        if(count) maxx++;   /* undone below, as MaxX-- for 8-bit fonts */
+        for(; count > 0; string += n, count -= n) {
+            n = font_glyph(tf, utf8, string, count, &g, GfxBase);
+
+            x += g.kern;
+            if(x < minx) minx = x;
+            if(x + g.width > maxx) maxx = x + g.width;
+            x += g.space + rp->TxSpacing;
+            if(x < minx) minx = x;
+            if(x > maxx) maxx = x;
+        }
+        textExtent->te_Extent.MinX = minx;
+        textExtent->te_Extent.MaxX = maxx - 1;
+    } else if((tf->tf_Flags & FPF_PROPORTIONAL) || tf->tf_CharKern
             || tf->tf_CharSpace) {
         WORD  idx;
         WORD  defaultidx = NUMCHARS(tf) - 1; /* Last glyph is default glyph */

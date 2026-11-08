@@ -68,6 +68,7 @@
     AROS_LIBFUNC_INIT
 
     struct TextFont *tf = rp->Font;
+    struct TextFontExtension_intern *utf8 = utf8_font(tf);
     ULONG retval = 0;
 
     if(strLen && (constrainingBitHeight >= tf->tf_YSize)) {
@@ -91,12 +92,31 @@
         }
 
         if(ok) {
-            while(strLen--) {
+            while(strLen) {
                 struct TextExtent char_extent;
                 WORD newwidth, newminx, newmaxx, minx, maxx;
+                CONST_STRPTR c = string;
+                ULONG n = 1;
 
-                TextExtent(rp, string, 1, &char_extent);
-                string += strDirection;
+                /* UTF-8 fonts fit whole characters and count their bytes */
+                if(utf8) {
+                    if(strDirection < 0) {
+                        while(n < strLen && n < 4 && (*c & 0xC0) == 0x80) {
+                            c--;
+                            n++;
+                        }
+                    } else {
+                        ULONG cp;
+
+                        n = utf8_decode(string, strLen, &cp);
+                    }
+                }
+
+                TextExtent(rp, c, n, &char_extent);
+                if(!utf8)
+                    string += strDirection;
+                else
+                    string = (strDirection < 0) ? c - 1 : string + n;
 
                 newwidth = textExtent->te_Width + char_extent.te_Width;
                 minx = textExtent->te_Width + char_extent.te_Extent.MinX;
@@ -120,9 +140,10 @@
                 textExtent->te_Extent.MinX = newminx;
                 textExtent->te_Extent.MaxX = newmaxx;
 
-                retval++;
+                retval += n;
+                strLen -= n;
 
-            } /* while(strLen--) */
+            } /* while(strLen) */
 
         } /* if (ok) */
 

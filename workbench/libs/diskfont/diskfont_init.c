@@ -36,6 +36,7 @@ static int Init(LIBBASETYPEPTR LIBBASE)
     D(bug("Inside initfunc\n"));
 
     NEWLIST(&LIBBASE->diskfontlist);
+    NEWLIST(&LIBBASE->glyphsources);
     NEWLIST(&LIBBASE->fontsdirentrylist);
     InitSemaphore(&LIBBASE->fontssemaphore);
 
@@ -69,6 +70,10 @@ static int Expunge(LIBBASETYPEPTR LIBBASE)
         Never break the Forbid() or strange things might happen.
     */
     D(bug("Inside expungefunc\n"));
+
+    /* UTF-8 fonts call back into this library for their glyphs */
+    if (!IsListEmpty((struct List *)&LIBBASE->glyphsources))
+        return FALSE;
 
     RemMemHandler(&LIBBASE->memint);
     
@@ -108,6 +113,7 @@ AROS_UFH3(int, CleanMem,
                 /* Unlink from GfxBase->TextFonts */
                 REMOVE(&dfh->dfh_TF.tf_Message.mn_Node);
 
+                OTAG_FreeGlyphSource(&dfh->dfh_TF, LIBBASE);
                 StripFont(&dfh->dfh_TF);
 
                 /* Unlink from DiskfontBase->diskfontlist */

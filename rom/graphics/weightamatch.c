@@ -4,6 +4,7 @@
     Desc:
 */
 #include "graphics_intern.h"
+#include <proto/utility.h>
 #include <stdlib.h>
 
 /*****************************************************************************
@@ -57,6 +58,16 @@
     WORD matchweight = MAXFONTMATCHWEIGHT;
     WORD sizematch = 0; /* for temporary keeping data */
     UWORD sizediff;
+
+    /* A target that names its charset only matches requests for the same
+       kind, so a UTF-8 instance never serves 8-bit strings or vice versa */
+    if(targetTags && FindTagItem(TA_CharSet, targetTags)) {
+        BOOL requtf8 = (reqTextAttr->ta_Style & FSF_TAGGED) &&
+                       GetTagData(TA_CharSet, 0, ((const struct TTextAttr *)reqTextAttr)->tta_Tags) == CHARSET_UTF8;
+
+        if(requtf8 != (GetTagData(TA_CharSet, 0, targetTags) == CHARSET_UTF8))
+            return 0;
+    }
 
     /* Compare font flags */
 

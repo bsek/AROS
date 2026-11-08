@@ -104,11 +104,13 @@ void BltTemplateBasedText(struct RastPort *rp, CONST_STRPTR text, ULONG len,
     BOOL                 is_bold, is_italic, fastfont;
     BOOL                 allocated = FALSE;
     ULONG                rassize;
+    struct TextFontExtension_intern *utf8;
 
     tf = rp->Font;
+    utf8 = utf8_font(tf);
     is_bold = (rp->AlgoStyle & FSF_BOLD) != 0;
     is_italic = (rp->AlgoStyle & FSF_ITALIC) != 0;
-    fastfont = !is_bold && !is_italic && tf->tf_XSize == 8 &&
+    fastfont = !utf8 && !is_bold && !is_italic && tf->tf_XSize == 8 &&
                rp->TxSpacing == 0;
 
     if (fastfont)
@@ -229,30 +231,23 @@ void BltTemplateBasedText(struct RastPort *rp, CONST_STRPTR text, ULONG len,
                 x += batch * 8;
             }
         }
-        else while(len--) {
-            UBYTE c = *text++;
-            ULONG idx;
-            ULONG charloc;
+        else while(len) {
+            struct fontglyph g;
+            ULONG n;
             UWORD glyphwidth, glyphpos, bold;
             UBYTE *glyphdata;
             UBYTE *dst;
             ULONG srcmask;
             ULONG dstmask;
 
-            if(c < tf->tf_LoChar || c > tf->tf_HiChar) {
-                idx = NUMCHARS(tf) - 1;
-            } else {
-                idx = c - tf->tf_LoChar;
-            }
+            n = font_glyph(tf, utf8, text, len, &g, GfxBase);
+            text += n;
+            len -= n;
 
-            charloc = ((ULONG *)tf->tf_CharLoc)[idx];
+            glyphwidth = g.width;
+            glyphpos = g.pos;
 
-            glyphwidth = charloc & 0xFFFF;
-            glyphpos = charloc >> 16;
-
-            if(tf->tf_CharKern) {
-                x += ((WORD *)tf->tf_CharKern)[idx];
-            }
+            x += g.kern;
 
 
             if (!is_bold && !is_italic && glyphwidth <= 8) {
@@ -260,7 +255,7 @@ void BltTemplateBasedText(struct RastPort *rp, CONST_STRPTR text, ULONG len,
                 UWORD srcshift = glyphpos & 7;
                 UWORD dstshift = wx & 7;
 
-                glyphdata = (UBYTE *)tf->tf_CharData + glyphpos / 8;
+                glyphdata = g.data + glyphpos / 8;
                 dst = raster + wx / 8;
 
                 for (y = 0; y < rasheight; y++) {
@@ -279,7 +274,7 @@ void BltTemplateBasedText(struct RastPort *rp, CONST_STRPTR text, ULONG len,
                     if ((dstshift + glyphwidth > 8) && (packed & 0xff))
                         dst[1] |= packed;
 
-                    glyphdata += tf->tf_Modulo;
+                    glyphdata += g.modulo;
                     dst += raswidth_bpr;
                 }
             } else for(bold = 0; bold <= is_bold; bold++) {
@@ -295,7 +290,7 @@ void BltTemplateBasedText(struct RastPort *rp, CONST_STRPTR text, ULONG len,
 
                 wx = x + italicshift + (bold ? tf->tf_BoldSmear : 0);
 
-                glyphdata = ((UBYTE *)tf->tf_CharData) + glyphpos / 8;
+                glyphdata = g.data + glyphpos / 8;
                 dst = raster + wx / 8;
 
                 for(y = 0; y < rasheight; y++) {
@@ -330,7 +325,7 @@ void BltTemplateBasedText(struct RastPort *rp, CONST_STRPTR text, ULONG len,
 
                     } /* for(gx = 0; gx < glyphwidth; gx++) */
 
-                    glyphdata += tf->tf_Modulo;
+                    glyphdata += g.modulo;
                     dst += raswidth_bpr;
 
                     if(is_italic) {
@@ -348,15 +343,10 @@ void BltTemplateBasedText(struct RastPort *rp, CONST_STRPTR text, ULONG len,
 
             } /* for(bold = 0; bold < ((rp->AlgoStyle & FSF_BOLD) ? 2 : 1); bold++) */
 
-            if(tf->tf_CharSpace) {
-                x += ((WORD *)tf->tf_CharSpace)[idx];
-            } else {
-                x += tf->tf_XSize;
-            }
-
+            x += g.space;
             x += rp->TxSpacing;
 
-        } /* while(len--) */
+        } /* while(len) */
 
         if(rp->AlgoStyle & FSF_UNDERLINED) {
             UBYTE *dst;
@@ -433,6 +423,7 @@ void BltTemplateAlphaBasedText(struct RastPort *rp, CONST_STRPTR text, ULONG len
     WORD                 raswidth, raswidth_bpr, rasheight, x, y, gx;
     UBYTE               *raster;
     BOOL                 is_bold, is_italic;
+    struct TextFontExtension_intern *utf8;
 
     /* CyberGfxBase is placed inside GfxBase, so it's static */
     if(!CyberGfxBase)
@@ -449,35 +440,28 @@ void BltTemplateAlphaBasedText(struct RastPort *rp, CONST_STRPTR text, ULONG len
 
     if((raster = AllocVec(raswidth * rasheight, MEMF_CLEAR))) {
         tf = rp->Font;
+        utf8 = utf8_font(tf);
 
         x = -te.te_Extent.MinX;
 
         is_bold   = (rp->AlgoStyle & FSF_BOLD) != 0;
         is_italic = (rp->AlgoStyle & FSF_ITALIC) != 0;
 
-        while(len--) {
-            UBYTE c = *text++;
-            ULONG idx;
-            ULONG charloc;
+        while(len) {
+            struct fontglyph g;
+            ULONG n;
             UWORD glyphwidth, glyphpos, bold;
             UBYTE *glyphdata;
             UBYTE *dst;
 
-            if(c < tf->tf_LoChar || c > tf->tf_HiChar) {
-                idx = NUMCHARS(tf) - 1;
-            } else {
-                idx = c - tf->tf_LoChar;
-            }
+            n = font_glyph(tf, utf8, text, len, &g, GfxBase);
+            text += n;
+            len -= n;
 
-            charloc = ((ULONG *)tf->tf_CharLoc)[idx];
+            glyphwidth = g.aadata ? g.width : 0;
+            glyphpos = g.pos;
 
-            glyphwidth = charloc & 0xFFFF;
-            glyphpos = charloc >> 16;
-
-            if(tf->tf_CharKern) {
-                x += ((WORD *)tf->tf_CharKern)[idx];
-            }
-
+            x += g.kern;
 
             for(bold = 0; bold <= is_bold; bold++) {
                 WORD wx;
@@ -492,7 +476,7 @@ void BltTemplateAlphaBasedText(struct RastPort *rp, CONST_STRPTR text, ULONG len
 
                 wx = x + italicshift + (bold ? tf->tf_BoldSmear : 0);
 
-                glyphdata = ((UBYTE *)((struct ColorTextFont *)tf)->ctf_CharData[0]) + glyphpos;
+                glyphdata = g.aadata + glyphpos;
                 dst = raster + wx;
 
                 for(y = 0; y < rasheight; y++) {
@@ -507,7 +491,7 @@ void BltTemplateAlphaBasedText(struct RastPort *rp, CONST_STRPTR text, ULONG len
                         *dstx++ = old;
                     }
 
-                    glyphdata += tf->tf_Modulo * 8;
+                    glyphdata += g.modulo * 8;
                     dst += raswidth_bpr;
 
                     if(is_italic) {
@@ -522,15 +506,10 @@ void BltTemplateAlphaBasedText(struct RastPort *rp, CONST_STRPTR text, ULONG len
 
             } /* for(bold = 0; bold < ((rp->AlgoStyle & FSF_BOLD) ? 2 : 1); bold++) */
 
-            if(tf->tf_CharSpace) {
-                x += ((WORD *)tf->tf_CharSpace)[idx];
-            } else {
-                x += tf->tf_XSize;
-            }
-
+            x += g.space;
             x += rp->TxSpacing;
 
-        } /* while(len--) */
+        } /* while(len) */
 
         if(rp->AlgoStyle & FSF_UNDERLINED) {
             UBYTE *dst;

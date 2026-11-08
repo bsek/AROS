@@ -52,9 +52,18 @@
     AROS_LIBFUNC_INIT
 
     struct TextFont *tf = rp->Font;
+    struct TextFontExtension_intern *utf8 = utf8_font(tf);
     WORD strlen;
 
-    if((tf->tf_Flags & FPF_PROPORTIONAL) || tf->tf_CharKern
+    if(utf8) {
+        struct fontglyph g;
+        ULONG n;
+
+        for(strlen = 0; count > 0; string += n, count -= n) {
+            n = font_glyph(tf, utf8, string, count, &g, GfxBase);
+            strlen += g.kern + g.space + rp->TxSpacing;
+        }
+    } else if((tf->tf_Flags & FPF_PROPORTIONAL) || tf->tf_CharKern
             || tf->tf_CharSpace) {
         WORD  idx;
         WORD  defaultidx = NUMCHARS(tf) - 1; /* Last glyph is default glyph */

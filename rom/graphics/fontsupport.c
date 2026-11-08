@@ -7,6 +7,7 @@
 #include <proto/exec.h>
 #include <proto/oop.h>
 #include <proto/graphics.h>
+#include <proto/utility.h>
 
 #include <exec/memory.h>
 #include <graphics/text.h>
@@ -123,6 +124,76 @@ void tfe_hashdelete(struct TextFont *tf, struct GfxBase *GfxBase)
 
     return;
 
+}
+
+/****************************************************************************************/
+
+/* Malformed sequences take one byte and decode to U+FFFD */
+ULONG utf8_decode(CONST_STRPTR s, ULONG len, ULONG *cp)
+{
+    UBYTE c = s[0];
+    ULONG n, i, v;
+
+    *cp = 0xFFFD;
+
+    if (c < 0x80)
+    {
+        *cp = c;
+        return 1;
+    }
+    if (c >= 0xC2 && c <= 0xDF)
+        n = 2, v = c & 0x1F;
+    else if (c >= 0xE0 && c <= 0xEF)
+        n = 3, v = c & 0x0F;
+    else if (c >= 0xF0 && c <= 0xF4)
+        n = 4, v = c & 0x07;
+    else
+        return 1;
+
+    if (n > len)
+        return 1;
+    for (i = 1; i < n; i++)
+    {
+        if ((s[i] & 0xC0) != 0x80)
+            return 1;
+        v = (v << 6) | (s[i] & 0x3F);
+    }
+    if ((n == 3 && v < 0x800) || (n == 4 && (v < 0x10000 || v > 0x10FFFF)) ||
+        (v >= 0xD800 && v <= 0xDFFF))
+        return 1;
+
+    *cp = v;
+    return n;
+}
+
+/****************************************************************************************/
+
+ULONG font_glyph_utf8(struct TextFont *tf, struct TextFontExtension_intern *utf8,
+                      CONST_STRPTR s, ULONG len, struct fontglyph *g,
+                      struct GfxBase *GfxBase)
+{
+    struct TextGlyph *tg = NULL;
+    ULONG cp, n;
+
+    n = utf8_decode(s, len, &cp);
+
+    if (cp > 255 && utf8->glyphhook)
+        tg = (struct TextGlyph *)CallHookPkt(utf8->glyphhook, tf, &cp);
+
+    if (tg)
+    {
+        g->data   = tg->tg_CharData;
+        g->aadata = tg->tg_AAData;
+        g->pos    = 0;
+        g->modulo = tg->tg_Modulo;
+        g->width  = tg->tg_Width;
+        g->kern   = tg->tg_Kern;
+        g->space  = tg->tg_Space;
+    }
+    else
+        font_glyph8(tf, cp, g);
+
+    return n;
 }
 
 /****************************************************************************************/

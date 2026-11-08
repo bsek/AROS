@@ -124,6 +124,23 @@ struct TTextAttr
 
 /* tta_Tags */
 #define TA_DeviceDPI	    (TAG_USER + 1)          /* hi word = XDPI, lo word = YDPI               */
+#define TA_CharSet	    (TAG_USER + 3)          /* IANA MIBenum of the strings, 106 = UTF-8     */
+#define TA_GlyphHook	    (TAG_USER + 0x0f00)     /* AROS private, see struct TextGlyph           */
+
+#define CHARSET_UTF8	    106
+
+/* A TA_GlyphHook is called as CallHookPkt(hook, font, &codepoint) for code
+   points above 255 of a UTF-8 font. It returns a glyph that stays valid
+   until the font is freed, or NULL for the font's default glyph. */
+struct TextGlyph
+{
+    APTR  tg_CharData;	/* tf_YSize rows of tg_Modulo bytes, glyph at bit 0 */
+    APTR  tg_AAData;	/* tf_YSize rows of tg_Modulo * 8 alpha bytes, or NULL */
+    UWORD tg_Modulo;
+    UWORD tg_Width;
+    WORD  tg_Kern;
+    WORD  tg_Space;
+};
 
 #define MAXFONTMATCHWEIGHT  32767
 
