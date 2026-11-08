@@ -55,6 +55,9 @@ struct DF_FontsData /*DiskFontData */
     UWORD                  AttrsIndex;
     struct FileEntry      *RememberFileEntry;
     UWORD                  RememberIndex;
+    /* The best-match attr of an outline font; the cached one stays
+       untouched as it would keep the caller's tag pointer */
+    struct TTextAttr       OutlineAttr, RememberOutlineAttr;
 };
 
 struct DF_FileData
@@ -996,6 +999,8 @@ struct TTextAttr *DF_IteratorGetNext(APTR iterator, struct DiskfontBase *Diskfon
             
             /* The last attr for a outline font is filled with values matching
              * as close as possible the reqattr */
+            df_data->u.FontsData.OutlineAttr = *retval;
+            retval = &df_data->u.FontsData.OutlineAttr;
             retval->tta_YSize = df_data->ReqAttr->tta_YSize;
             retval->tta_Style = df_data->u.FontsData.CurrentFileEntry->FontStyle;
             
@@ -1128,6 +1133,14 @@ VOID DF_IteratorRemember(APTR iterator, struct DiskfontBase *DiskfontBase)
                 df_data->u.FontsData.RememberIndex--;
             }
         }
+
+        if (df_data->u.FontsData.RememberFileEntry->ContentsID == OFCH_ID
+            && df_data->ReqAttr != NULL
+            && df_data->u.FontsData.RememberIndex
+               == df_data->u.FontsData.RememberFileEntry->Numentries - 1)
+        {
+            df_data->u.FontsData.RememberOutlineAttr = df_data->u.FontsData.OutlineAttr;
+        }
     
         D(bug("DF_IteratorRemember: Remembered font: %s/%d\n",
               df_data->u.FontsData.RememberFileEntry->Attrs[df_data->u.FontsData.RememberIndex].tta_Name,
@@ -1176,7 +1189,7 @@ struct TextFont *DF_IteratorRememberOpen(APTR iterator, struct DiskfontBase *Dis
                 && df_data->u.FontsData.RememberIndex == rementry->Numentries - 1)
             {
                 /* It is the TAttr generated for best matching */
-                RememberAttr = &rementry->Attrs[df_data->u.FontsData.RememberIndex];
+                RememberAttr = &df_data->u.FontsData.RememberOutlineAttr;
             }
             else
                 RememberAttr = &fdh->TAttrArray[df_data->u.FontsData.RememberIndex];
