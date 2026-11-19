@@ -132,92 +132,9 @@ static inline float clamp_scalar(float x, float a, float b) {
   return x < a ? a : (x > b ? b : x);
 }
 
-static inline float smoothstep_scalar(float edge0, float edge1, float x) {
-  float t = clamp_scalar((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
-  return t * t * (3.0f - 2.0f * t);
-}
-
-static inline float smoothstep_half_scalar(float x) {
-  return smoothstep_scalar(-0.5f, 0.5f, x);
-}
-
 /* Linear coverage ramp: the box-filtered coverage of a straight edge */
 static inline float ramp_scalar(float edge0, float edge1, float x) {
   return clamp_scalar((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
-}
-
-/* Circle SDF and alpha helpers (scalar fallbacks) */
-static inline float sdf_circle_scalar(float px, float py, float cx, float cy,
-                                      float radius) {
-  float dx = px + 0.5f - cx;
-  float dy = py + 0.5f - cy;
-  return fast_sqrtf(dx * dx + dy * dy) - radius;
-}
-
-static void cybergfx_sdf_circle_batch4_scalar(const float rel_x[4], float rel_y,
-                                              float radius, float dist_out[4]) {
-  for (WORD i = 0; i < 4; i++) {
-    float dx = rel_x[i];
-    float dy = rel_y;
-    dist_out[i] = fast_sqrtf(dx * dx + dy * dy) - radius;
-  }
-}
-
-static void cybergfx_sdf_circle_batch8_scalar(const float rel_x[8], float rel_y,
-                                              float radius, float dist_out[8]) {
-  for (WORD i = 0; i < 8; i++) {
-    float dx = rel_x[i];
-    float dy = rel_y;
-    dist_out[i] = fast_sqrtf(dx * dx + dy * dy) - radius;
-  }
-}
-
-static void cybergfx_circle_alphas_batch4_scalar(const float dist[4],
-                                                 float border_width,
-                                                 BOOL hasFill, BOOL hasBorder,
-                                                 float fill_a[4],
-                                                 float border_a[4]) {
-  for (WORD i = 0; i < 4; i++) {
-    float d = dist[i];
-    float outer_alpha = 1.0f - smoothstep_half_scalar(d);
-    float fa = 0.0f;
-    float ba = 0.0f;
-
-    if (hasFill) {
-      fa = outer_alpha;
-    }
-    if (hasBorder && border_width > 0.0f) {
-      float half_border = border_width * 0.5f;
-      ba = 1.0f -
-           smoothstep_scalar(-half_border - 0.5f, half_border + 0.5f, fabsf(d));
-    }
-    fill_a[i] = fa;
-    border_a[i] = ba;
-  }
-}
-
-static void cybergfx_circle_alphas_batch8_scalar(const float dist[8],
-                                                 float border_width,
-                                                 BOOL hasFill, BOOL hasBorder,
-                                                 float fill_a[8],
-                                                 float border_a[8]) {
-  for (WORD i = 0; i < 8; i++) {
-    float d = dist[i];
-    float outer_alpha = 1.0f - smoothstep_half_scalar(d);
-    float fa = 0.0f;
-    float ba = 0.0f;
-
-    if (hasFill) {
-      fa = outer_alpha;
-    }
-    if (hasBorder && border_width > 0.0f) {
-      float half_border = border_width * 0.5f;
-      ba = 1.0f -
-           smoothstep_scalar(-half_border - 0.5f, half_border + 0.5f, fabsf(d));
-    }
-    fill_a[i] = fa;
-    border_a[i] = ba;
-  }
 }
 
 #if defined(__SSE2__)
@@ -322,15 +239,6 @@ static void cybergfx_sdf_roundrect_batch4_sse2(const float rel_x[4],
   _mm_storeu_ps(dist_out, result);
 }
 
-static inline __m128 cybergfx_smoothstep_ps(__m128 edge0, __m128 edge1,
-                                            __m128 x) {
-  __m128 t = _mm_div_ps(_mm_sub_ps(x, edge0), _mm_sub_ps(edge1, edge0));
-  t = cybergfx_clamp_ps(t, _mm_set1_ps(0.0f), _mm_set1_ps(1.0f));
-  __m128 t2 = _mm_mul_ps(t, t);
-  return _mm_mul_ps(
-      t2, _mm_sub_ps(_mm_set1_ps(3.0f), _mm_mul_ps(_mm_set1_ps(2.0f), t)));
-}
-
 static inline __m128 cybergfx_smoothstep_ps_half(__m128 x) {
   const __m128 edge0 = _mm_set1_ps(-0.5f);
   const __m128 edge1 = _mm_set1_ps(0.5f);
@@ -339,56 +247,6 @@ static inline __m128 cybergfx_smoothstep_ps_half(__m128 x) {
   __m128 t2 = _mm_mul_ps(t, t);
   return _mm_mul_ps(
       t2, _mm_sub_ps(_mm_set1_ps(3.0f), _mm_mul_ps(_mm_set1_ps(2.0f), t)));
-}
-
-static inline __m128 cybergfx_sdf_circle_sse2(__m128 x, __m128 y,
-                                              float radius) {
-  __m128 dx2 = _mm_mul_ps(x, x);
-  __m128 dy2 = _mm_mul_ps(y, y);
-  __m128 sum = _mm_add_ps(dx2, dy2);
-#if defined(__SSE3__)
-  __m128 dist = _mm_sqrt_ps(sum);
-#else
-  __m128 dist = _mm_sqrt_ps(sum);
-#endif
-  return _mm_sub_ps(dist, _mm_set1_ps(radius));
-}
-
-static void cybergfx_sdf_circle_batch4_sse2(const float rel_x[4], float rel_y,
-                                            float radius, float dist_out[4]) {
-  __m128 x = _mm_loadu_ps(rel_x);
-  __m128 y = _mm_set1_ps(rel_y);
-  __m128 d = cybergfx_sdf_circle_sse2(x, y, radius);
-  _mm_storeu_ps(dist_out, d);
-}
-
-static void cybergfx_circle_alphas_batch4_sse2(const float dist[4],
-                                               float border_width, BOOL hasFill,
-                                               BOOL hasBorder, float fill_a[4],
-                                               float border_a[4]) {
-  __m128 d_vec = _mm_loadu_ps(dist);
-  __m128 outer_alpha =
-      _mm_sub_ps(_mm_set1_ps(1.0f), cybergfx_smoothstep_ps_half(d_vec));
-
-  __m128 fa = _mm_set1_ps(0.0f);
-  __m128 ba = _mm_set1_ps(0.0f);
-
-  if (hasFill) {
-    fa = outer_alpha;
-  }
-
-  if (hasBorder && border_width > 0.0f) {
-    __m128 half_border = _mm_set1_ps(border_width * 0.5f);
-    __m128 border_neg = _mm_sub_ps(_mm_mul_ps(_mm_set1_ps(-1.0f), half_border),
-                                   _mm_set1_ps(0.5f));
-    __m128 border_pos = _mm_add_ps(half_border, _mm_set1_ps(0.5f));
-    __m128 abs_d = cybergfx_abs_ps(d_vec);
-    ba = _mm_sub_ps(_mm_set1_ps(1.0f),
-                    cybergfx_smoothstep_ps(border_neg, border_pos, abs_d));
-  }
-
-  _mm_storeu_ps(fill_a, fa);
-  _mm_storeu_ps(border_a, ba);
 }
 
 /* Linear coverage ramp: the box-filtered coverage of a straight edge */
@@ -791,27 +649,6 @@ static void cybergfx_blend_aa_pixels_batch4_scalar(
   }
 }
 
-static void cybergfx_blend_aa_pixels_batch8_fallback(
-    const ULONG bg_pixels[8], const float alphaFill[8],
-    const float alphaLine[8], UBYTE fc_r, UBYTE fc_g, UBYTE fc_b,
-    float fc_alpha_scale, UBYTE o_r, UBYTE o_g, UBYTE o_b, float o_alpha_scale,
-    BOOL hasFill, BOOL hasBorder, ULONG result_pixels[8],
-    ULONG *changed_mask, const struct ZunePixelLayout *dl) {
-  ULONG mask1 = 0, mask2 = 0;
-
-  cybergfx_blend_aa_pixels_batch4(&bg_pixels[0], &alphaFill[0], &alphaLine[0],
-                                  fc_r, fc_g, fc_b, fc_alpha_scale, o_r, o_g,
-                                  o_b, o_alpha_scale, hasFill, hasBorder,
-                                  &result_pixels[0], &mask1, dl);
-
-  cybergfx_blend_aa_pixels_batch4(&bg_pixels[4], &alphaFill[4], &alphaLine[4],
-                                  fc_r, fc_g, fc_b, fc_alpha_scale, o_r, o_g,
-                                  o_b, o_alpha_scale, hasFill, hasBorder,
-                                  &result_pixels[4], &mask2, dl);
-
-  *changed_mask = mask1 | (mask2 << 4);
-}
-
 /*****************************************************************************/
 /* Dispatch helpers                                                          */
 /*****************************************************************************/
@@ -954,128 +791,6 @@ void cybergfx_blend_aa_pixels_batch4(
   impl(bg_pixels, alphaFill, alphaLine, fc_r, fc_g, fc_b, fc_alpha_scale, o_r,
        o_g, o_b, o_alpha_scale, hasFill, hasBorder, result_pixels,
        changed_mask, dl);
-}
-
-void cybergfx_blend_aa_pixels_batch8(
-    const ULONG bg_pixels[8], const float alphaFill[8],
-    const float alphaLine[8], UBYTE fc_r, UBYTE fc_g, UBYTE fc_b,
-    float fc_alpha_scale, UBYTE o_r, UBYTE o_g, UBYTE o_b, float o_alpha_scale,
-    BOOL hasFill, BOOL hasBorder, ULONG result_pixels[8],
-    ULONG *changed_mask, const struct ZunePixelLayout *dl) {
-  static void (*impl)(const ULONG *, const float *, const float *, UBYTE, UBYTE,
-                      UBYTE, float, UBYTE, UBYTE, UBYTE, float, BOOL, BOOL,
-                      ULONG *, ULONG *,
-                      const struct ZunePixelLayout *) = NULL;
-
-  if (!impl) {
-    cybergfx_simd_level level = cybergfx_get_simd_level();
-
-#if defined(__AVX2__)
-    if (level == CYBERGFX_SIMD_AVX2) {
-      /* For now, AVX2 uses fallback too (full SIMD pixel packing is complex) */
-      impl = cybergfx_blend_aa_pixels_batch8_fallback;
-    } else
-#endif
-    {
-      impl = cybergfx_blend_aa_pixels_batch8_fallback;
-    }
-  }
-
-  impl(bg_pixels, alphaFill, alphaLine, fc_r, fc_g, fc_b, fc_alpha_scale, o_r,
-       o_g, o_b, o_alpha_scale, hasFill, hasBorder, result_pixels,
-       changed_mask, dl);
-}
-
-void cybergfx_sdf_circle_batch4(const float rel_x[4], float rel_y, float radius,
-                                float dist_out[4]) {
-  static void (*impl)(const float *, float, float, float *) = NULL;
-
-  if (!impl) {
-    cybergfx_simd_level level = cybergfx_get_simd_level();
-#if defined(__SSE2__)
-    if (level == CYBERGFX_SIMD_SSE2) {
-      impl = cybergfx_sdf_circle_batch4_sse2;
-    } else
-#endif
-    {
-      impl = cybergfx_sdf_circle_batch4_scalar;
-    }
-  }
-
-  impl(rel_x, rel_y, radius, dist_out);
-}
-
-void cybergfx_sdf_circle_batch8(const float rel_x[8], float rel_y, float radius,
-                                float dist_out[8]) {
-  static void (*impl)(const float *, float, float, float *) = NULL;
-
-  if (!impl) {
-    cybergfx_simd_level level = cybergfx_get_simd_level();
-#if CYBERGFX_CAN_BUILD_AVX2
-    if (level == CYBERGFX_SIMD_AVX2) {
-      /* Use two batch4 SSE2/scalar calls if AVX2 not available for circle SDF
-       */
-      impl = NULL;
-    } else
-#endif
-    {
-      impl = NULL;
-    }
-  }
-
-  if (impl) {
-    impl(rel_x, rel_y, radius, dist_out);
-  } else {
-    cybergfx_sdf_circle_batch4(rel_x, rel_y, radius, dist_out);
-    cybergfx_sdf_circle_batch4(&rel_x[4], rel_y, radius, &dist_out[4]);
-  }
-}
-
-void cybergfx_circle_alphas_batch4(const float dist[4], float border_width,
-                                   BOOL hasFill, BOOL hasBorder, float fill_a[4],
-                                   float border_a[4]) {
-  static void (*impl)(const float *, float, BOOL, BOOL, float *, float *) = NULL;
-
-  if (!impl) {
-    cybergfx_simd_level level = cybergfx_get_simd_level();
-#if defined(__SSE2__)
-    if (level == CYBERGFX_SIMD_SSE2) {
-      impl = cybergfx_circle_alphas_batch4_sse2;
-    } else
-#endif
-    {
-      impl = cybergfx_circle_alphas_batch4_scalar;
-    }
-  }
-
-  impl(dist, border_width, hasFill, hasBorder, fill_a, border_a);
-}
-
-void cybergfx_circle_alphas_batch8(const float dist[8], float border_width,
-                                   BOOL hasFill, BOOL hasBorder, float fill_a[8],
-                                   float border_a[8]) {
-  static void (*impl)(const float *, float, BOOL, BOOL, float *, float *) = NULL;
-
-  if (!impl) {
-    cybergfx_simd_level level = cybergfx_get_simd_level();
-#if CYBERGFX_CAN_BUILD_AVX2
-    if (level == CYBERGFX_SIMD_AVX2) {
-      impl = NULL;
-    } else
-#endif
-    {
-      impl = NULL;
-    }
-  }
-
-  if (impl) {
-    impl(dist, border_width, hasFill, hasBorder, fill_a, border_a);
-  } else {
-    cybergfx_circle_alphas_batch4(dist, border_width, hasFill, hasBorder,
-                                  fill_a, border_a);
-    cybergfx_circle_alphas_batch4(&dist[4], border_width, hasFill, hasBorder,
-                                  &fill_a[4], &border_a[4]);
-  }
 }
 
 /*****************************************************************************/

@@ -138,6 +138,140 @@ void OpenGLDrawLine(struct RenderContext *rctx, WORD startX, WORD startY,
     OpenGL_FlushIfNotBatching(rctx);
 }
 
+/*
+ * A rounded rectangle through the SDF shader. Circles use it too: a circle is
+ * a square whose corner radius is half its side, so both shapes get the
+ * coverage model the CPU rasteriser uses. The caller checks for shaders.
+ */
+static void OpenGL_DrawSDFRoundedRect(struct RenderContext *rctx, WORD x, WORD y,
+                                      UWORD width, UWORD height, float corner_radius,
+                                      UBYTE border_width, struct ZuneBrush *fill_brush,
+                                      struct InternalColor *border_color, BOOL filled)
+{
+    float border_r = 0, border_g = 0, border_b = 0, border_a = 0;
+    BOOL has_fill = (filled && fill_brush);
+    BOOL has_border = (border_width > 0 && border_color);
+    BOOL use_textured_shader = (has_fill && fill_brush->type != ZUNE_BRUSH_TYPE_SOLID &&
+                                g_rounded_rect_textured_program != 0);
+    GLuint brush_texture = 0;
+
+    /* Extract border color */
+    if (has_border) {
+        border_r = border_color->r / 255.0f;
+        border_g = border_color->g / 255.0f;
+        border_b = border_color->b / 255.0f;
+        border_a = border_color->a / 255.0f;
+    }
+
+    if (use_textured_shader) {
+        /* Non-solid brush: convert to texture and use textured shader */
+        brush_texture = OpenGL_BrushToTexture(rctx, fill_brush, x, y, width, height);
+        if (brush_texture == 0) {
+            has_fill = FALSE;
+            use_textured_shader = FALSE;
+        }
+    }
+
+    if (use_textured_shader) {
+        /* Use textured shader for non-solid brushes */
+        glUseProgram_ptr(g_rounded_rect_textured_program);
+
+        glEnable(GL_TEXTURE_2D);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, brush_texture);
+
+        if (g_uniform_tex_rect_size >= 0 && glUniform2f_ptr)
+            glUniform2f_ptr(g_uniform_tex_rect_size, (GLfloat)width, (GLfloat)height);
+        if (g_uniform_tex_rect_radius >= 0 && glUniform1f_ptr)
+            glUniform1f_ptr(g_uniform_tex_rect_radius, (GLfloat)corner_radius);
+        if (g_uniform_tex_fill_texture >= 0 && glUniform1i_ptr)
+            glUniform1i_ptr(g_uniform_tex_fill_texture, 0);
+        if (g_uniform_tex_border_color >= 0 && glUniform4f_ptr)
+            glUniform4f_ptr(g_uniform_tex_border_color, border_r, border_g, border_b, border_a);
+        if (g_uniform_tex_border_width >= 0 && glUniform1f_ptr)
+            glUniform1f_ptr(g_uniform_tex_border_width, (GLfloat)border_width);
+        if (g_uniform_tex_has_fill >= 0 && glUniform1f_ptr)
+            glUniform1f_ptr(g_uniform_tex_has_fill, has_fill ? 1.0f : 0.0f);
+        if (g_uniform_tex_has_border >= 0 && glUniform1f_ptr)
+            glUniform1f_ptr(g_uniform_tex_has_border, has_border ? 1.0f : 0.0f);
+    } else {
+        /* Use solid color shader */
+        ULONG fill_color_val = 0;
+        float fill_r = 0, fill_g = 0, fill_b = 0, fill_a = 0;
+
+        if (has_fill && fill_brush->type == ZUNE_BRUSH_TYPE_SOLID) {
+            fill_color_val = fill_brush->data.solid.color;
+            fill_r = ((fill_color_val >> 16) & 0xFF) / 255.0f;
+            fill_g = ((fill_color_val >> 8) & 0xFF) / 255.0f;
+            fill_b = (fill_color_val & 0xFF) / 255.0f;
+            fill_a = ((fill_color_val >> 24) & 0xFF) / 255.0f;
+        } else {
+            has_fill = FALSE;
+        }
+
+        glUseProgram_ptr(g_rounded_rect_program);
+
+        if (g_uniform_rect_size >= 0 && glUniform2f_ptr)
+            glUniform2f_ptr(g_uniform_rect_size, (GLfloat)width, (GLfloat)height);
+        if (g_uniform_rect_radius >= 0 && glUniform1f_ptr)
+            glUniform1f_ptr(g_uniform_rect_radius, (GLfloat)corner_radius);
+        if (g_uniform_fill_color >= 0 && glUniform4f_ptr)
+            glUniform4f_ptr(g_uniform_fill_color, fill_r, fill_g, fill_b, fill_a);
+        if (g_uniform_border_color >= 0 && glUniform4f_ptr)
+            glUniform4f_ptr(g_uniform_border_color, border_r, border_g, border_b, border_a);
+        if (g_uniform_border_width >= 0 && glUniform1f_ptr)
+            glUniform1f_ptr(g_uniform_border_width, (GLfloat)border_width);
+        if (g_uniform_has_fill >= 0 && glUniform1f_ptr)
+            glUniform1f_ptr(g_uniform_has_fill, has_fill ? 1.0f : 0.0f);
+        if (g_uniform_has_border >= 0 && glUniform1f_ptr)
+            glUniform1f_ptr(g_uniform_has_border, has_border ? 1.0f : 0.0f);
+    }
+
+    /* The shader writes premultiplied colour */
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
+    /* Draw the quad using VBO if available, otherwise immediate mode */
+    if (g_vbo_available && g_quad_vbo != 0 && glBindBuffer_ptr) {
+        glPushMatrix();
+        glTranslatef((GLfloat)x, (GLfloat)y, 0.0f);
+        glScalef((GLfloat)width, (GLfloat)height, 1.0f);
+
+        glBindBuffer_ptr(GL_ARRAY_BUFFER, g_quad_vbo);
+
+        glEnableClientState(GL_VERTEX_ARRAY);
+        glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+
+        glVertexPointer(2, GL_FLOAT, 4 * sizeof(GLfloat), (void*)0);
+        glTexCoordPointer(2, GL_FLOAT, 4 * sizeof(GLfloat), (void*)(2 * sizeof(GLfloat)));
+
+        glDrawArrays(GL_QUADS, 0, 4);
+
+        glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+        glDisableClientState(GL_VERTEX_ARRAY);
+
+        glBindBuffer_ptr(GL_ARRAY_BUFFER, 0);
+        glPopMatrix();
+    } else {
+        glBegin(GL_QUADS);
+        glTexCoord2f(0.0f, 0.0f); glVertex2i(x, y);
+        glTexCoord2f(1.0f, 0.0f); glVertex2i(x + width, y);
+        glTexCoord2f(1.0f, 1.0f); glVertex2i(x + width, y + height);
+        glTexCoord2f(0.0f, 1.0f); glVertex2i(x, y + height);
+        glEnd();
+    }
+
+    /* Cleanup */
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    if (use_textured_shader) {
+        glDisable(GL_TEXTURE_2D);
+        if (brush_texture != 0) {
+            glDeleteTextures(1, &brush_texture);
+        }
+    }
+
+    glUseProgram_ptr(0);
+}
+
 void OpenGLDrawRectangle(struct RenderContext *rctx, WORD x, WORD y,
                                 UWORD width, UWORD height, UBYTE border_width,
                                 UBYTE corner_radius, struct ZuneBrush *fill_brush,
@@ -253,128 +387,8 @@ void OpenGLDrawRectangle(struct RenderContext *rctx, WORD x, WORD y,
         /* Rounded rectangle - use shader if available for smooth AA */
 
         if (g_shaders_available && g_rounded_rect_program && glUseProgram_ptr) {
-            float border_r = 0, border_g = 0, border_b = 0, border_a = 0;
-            BOOL has_fill = (filled && fill_brush);
-            BOOL has_border = (border_width > 0 && border_color);
-            BOOL use_textured_shader = (has_fill && fill_brush->type != ZUNE_BRUSH_TYPE_SOLID &&
-                                        g_rounded_rect_textured_program != 0);
-            GLuint brush_texture = 0;
-
-            /* Extract border color */
-            if (has_border) {
-                border_r = border_color->r / 255.0f;
-                border_g = border_color->g / 255.0f;
-                border_b = border_color->b / 255.0f;
-                border_a = border_color->a / 255.0f;
-            }
-
-            if (use_textured_shader) {
-                /* Non-solid brush: convert to texture and use textured shader */
-                brush_texture = OpenGL_BrushToTexture(rctx, fill_brush, x, y, width, height);
-                if (brush_texture == 0) {
-                    has_fill = FALSE;
-                    use_textured_shader = FALSE;
-                }
-            }
-
-            if (use_textured_shader) {
-                /* Use textured shader for non-solid brushes */
-                glUseProgram_ptr(g_rounded_rect_textured_program);
-
-                glEnable(GL_TEXTURE_2D);
-                glActiveTexture(GL_TEXTURE0);
-                glBindTexture(GL_TEXTURE_2D, brush_texture);
-
-                if (g_uniform_tex_rect_size >= 0 && glUniform2f_ptr)
-                    glUniform2f_ptr(g_uniform_tex_rect_size, (GLfloat)width, (GLfloat)height);
-                if (g_uniform_tex_rect_radius >= 0 && glUniform1f_ptr)
-                    glUniform1f_ptr(g_uniform_tex_rect_radius, (GLfloat)corner_radius);
-                if (g_uniform_tex_fill_texture >= 0 && glUniform1i_ptr)
-                    glUniform1i_ptr(g_uniform_tex_fill_texture, 0);
-                if (g_uniform_tex_border_color >= 0 && glUniform4f_ptr)
-                    glUniform4f_ptr(g_uniform_tex_border_color, border_r, border_g, border_b, border_a);
-                if (g_uniform_tex_border_width >= 0 && glUniform1f_ptr)
-                    glUniform1f_ptr(g_uniform_tex_border_width, (GLfloat)border_width);
-                if (g_uniform_tex_has_fill >= 0 && glUniform1f_ptr)
-                    glUniform1f_ptr(g_uniform_tex_has_fill, has_fill ? 1.0f : 0.0f);
-                if (g_uniform_tex_has_border >= 0 && glUniform1f_ptr)
-                    glUniform1f_ptr(g_uniform_tex_has_border, has_border ? 1.0f : 0.0f);
-            } else {
-                /* Use solid color shader */
-                ULONG fill_color_val = 0;
-                float fill_r = 0, fill_g = 0, fill_b = 0, fill_a = 0;
-
-                if (has_fill && fill_brush->type == ZUNE_BRUSH_TYPE_SOLID) {
-                    fill_color_val = fill_brush->data.solid.color;
-                    fill_r = ((fill_color_val >> 16) & 0xFF) / 255.0f;
-                    fill_g = ((fill_color_val >> 8) & 0xFF) / 255.0f;
-                    fill_b = (fill_color_val & 0xFF) / 255.0f;
-                    fill_a = ((fill_color_val >> 24) & 0xFF) / 255.0f;
-                } else {
-                    has_fill = FALSE;
-                }
-
-                glUseProgram_ptr(g_rounded_rect_program);
-
-                if (g_uniform_rect_size >= 0 && glUniform2f_ptr)
-                    glUniform2f_ptr(g_uniform_rect_size, (GLfloat)width, (GLfloat)height);
-                if (g_uniform_rect_radius >= 0 && glUniform1f_ptr)
-                    glUniform1f_ptr(g_uniform_rect_radius, (GLfloat)corner_radius);
-                if (g_uniform_fill_color >= 0 && glUniform4f_ptr)
-                    glUniform4f_ptr(g_uniform_fill_color, fill_r, fill_g, fill_b, fill_a);
-                if (g_uniform_border_color >= 0 && glUniform4f_ptr)
-                    glUniform4f_ptr(g_uniform_border_color, border_r, border_g, border_b, border_a);
-                if (g_uniform_border_width >= 0 && glUniform1f_ptr)
-                    glUniform1f_ptr(g_uniform_border_width, (GLfloat)border_width);
-                if (g_uniform_has_fill >= 0 && glUniform1f_ptr)
-                    glUniform1f_ptr(g_uniform_has_fill, has_fill ? 1.0f : 0.0f);
-                if (g_uniform_has_border >= 0 && glUniform1f_ptr)
-                    glUniform1f_ptr(g_uniform_has_border, has_border ? 1.0f : 0.0f);
-            }
-
-            /* The shader writes premultiplied colour */
-            glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-
-            /* Draw the quad using VBO if available, otherwise immediate mode */
-            if (g_vbo_available && g_quad_vbo != 0 && glBindBuffer_ptr) {
-                glPushMatrix();
-                glTranslatef((GLfloat)x, (GLfloat)y, 0.0f);
-                glScalef((GLfloat)width, (GLfloat)height, 1.0f);
-
-                glBindBuffer_ptr(GL_ARRAY_BUFFER, g_quad_vbo);
-
-                glEnableClientState(GL_VERTEX_ARRAY);
-                glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-
-                glVertexPointer(2, GL_FLOAT, 4 * sizeof(GLfloat), (void*)0);
-                glTexCoordPointer(2, GL_FLOAT, 4 * sizeof(GLfloat), (void*)(2 * sizeof(GLfloat)));
-
-                glDrawArrays(GL_QUADS, 0, 4);
-
-                glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-                glDisableClientState(GL_VERTEX_ARRAY);
-
-                glBindBuffer_ptr(GL_ARRAY_BUFFER, 0);
-                glPopMatrix();
-            } else {
-                glBegin(GL_QUADS);
-                glTexCoord2f(0.0f, 0.0f); glVertex2i(x, y);
-                glTexCoord2f(1.0f, 0.0f); glVertex2i(x + width, y);
-                glTexCoord2f(1.0f, 1.0f); glVertex2i(x + width, y + height);
-                glTexCoord2f(0.0f, 1.0f); glVertex2i(x, y + height);
-                glEnd();
-            }
-
-            /* Cleanup */
-            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-            if (use_textured_shader) {
-                glDisable(GL_TEXTURE_2D);
-                if (brush_texture != 0) {
-                    glDeleteTextures(1, &brush_texture);
-                }
-            }
-
-            glUseProgram_ptr(0);
+            OpenGL_DrawSDFRoundedRect(rctx, x, y, width, height, corner_radius, border_width,
+                                      fill_brush, border_color, filled);
         } else {
             /*
              * Fallback: Draw rounded rectangle using geometry (no shaders)
@@ -578,6 +592,13 @@ void OpenGLDrawCircle(struct RenderContext *rctx, WORD center_x, WORD center_y,
     if (!OpenGL_SwitchToTarget(rctx)) {
         ZuneFallback_DrawCircle(rctx, center_x, center_y, radius, border_width,
                                 fill_brush, border_color, filled, antialias);
+        return;
+    }
+
+    if (antialias && g_shaders_available && g_rounded_rect_program && glUseProgram_ptr) {
+        OpenGL_DrawSDFRoundedRect(rctx, center_x - radius, center_y - radius, 2 * radius, 2 * radius,
+                                  (float)radius, border_width, fill_brush, border_color, filled);
+        OpenGL_FlushIfNotBatching(rctx);
         return;
     }
 

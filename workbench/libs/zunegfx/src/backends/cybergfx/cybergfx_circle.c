@@ -28,6 +28,7 @@
 #include "../backend_interface.h"
 #include "cybergfx_backend.h"
 #include "cybergfx_simd.h"
+#include "cybergfx_antialiasing.h"
 
 /* Forward declarations for antialiasing functions */
 static void CybergfxDrawAACircleDrawingBoard(struct RenderContext *rctx, UWORD x, UWORD y, UWORD radius, struct ZuneBrush *fill_brush,
@@ -292,51 +293,65 @@ void CybergfxDrawCircle(struct RenderContext *rctx, WORD center_x, WORD center_y
  * Anti-aliasing functions
  ********************************************************************************************/
 
-/* SDF function for circle */
-static inline float sdf_circle(float px, float py, float cx, float cy, float radius) {
-    float dx = px - cx;
-    float dy = py - cy;
-    return sqrtf(dx * dx + dy * dy) - radius;
+/*
+ * One row of an antialiased circle, on pixels in layout dl. The coverage model
+ * is the rounded rectangle's, and the GPU draws a circle as one: exact distance
+ * divided by the pixel's footprint along the radius, a linear ramp, the border
+ * inside the edge at full width and the fill running under it.
+ * Returns TRUE if any pixel changed.
+ */
+static BOOL CybergfxAACircleRow(ULONG *row, WORD n, float rel_x0, float rel_y, float radius, float border_width,
+                                const struct InternalColor *fill, const struct InternalColor *border,
+                                const struct ZunePixelLayout *dl) {
+    BOOL hasFill = fill != NULL;
+    BOOL hasBorder = border != NULL && border_width > 0.0f;
+    float fill_a = hasFill ? fill->a / 255.0f : 0.0f;
+    float border_a = hasBorder ? border->a / 255.0f : 0.0f;
+    BOOL any = FALSE;
+
+    for (WORD px = 0; px < n; px += 4) {
+        WORD valid = (n - px < 4) ? n - px : 4;
+        float dist_outer[4], dist_inner[4], alphaFill[4], alphaLine[4];
+        ULONG bg[4] = { 0, 0, 0, 0 }, result[4];
+        ULONG changed;
+        BOOL covered = FALSE;
+
+        for (WORD i = 0; i < 4; i++) {
+            float rx = rel_x0 + px + i;
+            float foot = cybergfx_rr_footprint(rx, rel_y, radius, radius, radius);
+
+            dist_outer[i] = (sqrtf(rx * rx + rel_y * rel_y) - radius) / foot;
+            dist_inner[i] = dist_outer[i] + border_width / foot;
+            if (dist_outer[i] < cybergfx_aa_smoothness)
+                covered = TRUE;
+        }
+        if (!covered)
+            continue;
+
+        cybergfx_compute_alphas_batch4(dist_inner, dist_outer, -cybergfx_aa_smoothness, cybergfx_aa_smoothness,
+                                       hasFill, hasBorder, alphaFill, alphaLine);
+        if (hasFill && hasBorder) {
+            cybergfx_fill_under_border(alphaFill, alphaLine, 4, border_a);
+        }
+
+        for (WORD i = 0; i < valid; i++)
+            bg[i] = row[px + i];
+
+        cybergfx_blend_aa_pixels_batch4(bg, alphaFill, alphaLine,
+                                        hasFill ? fill->r : 0, hasFill ? fill->g : 0, hasFill ? fill->b : 0, fill_a,
+                                        hasBorder ? border->r : 0, hasBorder ? border->g : 0, hasBorder ? border->b : 0,
+                                        border_a, hasFill, hasBorder, result, &changed, dl);
+
+        for (WORD i = 0; i < valid; i++) {
+            if (changed & (1u << i)) {
+                row[px + i] = result[i];
+                any = TRUE;
+            }
+        }
+    }
+
+    return any;
 }
-
-/* Helper functions for color mixing and blending */
-static inline float clamp(float x, float a, float b) { return x < a ? a : (x > b ? b : x); }
-
-static inline float smoothstep(float edge0, float edge1, float x) {
-    float t = clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
-    return t * t * (3.0f - 2.0f * t);
-}
-
-static inline void blend_over(UBYTE *r, UBYTE *g, UBYTE *b, UBYTE cr, UBYTE cg, UBYTE cb, float a) {
-    *r = (UBYTE)((1 - a) * (*r) + a * cr);
-    *g = (UBYTE)((1 - a) * (*g) + a * cg);
-    *b = (UBYTE)((1 - a) * (*b) + a * cb);
-}
-
-/* Extract color components from BGRA32 pixel */
-static inline void extract_bgra32(ULONG pixel, UBYTE *a, UBYTE *r, UBYTE *g, UBYTE *b) {
-    *b = (pixel >> 24) & 0xFF;
-    *g = (pixel >> 16) & 0xFF;
-    *r = (pixel >> 8) & 0xFF;
-    *a = pixel & 0xFF;
-}
-
-/* Extract color components from BGRA32 pixel */
-static inline void extract_argb32(ULONG pixel, UBYTE *a, UBYTE *r, UBYTE *g, UBYTE *b) {
-    *a = (pixel >> 24) & 0xFF;
-    *r = (pixel >> 16) & 0xFF;
-    *g = (pixel >> 8) & 0xFF;
-    *b = pixel & 0xFF;
-}
-
-/* Make ARGB32 pixel from components */
-static inline ULONG make_argb32(UBYTE a, UBYTE r, UBYTE g, UBYTE b) { return ((ULONG)a << 24) | ((ULONG)r << 16) | ((ULONG)g << 8) | b; }
-
-/* Make BGRA32 pixel from components */
-static inline ULONG make_bgra32(UBYTE a, UBYTE r, UBYTE g, UBYTE b) { return ((ULONG)b << 24) | ((ULONG)g << 16) | ((ULONG)r << 8) | a; }
-
-/* Fast floating point to integer conversion */
-static inline LONG cybergfx_fast_ftoi(float f) { return (LONG)(f + 0.5f); }
 
 /* Draw filled circle with border using SDF antialiasing */
 static void CybergfxDrawAACircleDrawingBoard(struct RenderContext *rctx, UWORD x, UWORD y, UWORD radius, struct ZuneBrush *fill_brush,
@@ -367,24 +382,6 @@ static void CybergfxDrawAACircleDrawingBoard(struct RenderContext *rctx, UWORD x
       PrepareBrushForRendering(rctx, fill_brush, x, y, radius * 2, radius * 2);
     }
 
-    /* Get direct pixel buffer access */
-    ULONG *pixels = (ULONG *)board->pixels;
-    ULONG pitch_pixels = board->pitch / 4;
-
-    /* Calculate bounding box with padding for antialiasing */
-    WORD min_x = fmaxf(0, cybergfx_fast_ftoi(x - radius - 2.0f));
-    WORD min_y = fmaxf(0, cybergfx_fast_ftoi(y - radius - 2.0f));
-    WORD max_x = fminf(board->width - 1, cybergfx_fast_ftoi(x + radius + 2.0f));
-    WORD max_y = fminf(board->height - 1, cybergfx_fast_ftoi(y + radius + 2.0f));
-
-    D(bug("CybergfxDrawAACircleRastPort: bounding box (%d,%d) to (%d,%d)\n", min_x, min_y, max_x, max_y));
-
-    /* SIMD/scanline path */
-    cybergfx_simd_level level = cybergfx_get_simd_level();
-    WORD width = max_x - min_x + 1;
-    ULONG *row_buffer = width > 0 ? malloc((ULONG)width * sizeof(ULONG)) : NULL;
-    float rel_x_buf[8];
-
     /* Convert fill brush to internal color once before the loop */
     struct InternalColor fill_color_storage;
     struct InternalColor *fill_color = NULL;
@@ -392,112 +389,20 @@ static void CybergfxDrawAACircleDrawingBoard(struct RenderContext *rctx, UWORD x
         fill_color = &fill_color_storage;
     }
 
-    for (WORD py = min_y; py <= max_y; py++) {
-        ULONG row_base = (ULONG)py * pitch_pixels + min_x;
-        if (row_buffer) {
-            memcpy(row_buffer, pixels + row_base, (ULONG)width * sizeof(ULONG));
-        }
+    /* Bounding box, padded for the antialiasing band */
+    WORD min_x = fmaxf(0, cybergfx_fast_ftoi(x - radius - 2.0f));
+    WORD min_y = fmaxf(0, cybergfx_fast_ftoi(y - radius - 2.0f));
+    WORD max_x = fminf(board->width - 1, cybergfx_fast_ftoi(x + radius + 2.0f));
+    WORD max_y = fminf(board->height - 1, cybergfx_fast_ftoi(y + radius + 2.0f));
+    WORD width = max_x - min_x + 1;
 
-        float rel_y = (py + 0.5f) - y;
-        WORD px = 0;
+    ULONG *pixels = (ULONG *)board->pixels;
+    ULONG pitch_pixels = board->pitch / 4;
 
-        for (; px <= width - 4; px += 4) {
-            for (WORD i = 0; i < 4; i++) rel_x_buf[i] = (min_x + px + i + 0.5f) - x;
-            float dist[4];
-            cybergfx_sdf_circle_batch4(rel_x_buf, rel_y, radius, dist);
-
-            float fill_a[4], border_a[4];
-            cybergfx_circle_alphas_batch4(dist, border_width, fill_color != NULL, border_color != NULL, fill_a, border_a);
-
-            ULONG bg_pixels[4];
-            ULONG *src = row_buffer ? (row_buffer + px) : (pixels + row_base + px);
-            for (WORD i = 0; i < 4; i++)
-                bg_pixels[i] = src[i];
-
-            ULONG result_pixels[4];
-            ULONG changed_mask;
-            cybergfx_blend_aa_pixels_batch4(bg_pixels, fill_a, border_a,
-                                            fill_color ? fill_color->r : 0,
-                                            fill_color ? fill_color->g : 0,
-                                            fill_color ? fill_color->b : 0,
-                                            fill_color ? (fill_color->a / 255.0f) : 0.0f,
-                                            border_color ? border_color->r : 0,
-                                            border_color ? border_color->g : 0,
-                                            border_color ? border_color->b : 0,
-                                            border_color ? (border_color->a / 255.0f) : 0.0f,
-                                            fill_color != NULL, border_color != NULL,
-                                            result_pixels, &changed_mask, &board->pixel_layout);
-
-            if (changed_mask) {
-                for (WORD i = 0; i < 4; i++) {
-                    if (changed_mask & (1u << i)) {
-                        ULONG final_color = result_pixels[i];
-                        CybergfxWritePixelClamped(pixels, pitch_pixels, board->width, board->height,
-                                                  min_x + px + i, py, final_color);
-                        if (row_buffer) row_buffer[px + i] = final_color;
-                    }
-                }
-            }
-        }
-
-        for (; px < width; px++) {
-            float rel_x = (min_x + px + 0.5f) - x;
-            float dist = sqrtf(rel_x * rel_x + rel_y * rel_y) - radius;
-
-            ULONG bg = row_buffer ? row_buffer[px] : pixels[row_base + px];
-            UBYTE bg_a, bg_r, bg_g, bg_b;
-            extract_bgra32(bg, &bg_a, &bg_r, &bg_g, &bg_b);
-
-            BOOL pixel_changed = FALSE;
-
-            if (border_width > 0.0f && border_color != NULL) {
-                if (fill_color != NULL) {
-                    float outer_alpha = 1.0f - smoothstep(-0.5f, 0.5f, dist);
-
-                    if (outer_alpha > 0.01f) {
-                        float border_threshold = -border_width;
-                        float blend_factor = smoothstep(border_threshold - 0.5f, border_threshold + 0.5f, dist);
-
-                        UBYTE final_r = (UBYTE)(blend_factor * fill_color->r + (1.0f - blend_factor) * border_color->r);
-                        UBYTE final_g = (UBYTE)(blend_factor * fill_color->g + (1.0f - blend_factor) * border_color->g);
-                        UBYTE final_b = (UBYTE)(blend_factor * fill_color->b + (1.0f - blend_factor) * border_color->b);
-                        UBYTE final_a = (UBYTE)(blend_factor * fill_color->a + (1.0f - blend_factor) * border_color->a);
-
-                        float final_alpha = (final_a / 255.0f) * outer_alpha;
-                        blend_over(&bg_r, &bg_g, &bg_b, final_r, final_g, final_b, final_alpha);
-                        pixel_changed = TRUE;
-                    }
-                } else {
-                    float half_border = border_width * 0.5f;
-                    float border_alpha = 1.0f - smoothstep(-half_border - 0.5f, half_border + 0.5f, fabsf(dist));
-
-                    if (border_alpha > 0.01f) {
-                        float final_border_alpha = (border_color->a / 255.0f) * border_alpha;
-                        blend_over(&bg_r, &bg_g, &bg_b, border_color->r, border_color->g, border_color->b, final_border_alpha);
-                        pixel_changed = TRUE;
-                    }
-                }
-            } else if (fill_color != NULL) {
-                float fill_alpha = 1.0f - smoothstep(-0.5f, 0.5f, dist);
-
-                if (fill_alpha > 0.01f) {
-                    float final_fill_alpha = (fill_color->a / 255.0f) * fill_alpha;
-                    blend_over(&bg_r, &bg_g, &bg_b, fill_color->r, fill_color->g, fill_color->b, final_fill_alpha);
-                    pixel_changed = TRUE;
-                }
-            }
-
-            if (pixel_changed) {
-                ULONG final_color = make_bgra32(bg_a, bg_r, bg_g, bg_b);
-                CybergfxWritePixelClamped(pixels, pitch_pixels, board->width,
-                                          board->height, min_x + px, py, final_color);
-                if (row_buffer) row_buffer[px] = final_color;
-            }
-        }
-    }
-
-    if (row_buffer) {
-        free(row_buffer);
+    /* The box is clamped to the board, so rows are processed in place */
+    for (WORD py = min_y; width > 0 && py <= max_y; py++) {
+        CybergfxAACircleRow(pixels + (ULONG)py * pitch_pixels + min_x, width, (min_x + 0.5f) - x, (py + 0.5f) - y,
+                            radius, border_width, fill_color, border_color, &board->pixel_layout);
     }
 
     EXIT_FUNCTION("CybergfxDrawAACircleDrawingBoard");
@@ -517,30 +422,19 @@ static void CybergfxDrawAACircleRastPort(struct RenderContext *rctx, UWORD x, UW
         return;
     }
 
-    /* Get bitmap dimensions */
-    ULONG bitmap_width = GetBitMapAttr(rctx->target_rastport->BitMap, BMA_WIDTH);
-    ULONG bitmap_height = GetBitMapAttr(rctx->target_rastport->BitMap, BMA_HEIGHT);
+    struct RastPort *rp = rctx->target_rastport;
 
-    /* Calculate bounding box with padding for antialiasing */
+    /* Get bitmap dimensions */
+    ULONG bitmap_width = GetBitMapAttr(rp->BitMap, BMA_WIDTH);
+    ULONG bitmap_height = GetBitMapAttr(rp->BitMap, BMA_HEIGHT);
+
+    /* Bounding box, padded for the antialiasing band */
     WORD min_x = fmaxf(0, cybergfx_fast_ftoi(x - radius - 2.0f));
     WORD min_y = fmaxf(0, cybergfx_fast_ftoi(y - radius - 2.0f));
     WORD max_x = fminf(bitmap_width - 1, cybergfx_fast_ftoi(x + radius + 2.0f));
     WORD max_y = fminf(bitmap_height - 1, cybergfx_fast_ftoi(y + radius + 2.0f));
 
     D(bug("CybergfxDrawAACircleRastPort: bounding box (%d,%d) to (%d,%d)\n", min_x, min_y, max_x, max_y));
-
-    /* Use multi-scanline batching to reduce ReadPixelArray/WritePixelArray syscall overhead */
-    #define SCANLINE_BATCH 32
-    WORD width = max_x - min_x + 1;
-    WORD total_height = max_y - min_y + 1;
-
-    ULONG *batch_buffer = (width > 0 && total_height > 0)
-                             ? malloc((ULONG)width * SCANLINE_BATCH * sizeof(ULONG))
-                             : NULL;
-    float rel_x_buf[8];
-
-    /* Track which rows in the batch are dirty */
-    BOOL batch_dirty[SCANLINE_BATCH];
 
     /* Convert fill brush to internal color once before the loop */
     struct InternalColor fill_color_storage;
@@ -549,8 +443,21 @@ static void CybergfxDrawAACircleRastPort(struct RenderContext *rctx, UWORD x, UW
         fill_color = &fill_color_storage;
     }
 
+    /* Use multi-scanline batching to reduce ReadPixelArray/WritePixelArray syscall overhead */
+    #define SCANLINE_BATCH 32
+    WORD width = max_x - min_x + 1;
+    WORD total_height = max_y - min_y + 1;
+    float rel_x0 = (min_x + 0.5f) - x;
+
+    ULONG *batch_buffer = (width > 0 && total_height > 0)
+                             ? malloc((ULONG)width * SCANLINE_BATCH * sizeof(ULONG))
+                             : NULL;
+
+    /* Track which rows in the batch are dirty */
+    BOOL batch_dirty[SCANLINE_BATCH];
+
     /* Process rows in batches */
-    for (WORD batch_start_y = min_y; batch_start_y <= max_y; batch_start_y += SCANLINE_BATCH) {
+    for (WORD batch_start_y = min_y; width > 0 && batch_start_y <= max_y; batch_start_y += SCANLINE_BATCH) {
         WORD batch_height = (batch_start_y + SCANLINE_BATCH <= max_y + 1)
                               ? SCANLINE_BATCH
                               : (max_y - batch_start_y + 1);
@@ -558,151 +465,36 @@ static void CybergfxDrawAACircleRastPort(struct RenderContext *rctx, UWORD x, UW
         /* Read entire batch from raster port */
         BOOL batch_ok = FALSE;
         if (batch_buffer) {
-            batch_ok = ReadPixelArray(batch_buffer, 0, 0, (ULONG)width * 4, rctx->target_rastport,
+            batch_ok = ReadPixelArray(batch_buffer, 0, 0, (ULONG)width * 4, rp,
                                       min_x, batch_start_y, width, batch_height, CYBERGFX_PIXELFORMAT_ARGB32);
-        }
-
-        /* Reset dirty flags */
-        for (WORD i = 0; i < batch_height; ++i) {
-            batch_dirty[i] = FALSE;
         }
 
         BOOL any_dirty = FALSE;
 
         for (WORD row_in_batch = 0; row_in_batch < batch_height; ++row_in_batch) {
             WORD py = batch_start_y + row_in_batch;
-            ULONG *row_buffer = batch_buffer + (row_in_batch * width);
-
             float rel_y = (py + 0.5f) - y;
-            WORD px = 0;
-
-            if (batch_ok && cybergfx_get_simd_level() == CYBERGFX_SIMD_AVX2) {
-                for (; px <= width - 8; px += 8) {
-                    for (WORD i = 0; i < 8; i++) rel_x_buf[i] = (min_x + px + i + 0.5f) - x;
-                    float dist[8];
-                    cybergfx_sdf_circle_batch8(rel_x_buf, rel_y, radius, dist);
-
-                    float fill_a[8], border_a[8];
-                    cybergfx_circle_alphas_batch8(dist, border_width, fill_color != NULL, border_color != NULL, fill_a, border_a);
-
-                    ULONG bg_pixels[8];
-                    memcpy(bg_pixels, row_buffer + px, sizeof(bg_pixels));
-
-                    ULONG result_pixels[8];
-                    ULONG changed_mask;
-                    cybergfx_blend_aa_pixels_batch8(bg_pixels, fill_a, border_a,
-                                                    fill_color ? fill_color->r : 0,
-                                                    fill_color ? fill_color->g : 0,
-                                                    fill_color ? fill_color->b : 0,
-                                                    fill_color ? (fill_color->a / 255.0f) : 0.0f,
-                                                    border_color ? border_color->r : 0,
-                                                    border_color ? border_color->g : 0,
-                                                    border_color ? border_color->b : 0,
-                                                    border_color ? (border_color->a / 255.0f) : 0.0f,
-                                                    fill_color != NULL, border_color != NULL,
-                                                    result_pixels, &changed_mask, &zunegfx_logical_layout);
-
-                    if (changed_mask) {
-                        for (WORD i = 0; i < 8; i++) {
-                            if (changed_mask & (1u << i)) row_buffer[px + i] = result_pixels[i];
-                        }
-                        batch_dirty[row_in_batch] = TRUE;
-                        any_dirty = TRUE;
-                    }
-                }
-            }
 
             if (batch_ok) {
-                for (; px <= width - 4; px += 4) {
-                    for (WORD i = 0; i < 4; i++) rel_x_buf[i] = (min_x + px + i + 0.5f) - x;
-                    float dist[4];
-                    cybergfx_sdf_circle_batch4(rel_x_buf, rel_y, radius, dist);
-
-                    float fill_a[4], border_a[4];
-                    cybergfx_circle_alphas_batch4(dist, border_width, fill_color != NULL, border_color != NULL, fill_a, border_a);
-
-                    ULONG bg_pixels[4];
-                    memcpy(bg_pixels, row_buffer + px, sizeof(bg_pixels));
-
-                    ULONG result_pixels[4];
-                    ULONG changed_mask;
-                    cybergfx_blend_aa_pixels_batch4(bg_pixels, fill_a, border_a,
-                                                    fill_color ? fill_color->r : 0,
-                                                    fill_color ? fill_color->g : 0,
-                                                    fill_color ? fill_color->b : 0,
-                                                    fill_color ? (fill_color->a / 255.0f) : 0.0f,
-                                                    border_color ? border_color->r : 0,
-                                                    border_color ? border_color->g : 0,
-                                                    border_color ? border_color->b : 0,
-                                                    border_color ? (border_color->a / 255.0f) : 0.0f,
-                                                    fill_color != NULL, border_color != NULL,
-                                                    result_pixels, &changed_mask, &zunegfx_logical_layout);
-
-                    if (changed_mask) {
-                        for (WORD i = 0; i < 4; i++) {
-                            if (changed_mask & (1u << i)) row_buffer[px + i] = result_pixels[i];
-                        }
-                        batch_dirty[row_in_batch] = TRUE;
-                        any_dirty = TRUE;
-                    }
-                }
+                batch_dirty[row_in_batch] =
+                    CybergfxAACircleRow(batch_buffer + (row_in_batch * width), width, rel_x0, rel_y, radius,
+                                        border_width, fill_color, border_color, &zunegfx_logical_layout);
+                any_dirty |= batch_dirty[row_in_batch];
+                continue;
             }
 
-            for (; px < width; px++) {
-                float rel_x = (min_x + px + 0.5f) - x;
-                float dist = sqrtf(rel_x * rel_x + rel_y * rel_y) - radius;
+            /* No batch buffer: four pixels at a time through ReadRGBPixel */
+            for (WORD px = 0; px < width; px += 4) {
+                WORD valid = (width - px < 4) ? width - px : 4;
+                ULONG chunk[4], orig[4];
 
-                ULONG bg = batch_ok ? row_buffer[px] : ReadRGBPixel(rctx->target_rastport, min_x + px, py);
-                UBYTE bg_a, bg_r, bg_g, bg_b;
-                extract_argb32(bg, &bg_a, &bg_r, &bg_g, &bg_b);
-
-                BOOL pixel_changed = FALSE;
-
-                if (border_width > 0.0f && border_color != NULL) {
-                    if (fill_color != NULL) {
-                        float outer_alpha = 1.0f - smoothstep(-0.5f, 0.5f, dist);
-
-                        if (outer_alpha > 0.01f) {
-                            float border_threshold = -border_width;
-                            float blend_factor = smoothstep(border_threshold - 0.5f, border_threshold + 0.5f, dist);
-
-                            UBYTE final_r = (UBYTE)(blend_factor * fill_color->r + (1.0f - blend_factor) * border_color->r);
-                            UBYTE final_g = (UBYTE)(blend_factor * fill_color->g + (1.0f - blend_factor) * border_color->g);
-                            UBYTE final_b = (UBYTE)(blend_factor * fill_color->b + (1.0f - blend_factor) * border_color->b);
-                            UBYTE final_a = (UBYTE)(blend_factor * fill_color->a + (1.0f - blend_factor) * border_color->a);
-
-                            float final_alpha = (final_a / 255.0f) * outer_alpha;
-                            blend_over(&bg_r, &bg_g, &bg_b, final_r, final_g, final_b, final_alpha);
-                            pixel_changed = TRUE;
-                        }
-                    } else {
-                        float half_border = border_width * 0.5f;
-                        float border_alpha = 1.0f - smoothstep(-half_border - 0.5f, half_border + 0.5f, fabsf(dist));
-
-                        if (border_alpha > 0.01f) {
-                            float final_border_alpha = (border_color->a / 255.0f) * border_alpha;
-                            blend_over(&bg_r, &bg_g, &bg_b, border_color->r, border_color->g, border_color->b, final_border_alpha);
-                            pixel_changed = TRUE;
-                        }
-                    }
-                } else if (fill_color != NULL) {
-                    float fill_alpha = 1.0f - smoothstep(-0.5f, 0.5f, dist);
-
-                    if (fill_alpha > 0.01f) {
-                        float final_fill_alpha = (fill_color->a / 255.0f) * fill_alpha;
-                        blend_over(&bg_r, &bg_g, &bg_b, fill_color->r, fill_color->g, fill_color->b, final_fill_alpha);
-                        pixel_changed = TRUE;
-                    }
-                }
-
-                if (pixel_changed) {
-                    ULONG final_color = make_argb32(bg_a, bg_r, bg_g, bg_b);
-                    if (batch_ok) {
-                        row_buffer[px] = final_color;
-                        batch_dirty[row_in_batch] = TRUE;
-                        any_dirty = TRUE;
-                    } else {
-                        WriteRGBPixel(rctx->target_rastport, min_x + px, py, final_color);
+                for (WORD i = 0; i < valid; i++)
+                    chunk[i] = orig[i] = ReadRGBPixel(rp, min_x + px + i, py);
+                if (CybergfxAACircleRow(chunk, valid, rel_x0 + px, rel_y, radius, border_width, fill_color,
+                                        border_color, &zunegfx_logical_layout)) {
+                    for (WORD i = 0; i < valid; i++) {
+                        if (chunk[i] != orig[i])
+                            WriteRGBPixel(rp, min_x + px + i, py, chunk[i]);
                     }
                 }
             }
@@ -719,7 +511,7 @@ static void CybergfxDrawAACircleRastPort(struct RenderContext *rctx, UWORD x, UW
                     /* Write contiguous dirty region */
                     WORD write_height = i - write_start;
                     WritePixelArray(batch_buffer + (write_start * width), 0, 0, (ULONG)width * 4,
-                                    rctx->target_rastport, min_x, batch_start_y + write_start, width, write_height,
+                                    rp, min_x, batch_start_y + write_start, width, write_height,
                                     CYBERGFX_PIXELFORMAT_ARGB32);
                     write_start = -1;
                 }

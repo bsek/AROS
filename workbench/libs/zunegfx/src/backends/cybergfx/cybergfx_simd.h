@@ -107,12 +107,6 @@ void cybergfx_blend_aa_pixels_batch4(
     ULONG *changed_mask, const struct ZunePixelLayout *dl);
 
 /* Batch pixel blending for 8 pixels (AVX2 optimized) */
-void cybergfx_blend_aa_pixels_batch8(
-    const ULONG bg_pixels[8], const float alphaFill[8],
-    const float alphaLine[8], UBYTE fc_r, UBYTE fc_g, UBYTE fc_b,
-    float fc_alpha_scale, UBYTE o_r, UBYTE o_g, UBYTE o_b, float o_alpha_scale,
-    BOOL hasFill, BOOL hasBorder, ULONG result_pixels[8],
-    ULONG *changed_mask, const struct ZunePixelLayout *dl);
 
 /* Pack RGBA components into ARGB32 format (batch of 4)
  *
@@ -136,16 +130,6 @@ void cybergfx_blit_argb32_unity(const UBYTE *src, ULONG *dst, LONG width,
                                 const struct ZunePixelLayout *dl);
 
 /* Circle helpers */
-void cybergfx_sdf_circle_batch4(const float rel_x[4], float rel_y, float radius,
-                                float dist_out[4]);
-void cybergfx_sdf_circle_batch8(const float rel_x[8], float rel_y, float radius,
-                                float dist_out[8]);
-void cybergfx_circle_alphas_batch4(const float dist[4], float border_width,
-                                   BOOL hasFill, BOOL hasBorder, float fill_a[4],
-                                   float border_a[4]);
-void cybergfx_circle_alphas_batch8(const float dist[8], float border_width,
-                                   BOOL hasFill, BOOL hasBorder, float fill_a[8],
-                                   float border_a[8]);
 
 /* Texture alpha blending - batch operations for ARGB32 textures
  *
