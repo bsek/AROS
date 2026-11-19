@@ -22,6 +22,15 @@
 #include "../zunegfx_intern.h"
 #include "graphics/gfx.h"
 
+/*
+ * Half-width of the antialiasing band, centred on a shape's edge. The CPU
+ * rasterisers and the GLSL shaders both read it, so the backends cover the
+ * same pixels. At 0.5 a pixel-aligned straight edge is fully crisp.
+ */
+#define ZUNE_AA_HALF_BAND 0.5
+#define ZUNE_STR_(x) #x
+#define ZUNE_STR(x) ZUNE_STR_(x)
+
 /*****************************************************************************/
 /* Backend Type Enumeration */
 /*****************************************************************************/

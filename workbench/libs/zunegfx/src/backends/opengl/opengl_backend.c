@@ -482,6 +482,20 @@ BOOL OpenGL_SwitchToDrawingBoard(struct RenderContext *rctx)
 }
 
 /*
+ * Blending is on with straight alpha unless a draw says otherwise. Only
+ * window switches used to set it, so a DrawingBoard inherited whatever the
+ * last draw left behind. Pass-through so it wraps the switch result.
+ */
+static BOOL OpenGL_SetDefaultBlend(BOOL switched)
+{
+    if (switched) {
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    }
+    return switched;
+}
+
+/*
  * OpenGL_SwitchToTarget - Unified function to switch GL context to any target
  *
  * Determines if the RenderContext targets a Window or DrawingBoard and calls
@@ -505,7 +519,7 @@ BOOL OpenGL_SwitchToTarget(struct RenderContext *rctx)
             g_opengl_priv->current_board != rctx->target_board) {
             OpenGL_BatchFlush(rctx);
         }
-        return OpenGL_SwitchToDrawingBoard(rctx);
+        return OpenGL_SetDefaultBlend(OpenGL_SwitchToDrawingBoard(rctx));
     }
 
     {
@@ -521,7 +535,7 @@ BOOL OpenGL_SwitchToTarget(struct RenderContext *rctx)
     }
 
     /* Otherwise it's a Window-based RastPort */
-    return OpenGL_SwitchToWindow(rctx);
+    return OpenGL_SetDefaultBlend(OpenGL_SwitchToWindow(rctx));
 }
 
 /*

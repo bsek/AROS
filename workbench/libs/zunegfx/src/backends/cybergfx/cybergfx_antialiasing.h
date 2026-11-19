@@ -9,24 +9,9 @@
 #define DEBUG 0
 #include <aros/debug.h>
 
-#define CYBERGFX_AA_SMOOTHNESS 0.8f /* Sharper edges for UI elements */
+#define CYBERGFX_AA_SMOOTHNESS ((float)ZUNE_AA_HALF_BAND)
 #define CYBERGFX_AA_MIN_ALPHA_THRESHOLD 0.005f
 extern float cybergfx_aa_smoothness;
-
-/*
- * Corner distance cache for common radii.
- * Pre-computed sqrt(dx^2 + dy^2) for corner pixels.
- * Max radius 15, max offset 15+AA_padding = ~18 pixels from corner center.
- */
-#define CYBERGFX_CORNER_CACHE_MAX_RADIUS 15
-#define CYBERGFX_CORNER_CACHE_SIZE 40 /* radius + AA padding */
-
-typedef struct {
-    float dist[CYBERGFX_CORNER_CACHE_SIZE][CYBERGFX_CORNER_CACHE_SIZE];
-    BOOL valid;
-} CybergfxCornerCache;
-
-extern CybergfxCornerCache cybergfx_corner_cache;
 
 /* Fast inverse square root (Quake III algorithm) */
 static inline float fast_invsqrt(float x) {
@@ -45,36 +30,6 @@ static inline float fast_sqrtf(float x) {
     return x * fast_invsqrt(x);
 }
 
-/* Initialize corner distance cache */
-static inline void cybergfx_init_corner_cache(void) {
-    if (cybergfx_corner_cache.valid)
-        return;
-
-    for (WORD dy = 0; dy < CYBERGFX_CORNER_CACHE_SIZE; dy++) {
-        for (WORD dx = 0; dx < CYBERGFX_CORNER_CACHE_SIZE; dx++) {
-            /* Pre-compute distance from origin for each integer offset */
-            float fdx = (float)dx + 0.5f; /* pixel center */
-            float fdy = (float)dy + 0.5f;
-            cybergfx_corner_cache.dist[dy][dx] = sqrtf(fdx * fdx + fdy * fdy);
-        }
-    }
-    cybergfx_corner_cache.valid = TRUE;
-}
-
-/* Fast corner distance lookup - returns distance from corner center */
-static inline float cybergfx_corner_dist_lookup(WORD dx, WORD dy) {
-    WORD adx = dx < 0 ? -dx : dx;
-    WORD ady = dy < 0 ? -dy : dy;
-
-    if (adx < CYBERGFX_CORNER_CACHE_SIZE && ady < CYBERGFX_CORNER_CACHE_SIZE) {
-        return cybergfx_corner_cache.dist[ady][adx];
-    }
-    /* Fallback for large values */
-    float fdx = (float)adx + 0.5f;
-    float fdy = (float)ady + 0.5f;
-    return fast_sqrtf(fdx * fdx + fdy * fdy);
-}
-
 /* Legacy aliases - use pack_argb32/unpack_argb32 from cybergfx_pixel_format.h */
 #define extract_pixel_value(pixel, a, r, g, b) unpack_argb32(pixel, a, r, g, b)
 #define make_pixel_value(a, r, g, b) pack_argb32(a, r, g, b)
@@ -84,42 +39,6 @@ static inline float rfpart(float input) { return 1.0f - (input - floorf(input));
 static inline float fpart(float input) { return input - floorf(input); }
 
 static inline LONG cybergfx_fast_ftoi(float f) { return (LONG)(f + 0.5f); }
-
-static inline float sdf_roundrect(float x, float y, float width, float height, float r) {
-    float px = fabsf(x) - (width - r);
-    float py = fabsf(y) - (height - r);
-
-    float dx = fmaxf(px, 0.0f);
-    float dy = fmaxf(py, 0.0f);
-
-    float outside;
-    if (dx > 0.0f && dy > 0.0f) {
-        /* In corner region - use cached distance lookup if possible */
-        WORD idx = (WORD)dx;
-        WORD idy = (WORD)dy;
-        if (idx < CYBERGFX_CORNER_CACHE_SIZE && idy < CYBERGFX_CORNER_CACHE_SIZE && cybergfx_corner_cache.valid) {
-            /* Interpolate between cached integer positions for sub-pixel accuracy */
-            outside = cybergfx_corner_cache.dist[idy][idx];
-        } else {
-            D(bug("sdf_roundrect: cache miss idx=%d idy=%d (max=%d)\n", idx, idy, CYBERGFX_CORNER_CACHE_SIZE));
-            outside = fast_sqrtf(dx * dx + dy * dy);
-        }
-    } else {
-        /* On straight edge - no sqrt needed, just use the max component */
-        outside = fmaxf(dx, dy);
-    }
-
-    float inside = fminf(fmaxf(px, py), 0.0f);
-
-    return outside + inside - r;
-}
-
-static inline void mix(struct InternalColor a, struct InternalColor b, float t, UBYTE *ca, UBYTE *cr, UBYTE *cg, UBYTE *cb) {
-    *cr = (UBYTE)((1.0f - t) * a.r + t * b.r);
-    *cg = (UBYTE)((1.0f - t) * a.g + t * b.g);
-    *cb = (UBYTE)((1.0f - t) * a.b + t * b.b);
-    *ca = (UBYTE)((1.0f - t) * a.a + t * b.a);
-}
 
 static inline void blend_over(UBYTE *r, UBYTE *g, UBYTE *b, UBYTE cr, UBYTE cg, UBYTE cb, float a) {
     /* Fixed-point blending: alpha scaled to 0-256 for efficient integer math */
@@ -135,14 +54,6 @@ static inline float clamp(float x, float a, float b) { return x < a ? a : (x > b
 static inline float smoothstep(float edge0, float edge1, float x) {
     float t = clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
     return t * t * (3.0f - 2.0f * t);
-}
-
-static inline void mul(struct InternalColor color1, struct InternalColor color2, UBYTE *r, UBYTE *g, UBYTE *b, UBYTE *a) {
-    /* Integer multiply with divide by 255: (a*b + 127) / 255 ≈ (a*b + 128) >> 8 for speed */
-    *r = (UBYTE)(((UWORD)color1.r * color2.r + 128) / 255);
-    *g = (UBYTE)(((UWORD)color1.g * color2.g + 128) / 255);
-    *b = (UBYTE)(((UWORD)color1.b * color2.b + 128) / 255);
-    *a = (UBYTE)(((UWORD)color1.a * color2.a + 128) / 255);
 }
 
 /* Structure to hold AA rectangle computation parameters */
@@ -184,58 +95,18 @@ static inline void cybergfx_compute_aa_rect_params(UWORD x, UWORD y, UWORD width
     params->aa_edge_pos = cybergfx_aa_smoothness;
 }
 
-/* Compute alpha values for fill and border from SDF distances */
-static inline void cybergfx_compute_alphas(float dist_inner, float dist_outer, float aa_edge_neg, float aa_edge_pos, BOOL hasFill, BOOL hasBorder,
-                                           float *alphaFill, float *alphaLine) {
-
-    float alphaOuter = 0.0f;
-    float alphaInner = 0.0f;
-
-    if (hasFill || hasBorder) {
-        alphaOuter = 1.0f - smoothstep(aa_edge_neg, aa_edge_pos, dist_outer);
+/*
+ * The fill runs under the border. Composited first, with the border blended
+ * over it, a plain fill alpha would leak fill colour into the antialiased
+ * outer edge. Rescale it so the pair gives exact coverage. line[] is the ring
+ * coverage, border_a the border colour's alpha (0..1).
+ */
+static inline void cybergfx_fill_under_border(float *fill, const float *line, WORD n, float border_a) {
+    for (WORD i = 0; i < n; i++) {
+        float ring = line[i] * border_a;
+        float rest = 1.0f - ring;
+        fill[i] = rest > 1e-4f ? clamp((fill[i] - ring) / rest, 0.0f, 1.0f) : 0.0f;
     }
-    if (hasBorder) {
-        alphaInner = 1.0f - smoothstep(aa_edge_neg, aa_edge_pos, dist_inner);
-        *alphaLine = clamp(alphaOuter - alphaInner, 0.0f, 1.0f);
-    } else {
-        *alphaLine = 0.0f;
-    }
-    if (hasFill) {
-        if (hasBorder) {
-            float interior_cover = 1.0f - smoothstep(0.0f, aa_edge_pos, dist_inner);
-            *alphaFill = clamp(interior_cover, 0.0f, 1.0f);
-        } else {
-            *alphaFill = alphaOuter;
-        }
-    } else {
-        *alphaFill = 0.0f;
-    }
-}
-
-/* Blend fill and border colors onto background pixel */
-static inline BOOL cybergfx_blend_aa_pixel(UBYTE *bg_r, UBYTE *bg_g, UBYTE *bg_b, float alphaFill, float alphaLine, UBYTE fc_r, UBYTE fc_g,
-                                           UBYTE fc_b, float fc_alpha_scale, UBYTE o_r, UBYTE o_g, UBYTE o_b, float o_alpha_scale, BOOL hasFill,
-                                           BOOL hasBorder) {
-
-    BOOL pixel_changed = FALSE;
-
-    if (hasFill && alphaFill > CYBERGFX_AA_MIN_ALPHA_THRESHOLD) {
-        float final_alpha = fc_alpha_scale * alphaFill;
-        if (final_alpha > 0.0f) {
-            blend_over(bg_r, bg_g, bg_b, fc_r, fc_g, fc_b, final_alpha);
-            pixel_changed = TRUE;
-        }
-    }
-
-    if (hasBorder && alphaLine > CYBERGFX_AA_MIN_ALPHA_THRESHOLD) {
-        float final_alpha = o_alpha_scale * alphaLine;
-        if (final_alpha > 0.0f) {
-            blend_over(bg_r, bg_g, bg_b, o_r, o_g, o_b, final_alpha);
-            pixel_changed = TRUE;
-        }
-    }
-
-    return pixel_changed;
 }
 
 #endif

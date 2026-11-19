@@ -298,9 +298,6 @@ static BOOL CybergfxInitBackend(ZuneBackendContext *ctx) {
     ctx->initialized = TRUE;
     cybergfx_backend.available = TRUE;
 
-    /* Initialize corner distance cache for fast AA rendering */
-    cybergfx_init_corner_cache();
-
     D(bug("CybergfxInitBackend: Backend initialized successfully (caps=0x%08x)\n", ctx->capabilities));
     EXIT_FUNCTION("CybergfxInitBackend");
     return TRUE;

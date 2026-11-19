@@ -613,7 +613,6 @@ void OpenGLDrawText(struct RenderContext *rctx, WORD x, WORD y,
     /* Restore state */
     glDisable(GL_TEXTURE_2D);
     glUseProgram_ptr(0);
-    glDisable(GL_BLEND);
 
     OpenGL_FlushIfNotBatching(rctx);
 

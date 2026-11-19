@@ -337,7 +337,6 @@ void OpenGL_BlitFBOToFBO(struct DrawingBoard *src, struct DrawingBoard *dst,
     glEnd();
 
     glDisable(GL_TEXTURE_2D);
-    glDisable(GL_BLEND);
     glBindTexture(GL_TEXTURE_2D, 0);
 
     /* Mark destination as dirty */

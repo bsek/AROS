@@ -332,6 +332,9 @@ void OpenGLDrawRectangle(struct RenderContext *rctx, WORD x, WORD y,
                     glUniform1f_ptr(g_uniform_has_border, has_border ? 1.0f : 0.0f);
             }
 
+            /* The shader writes premultiplied colour */
+            glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
             /* Draw the quad using VBO if available, otherwise immediate mode */
             if (g_vbo_available && g_quad_vbo != 0 && glBindBuffer_ptr) {
                 glPushMatrix();
@@ -363,6 +366,7 @@ void OpenGLDrawRectangle(struct RenderContext *rctx, WORD x, WORD y,
             }
 
             /* Cleanup */
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
             if (use_textured_shader) {
                 glDisable(GL_TEXTURE_2D);
                 if (brush_texture != 0) {

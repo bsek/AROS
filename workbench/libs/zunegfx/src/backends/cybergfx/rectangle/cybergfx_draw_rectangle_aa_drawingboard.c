@@ -83,7 +83,7 @@ static BOOL cybergfx_prefill_solid_core_board(struct DrawingBoard *board, const 
 
     float margin = cybergfx_aa_smoothness;
     if (hasBorder) {
-        margin += params->halfLine;
+        margin += 2.0f * params->halfLine;
     }
     float inset = fmaxf(params->max_radius, margin);
 
@@ -195,10 +195,10 @@ void CybergfxAARectangleDrawingBoard(struct DrawingBoard *board, UWORD x, UWORD 
     ULONG pitch_pixels = board->pitch / 4;
     float base_rel_x = 0.5f - params.center_x;
 
-    /* Pre-compute outer dimensions for border */
-    float outer_half_w = params.half_w + params.halfLine;
-    float outer_half_h = params.half_h + params.halfLine;
-    float outer_radius = params.max_radius + params.halfLine;
+    /* The border lies inside the rectangle, so the rectangle is its outer edge */
+    float outer_half_w = params.half_w;
+    float outer_half_h = params.half_h;
+    float outer_radius = params.max_radius;
 
     for (WORD py = params.min_y; py <= params.max_y; ++py) {
         float rel_y = (py + 0.5f) - params.center_y;
@@ -229,11 +229,17 @@ void CybergfxAARectangleDrawingBoard(struct DrawingBoard *board, UWORD x, UWORD 
                 continue;
             }
 
+            /* Inner edge of the border: the same shape offset inward by its width */
             float dist_inner[4];
-            cybergfx_sdf_roundrect_batch4(rel_x, rel_y, params.half_w, params.half_h, params.max_radius, dist_inner);
+            for (WORD i = 0; i < 4; ++i) {
+                dist_inner[i] = dist_outer[i] + line_width;
+            }
 
             float alphaFill[4] = {0}, alphaLine[4] = {0};
             cybergfx_compute_alphas_batch4(dist_inner, dist_outer, params.aa_edge_neg, params.aa_edge_pos, hasFill, hasBorder, alphaFill, alphaLine);
+            if (hasFill && hasBorder) {
+                cybergfx_fill_under_border(alphaFill, alphaLine, 4, o_alpha_scale);
+            }
 
             UBYTE fc_r[4], fc_g[4], fc_b[4];
             if (hasFill) {

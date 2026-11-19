@@ -11,6 +11,3 @@
 #include "cybergfx_backend.h"
 
 float cybergfx_aa_smoothness = CYBERGFX_AA_SMOOTHNESS;
-
-/* Corner distance cache - pre-computed sqrt values for corner pixels */
-CybergfxCornerCache cybergfx_corner_cache = { .valid = FALSE };

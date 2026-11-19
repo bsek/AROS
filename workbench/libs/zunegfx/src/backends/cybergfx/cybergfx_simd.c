@@ -96,15 +96,8 @@ static inline float sdf_roundrect_scalar(float x, float y, float half_w,
 
   float outside;
   if (dx > 0.0f && dy > 0.0f) {
-    /* In corner region - use cached distance lookup if possible */
-    WORD idx = (WORD)dx;
-    WORD idy = (WORD)dy;
-    if (idx < CYBERGFX_CORNER_CACHE_SIZE && idy < CYBERGFX_CORNER_CACHE_SIZE && cybergfx_corner_cache.valid) {
-      outside = cybergfx_corner_cache.dist[idy][idx];
-    } else {
-      D(bug("sdf_roundrect_scalar: cache miss idx=%d idy=%d (max=%d)\n", idx, idy, CYBERGFX_CORNER_CACHE_SIZE));
-      outside = fast_sqrtf(dx * dx + dy * dy);
-    }
+    /* In corner region */
+    outside = fast_sqrtf(dx * dx + dy * dy);
   } else {
     /* On straight edge - no sqrt needed */
     outside = fmaxf(dx, dy);
@@ -257,13 +250,8 @@ static void cybergfx_compute_alphas_batch4_scalar(
       alphaLine_out[i] = 0.0f;
     }
     if (hasFill) {
-      if (hasBorder) {
-        float interior_cover =
-            1.0f - smoothstep_scalar(0.0f, aa_edge_pos, dist_inner[i]);
-        alphaFill_out[i] = clamp_scalar(interior_cover, 0.0f, 1.0f);
-      } else {
-        alphaFill_out[i] = alphaOuter;
-      }
+      /* Runs under the border, see cybergfx_fill_under_border() */
+      alphaFill_out[i] = alphaOuter;
     } else {
       alphaFill_out[i] = 0.0f;
     }
@@ -427,11 +415,6 @@ static void cybergfx_compute_alphas_batch4_sse2(
   }
 
   __m128 alphaFill = alphaOuter;
-  if (hasBorder) {
-    __m128 interior_cover =
-        _mm_sub_ps(one, cybergfx_smoothstep_ps(zero, edge_pos, d_inner));
-    alphaFill = cybergfx_clamp_ps(interior_cover, zero, one);
-  }
 
   if (hasFill) {
     _mm_storeu_ps(alphaFill_out, alphaFill);
@@ -541,11 +524,6 @@ static void CYBERGFX_TARGET_AVX2 cybergfx_compute_alphas_batch8_avx2(
   }
 
   __m256 alphaFill = alphaOuter;
-  if (hasBorder) {
-    __m256 interior_cover = _mm256_sub_ps(
-        one, cybergfx_smoothstep_ps256(zero, edge_pos, d_inner));
-    alphaFill = cybergfx_clamp_ps256(interior_cover, zero, one);
-  }
 
   if (hasFill) {
     _mm256_storeu_ps(alphaFill_out, alphaFill);
@@ -642,11 +620,6 @@ static void cybergfx_compute_alphas_batch4_neon(
   }
 
   float32x4_t alphaFill = alphaOuter;
-  if (hasBorder) {
-    float32x4_t interior_cover =
-        vsubq_f32(one, cybergfx_smoothstep_f32(zero, edge_pos, d_inner));
-    alphaFill = cybergfx_clamp_f32_alpha(interior_cover, zero, one);
-  }
 
   if (hasFill) {
     vst1q_f32(alphaFill_out, alphaFill);
