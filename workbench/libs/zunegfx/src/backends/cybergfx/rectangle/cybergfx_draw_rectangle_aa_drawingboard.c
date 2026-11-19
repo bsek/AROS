@@ -203,7 +203,7 @@ void CybergfxAARectangleDrawingBoard(struct DrawingBoard *board, UWORD x, UWORD 
     for (WORD py = params.min_y; py <= params.max_y; ++py) {
         float rel_y = (py + 0.5f) - params.center_y;
         float rel_y_abs = fabsf(rel_y);
-        if (rel_y_abs > outer_half_h + cybergfx_aa_smoothness) {
+        if (rel_y_abs > outer_half_h + CYBERGFX_AA_REACH) {
             continue;
         }
 
@@ -223,6 +223,12 @@ void CybergfxAARectangleDrawingBoard(struct DrawingBoard *board, UWORD x, UWORD 
             float dist_outer[4];
             cybergfx_sdf_roundrect_batch4(rel_x, rel_y, outer_half_w, outer_half_h, outer_radius, dist_outer);
 
+            float foot[4];
+            for (WORD i = 0; i < 4; ++i) {
+                foot[i] = cybergfx_rr_footprint(rel_x[i], rel_y, outer_half_w, outer_half_h, outer_radius);
+                dist_outer[i] /= foot[i];
+            }
+
             /* Early exit: if all 4 pixels are fully outside, skip this batch */
             if (dist_outer[0] > cybergfx_aa_smoothness && dist_outer[1] > cybergfx_aa_smoothness &&
                 dist_outer[2] > cybergfx_aa_smoothness && dist_outer[3] > cybergfx_aa_smoothness) {
@@ -232,7 +238,7 @@ void CybergfxAARectangleDrawingBoard(struct DrawingBoard *board, UWORD x, UWORD 
             /* Inner edge of the border: the same shape offset inward by its width */
             float dist_inner[4];
             for (WORD i = 0; i < 4; ++i) {
-                dist_inner[i] = dist_outer[i] + line_width;
+                dist_inner[i] = dist_outer[i] + line_width / foot[i];
             }
 
             float alphaFill[4] = {0}, alphaLine[4] = {0};

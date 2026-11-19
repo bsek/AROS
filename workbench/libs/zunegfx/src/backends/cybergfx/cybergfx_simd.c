@@ -96,8 +96,9 @@ static inline float sdf_roundrect_scalar(float x, float y, float half_w,
 
   float outside;
   if (dx > 0.0f && dy > 0.0f) {
-    /* In corner region */
-    outside = fast_sqrtf(dx * dx + dy * dy);
+    /* In corner region. Exact sqrt, as the SIMD paths: with a 1 px band
+     * the fast approximation's error shows up as coverage */
+    outside = sqrtf(dx * dx + dy * dy);
   } else {
     /* On straight edge - no sqrt needed */
     outside = fmaxf(dx, dy);
@@ -138,6 +139,11 @@ static inline float smoothstep_scalar(float edge0, float edge1, float x) {
 
 static inline float smoothstep_half_scalar(float x) {
   return smoothstep_scalar(-0.5f, 0.5f, x);
+}
+
+/* Linear coverage ramp: the box-filtered coverage of a straight edge */
+static inline float ramp_scalar(float edge0, float edge1, float x) {
+  return clamp_scalar((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
 }
 
 /* Circle SDF and alpha helpers (scalar fallbacks) */
@@ -240,11 +246,11 @@ static void cybergfx_compute_alphas_batch4_scalar(
 
     if (hasFill || hasBorder) {
       alphaOuter =
-          1.0f - smoothstep_scalar(aa_edge_neg, aa_edge_pos, dist_outer[i]);
+          1.0f - ramp_scalar(aa_edge_neg, aa_edge_pos, dist_outer[i]);
     }
     if (hasBorder) {
       alphaInner =
-          1.0f - smoothstep_scalar(aa_edge_neg, aa_edge_pos, dist_inner[i]);
+          1.0f - ramp_scalar(aa_edge_neg, aa_edge_pos, dist_inner[i]);
       alphaLine_out[i] = clamp_scalar(alphaOuter - alphaInner, 0.0f, 1.0f);
     } else {
       alphaLine_out[i] = 0.0f;
@@ -385,6 +391,12 @@ static void cybergfx_circle_alphas_batch4_sse2(const float dist[4],
   _mm_storeu_ps(border_a, ba);
 }
 
+/* Linear coverage ramp: the box-filtered coverage of a straight edge */
+static inline __m128 cybergfx_ramp_ps(__m128 edge0, __m128 edge1, __m128 x) {
+  __m128 t = _mm_div_ps(_mm_sub_ps(x, edge0), _mm_sub_ps(edge1, edge0));
+  return cybergfx_clamp_ps(t, _mm_set1_ps(0.0f), _mm_set1_ps(1.0f));
+}
+
 static void cybergfx_compute_alphas_batch4_sse2(
     const float dist_inner[4], const float dist_outer[4], float aa_edge_neg,
     float aa_edge_pos, BOOL hasFill, BOOL hasBorder, float alphaFill_out[4],
@@ -401,12 +413,12 @@ static void cybergfx_compute_alphas_batch4_sse2(
 
   if (hasFill || hasBorder) {
     alphaOuter =
-        _mm_sub_ps(one, cybergfx_smoothstep_ps(edge_neg, edge_pos, d_outer));
+        _mm_sub_ps(one, cybergfx_ramp_ps(edge_neg, edge_pos, d_outer));
   }
 
   if (hasBorder) {
     alphaInner =
-        _mm_sub_ps(one, cybergfx_smoothstep_ps(edge_neg, edge_pos, d_inner));
+        _mm_sub_ps(one, cybergfx_ramp_ps(edge_neg, edge_pos, d_inner));
     __m128 alphaLine =
         cybergfx_clamp_ps(_mm_sub_ps(alphaOuter, alphaInner), zero, one);
     _mm_storeu_ps(alphaLine_out, alphaLine);
@@ -483,15 +495,12 @@ static void CYBERGFX_TARGET_AVX2 cybergfx_sdf_roundrect_batch8_avx2(
   _mm256_storeu_ps(dist_out, result);
 }
 
+/* Linear coverage ramp: the box-filtered coverage of a straight edge */
 static inline __m256 CYBERGFX_TARGET_AVX2
-cybergfx_smoothstep_ps256(__m256 edge0, __m256 edge1, __m256 x) {
+cybergfx_ramp_ps256(__m256 edge0, __m256 edge1, __m256 x) {
   __m256 t =
       _mm256_div_ps(_mm256_sub_ps(x, edge0), _mm256_sub_ps(edge1, edge0));
-  t = cybergfx_clamp_ps256(t, _mm256_set1_ps(0.0f), _mm256_set1_ps(1.0f));
-  __m256 t2 = _mm256_mul_ps(t, t);
-  return _mm256_mul_ps(t2,
-                       _mm256_sub_ps(_mm256_set1_ps(3.0f),
-                                     _mm256_mul_ps(_mm256_set1_ps(2.0f), t)));
+  return cybergfx_clamp_ps256(t, _mm256_set1_ps(0.0f), _mm256_set1_ps(1.0f));
 }
 
 static void CYBERGFX_TARGET_AVX2 cybergfx_compute_alphas_batch8_avx2(
@@ -510,12 +519,12 @@ static void CYBERGFX_TARGET_AVX2 cybergfx_compute_alphas_batch8_avx2(
 
   if (hasFill || hasBorder) {
     alphaOuter = _mm256_sub_ps(
-        one, cybergfx_smoothstep_ps256(edge_neg, edge_pos, d_outer));
+        one, cybergfx_ramp_ps256(edge_neg, edge_pos, d_outer));
   }
 
   if (hasBorder) {
     alphaInner = _mm256_sub_ps(
-        one, cybergfx_smoothstep_ps256(edge_neg, edge_pos, d_inner));
+        one, cybergfx_ramp_ps256(edge_neg, edge_pos, d_inner));
     __m256 alphaLine =
         cybergfx_clamp_ps256(_mm256_sub_ps(alphaOuter, alphaInner), zero, one);
     _mm256_storeu_ps(alphaLine_out, alphaLine);
@@ -581,13 +590,11 @@ cybergfx_clamp_f32_alpha(float32x4_t v, float32x4_t lo, float32x4_t hi) {
   return vminq_f32(vmaxq_f32(v, lo), hi);
 }
 
+/* Linear coverage ramp: the box-filtered coverage of a straight edge */
 static inline float32x4_t
-cybergfx_smoothstep_f32(float32x4_t edge0, float32x4_t edge1, float32x4_t x) {
+cybergfx_ramp_f32(float32x4_t edge0, float32x4_t edge1, float32x4_t x) {
   float32x4_t t = vdivq_f32(vsubq_f32(x, edge0), vsubq_f32(edge1, edge0));
-  t = cybergfx_clamp_f32_alpha(t, vdupq_n_f32(0.0f), vdupq_n_f32(1.0f));
-  float32x4_t t2 = vmulq_f32(t, t);
-  return vmulq_f32(
-      t2, vsubq_f32(vdupq_n_f32(3.0f), vmulq_f32(vdupq_n_f32(2.0f), t)));
+  return cybergfx_clamp_f32_alpha(t, vdupq_n_f32(0.0f), vdupq_n_f32(1.0f));
 }
 
 static void cybergfx_compute_alphas_batch4_neon(
@@ -606,12 +613,12 @@ static void cybergfx_compute_alphas_batch4_neon(
 
   if (hasFill || hasBorder) {
     alphaOuter =
-        vsubq_f32(one, cybergfx_smoothstep_f32(edge_neg, edge_pos, d_outer));
+        vsubq_f32(one, cybergfx_ramp_f32(edge_neg, edge_pos, d_outer));
   }
 
   if (hasBorder) {
     alphaInner =
-        vsubq_f32(one, cybergfx_smoothstep_f32(edge_neg, edge_pos, d_inner));
+        vsubq_f32(one, cybergfx_ramp_f32(edge_neg, edge_pos, d_inner));
     float32x4_t alphaLine =
         cybergfx_clamp_f32_alpha(vsubq_f32(alphaOuter, alphaInner), zero, one);
     vst1q_f32(alphaLine_out, alphaLine);

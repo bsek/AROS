@@ -11,6 +11,9 @@
 
 #define CYBERGFX_AA_SMOOTHNESS ((float)ZUNE_AA_HALF_BAND)
 #define CYBERGFX_AA_MIN_ALPHA_THRESHOLD 0.005f
+/* Furthest a covered pixel can lie outside an edge: the band, widened by the
+ * diagonal footprint */
+#define CYBERGFX_AA_REACH (CYBERGFX_AA_SMOOTHNESS * 1.41421356f)
 extern float cybergfx_aa_smoothness;
 
 /* Fast inverse square root (Quake III algorithm) */
@@ -93,6 +96,21 @@ static inline void cybergfx_compute_aa_rect_params(UWORD x, UWORD y, UWORD width
 
     params->aa_edge_neg = -cybergfx_aa_smoothness;
     params->aa_edge_pos = cybergfx_aa_smoothness;
+}
+
+/*
+ * Width of a pixel measured along the edge normal of a rounded rectangle:
+ * 1 on the straight sides, up to sqrt(2) where a corner runs diagonally.
+ * Dividing the distance by it widens the ramp on curves only, so straight
+ * edges stay crisp. Same formula as the GLSL shader.
+ */
+static inline float cybergfx_rr_footprint(float x, float y, float half_w, float half_h, float r) {
+    float qx = fabsf(x) - (half_w - r);
+    float qy = fabsf(y) - (half_h - r);
+
+    if (qx <= 0.0f || qy <= 0.0f)
+        return 1.0f;
+    return (qx + qy) / sqrtf(qx * qx + qy * qy);
 }
 
 /*
