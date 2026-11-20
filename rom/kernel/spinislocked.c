@@ -9,6 +9,7 @@
 #include <aros/libcall.h>
 
 #include <kernel_base.h>
+#include <kernel_spinlock.h>
 
 /*****************************************************************************
 
@@ -46,8 +47,11 @@
 {
     AROS_LIBFUNC_INIT
 
-    /* The implementation of this function is architecture-specific */
+#if defined(KRNSPIN_ATOMICS)
+    return (lock->lock != SPINLOCK_UNLOCKED);
+#else
     return 0;
+#endif
 
     AROS_LIBFUNC_EXIT
 }

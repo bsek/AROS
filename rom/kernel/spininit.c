@@ -9,6 +9,7 @@
 #include <aros/libcall.h>
 
 #include <kernel_base.h>
+#include <kernel_spinlock.h>
 
 /*****************************************************************************
 
@@ -32,8 +33,7 @@
     RESULT
 
     NOTES
-        Initialization is architecture-specific; the generic fallback
-        does not modify the lock.
+        Without SMP support in the port this function does nothing.
 
     EXAMPLE
 
@@ -48,7 +48,11 @@
 {
     AROS_LIBFUNC_INIT
 
-    /* The implementation of this function is architecture-specific */
+#if defined(KRNSPIN_ATOMICS)
+    lock->lock = SPINLOCK_UNLOCKED;
+    lock->s_Owner = NULL;
+#endif
+
     return;
 
     AROS_LIBFUNC_EXIT

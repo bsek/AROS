@@ -15,12 +15,18 @@
 #include <aros/types/spinlock_s.h>
 #include <utility/hooks.h>
 
+#ifndef __KERNEL_NO_SPINLOCK_PROTOS__
 extern void Kernel_49_KrnSpinInit(spinlock_t *, void *);
+#endif
 #define EXEC_SPINLOCK_INIT(a) Kernel_49_KrnSpinInit((a), NULL)
+#ifndef __KERNEL_NO_SPINLOCK_PROTOS__
 extern spinlock_t *Kernel_52_KrnSpinLock(spinlock_t *, struct Hook *, ULONG, void *);
+#endif
 /* (lock, failhook, mode) - rom/exec passes all three. */
 #define EXEC_SPINLOCK_LOCK(a,b,c) Kernel_52_KrnSpinLock((a), (b), (c), NULL)
+#ifndef __KERNEL_NO_SPINLOCK_PROTOS__
 extern void Kernel_53_KrnSpinUnLock(spinlock_t *, void *);
+#endif
 #define EXEC_SPINLOCK_UNLOCK(a) Kernel_53_KrnSpinUnLock((a), NULL)
 
 /*

@@ -54,31 +54,6 @@ static inline BOOL core_AffinityMatch(struct Task *t, uint32_t cpumask)
     return (((uint32_t *)aff)[0] & cpumask) != 0;
 }
 
-/* Single attempt: everyone else takes task-lock before list-lock, so
- * blocking here (we hold the list lock) would be an AB-BA deadlock. */
-static inline BOOL core_TrySpinLockWrite(spinlock_t *lock)
-{
-    unsigned int lock_value, result;
-
-    asm volatile(
-            "1:     ldaxr   %w0, [%2]       \n\t"   // Load the lock value, gaining exclusive access
-            "       cbnz    %w0, 2f         \n\t"   // Taken - fail without spinning
-            "       stxr    %w1, %w3, [%2]  \n\t"   // Try to exclusively write the lock value
-            "       cbnz    %w1, 1b         \n\t"   // Exclusive access lost - re-examine the lock
-            "       b       3f              \n\t"
-            "2:     clrex                   \n\t"   // Drop the dangling exclusive monitor
-            "3:                             \n\t"
-            : "=&r"(lock_value), "=&r"(result)
-            : "r"(&lock->lock), "r"(SPINLOCKF_WRITE)
-            : "memory"
-    );
-
-    if (lock_value != 0)
-        return FALSE;
-
-    lock->s_Owner = GET_THIS_TASK;
-    return TRUE;
-}
 #endif
 
 /* Check if the currently running task on this cpu should be rescheduled */
@@ -257,8 +232,9 @@ dispatch_rescan:
         if (core_AffinityMatch(newtask, cpumask))
         {
             /* Lock before pulling it off the list, so the (state, list)
-             * change is atomic to anyone trusting tc_State. */
-            if (!core_TrySpinLockWrite(&newtask->tc_SpinLock))
+             * change is atomic to anyone trusting tc_State. A trylock:
+             * everyone else takes the task lock first (AB-BA). */
+            if (!KrnSpinTryLock(&newtask->tc_SpinLock, SPINLOCK_MODE_WRITE))
             {
                 sawContended = TRUE;
                 continue;

@@ -9,6 +9,16 @@
 #include <aros/libcall.h>
 
 #include <kernel_base.h>
+#include <kernel_spinlock.h>
+
+#if defined(KRNSPIN_ATOMICS)
+#include <exec/tasks.h>
+#define __KERNEL_NO_SPINLOCK_PROTOS__
+#include <exec_platform.h>
+
+/* Direct call: exec passes a NULL KernelBase */
+int Kernel_13_KrnIsSuper();
+#endif
 
 /*****************************************************************************
 
@@ -37,8 +47,11 @@
         be obtained on an implementation with spinlock support.
 
     NOTES
-        The generic fallback returns lock without acquiring it.
-        The implementation and availability are architecture-specific.
+        A write lock taken by a task records the task as its owner; a
+        caller in supervisor state records no owner.
+
+        Without SMP support in the port this function returns lock
+        without acquiring it.
 
     EXAMPLE
 
@@ -53,7 +66,17 @@
 {
     AROS_LIBFUNC_INIT
 
-    /* The implementation of this function is architecture-specific */
+#if defined(KRNSPIN_ATOMICS)
+    if (mode == SPINLOCK_MODE_WRITE)
+    {
+        if (!krnSpinTryWrite(lock))
+            return NULL;
+        lock->s_Owner = Kernel_13_KrnIsSuper() ? NULL : GET_THIS_TASK;
+    }
+    else if (!krnSpinTryRead(lock))
+        return NULL;
+#endif
+
     return lock;
 
     AROS_LIBFUNC_EXIT

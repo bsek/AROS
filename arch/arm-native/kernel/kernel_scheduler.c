@@ -51,37 +51,6 @@ static inline BOOL core_AffinityMatch(struct Task *t, uint32_t cpumask)
     return (((uint32_t *)aff)[0] & cpumask) != 0;
 }
 
-/*
- * Single-attempt write acquire. The dispatcher scans TaskReady holding
- * TaskReadySpinLock and must take each candidate's tc_SpinLock before
- * pulling it off the list - but every other tc_SpinLock user acquires
- * task-lock FIRST, list-lock second, so a blocking acquire here (list
- * before task) would be an AB-BA deadlock. Try once and skip the
- * candidate on contention instead.
- */
-static inline BOOL core_TrySpinLockWrite(spinlock_t *lock)
-{
-    unsigned long lock_value, result;
-
-    asm volatile(
-            "1:     ldrex   %0, [%2]        \n\t"   // Load the lock value, gaining exclusive access
-            "       teq     %0, #0          \n\t"   // Is the lock free?
-            "       bne     2f              \n\t"   // No - fail without spinning
-            "       strex   %1, %3, [%2]    \n\t"   // Try to exclusively write the lock value
-            "       teq     %1, #0          \n\t"   // Did it succeed?
-            "       bne     1b              \n\t"   // Exclusive access lost - re-examine the lock
-            "2:     clrex                   \n\t"   // Drop any dangling exclusive monitor
-            : "=&r"(lock_value), "=&r"(result)
-            : "r"(&lock->lock), "r"(0x80000000)
-            : "cc"
-    );
-
-    if (lock_value != 0)
-        return FALSE;
-
-    dmb();
-    return TRUE;
-}
 #endif
 
 /* Check if the currently running task on this cpu should be rescheduled */
@@ -275,9 +244,10 @@ dispatch_rescan:
              * Take tc_SpinLock before pulling the task off TaskReady so
              * the (state, list) transition is atomic to SetTaskPri /
              * Exec_ReschedTask, which trust tc_State under tc_SpinLock.
-             * See core_TrySpinLockWrite for why this must be a trylock.
+             * A trylock: everyone else takes the task lock first, so
+             * blocking here, holding the list lock, would be AB-BA.
              */
-            if (!core_TrySpinLockWrite(&newtask->tc_SpinLock))
+            if (!KrnSpinTryLock(&newtask->tc_SpinLock, SPINLOCK_MODE_WRITE))
             {
                 sawContended = TRUE;
                 continue;
