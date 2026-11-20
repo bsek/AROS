@@ -204,96 +204,40 @@ struct syscallx86_Handler x86_SCSwitchHandler =
     (APTR)X86_HandleSwitch
 };
 
-#if defined(__AROSEXEC_SMP__)
-/* Runlist spinlock guarding a task in this state; NULL if it has no runlist. */
-static spinlock_t *X86_TaskListSpinLock(ULONG state)
-{
-    switch (state)
-    {
-        case TS_RUN:
-            return &PrivExecBase(SysBase)->TaskRunningSpinLock;
-        case TS_READY:
-            return &PrivExecBase(SysBase)->TaskReadySpinLock;
-        case TS_WAIT:
-            return &PrivExecBase(SysBase)->TaskWaitSpinLock;
-        case TS_SPIN:
-            return &PrivExecBase(SysBase)->TaskSpinningLock;
-        default:
-            return NULL;
-    }
-}
 
-#endif
-
-/*
- * Put changeTask on the list for newState. On SMP tc_State is written under
- * that list's spinlock, so another CPU never sees the new state before the
- * task is on the list. dolock is FALSE when the caller holds that lock.
- */
-static void X86_SetTaskState(struct Task *changeTask, ULONG newState, BOOL dolock)
+#if !defined(__AROSEXEC_SMP__)
+/* Put changeTask on the list for newState */
+static void X86_SetTaskState(struct Task *changeTask, ULONG newState)
 {
-#if defined(__AROSEXEC_SMP__)
-    spinlock_t *task_listlock = X86_TaskListSpinLock(newState);
-#endif
     struct List *task_list = NULL;
     D(bug("[Exec:X86] %s(0x%p,%08x)\n", __func__, changeTask, newState));
 
     switch (newState)
     {
-        case TS_RUN:
-#if defined(__AROSEXEC_SMP__)
-            task_list = &PrivExecBase(SysBase)->TaskRunning;
-#endif
-            break;
         case TS_READY:
             task_list = &SysBase->TaskReady;
             break;
         case TS_WAIT:
             task_list = &SysBase->TaskWait;
             break;
-#if defined(__AROSEXEC_SMP__)
-        case TS_SPIN:
-            task_list = &PrivExecBase(SysBase)->TaskSpinning;
-            break;
-#endif
         default:
             break;
     }
+    changeTask->tc_State = newState;
     if (task_list)
-    {
-#if defined(__AROSEXEC_SMP__)
-        if (dolock && task_listlock) EXEC_SPINLOCK_LOCK(task_listlock, NULL, SPINLOCK_MODE_WRITE);
-#endif
-        changeTask->tc_State = newState;
         Enqueue(task_list, &changeTask->tc_Node);
-#if defined(__AROSEXEC_SMP__)
-        if (dolock && task_listlock) EXEC_SPINLOCK_UNLOCK(task_listlock);
-#endif
-    }
-    else
-    {
-        changeTask->tc_State = newState;
-    }
 }
+#endif
 
 /*
  * krnSysCallReschedTask(): move reschTask to the list for reschState.
- * On SMP the task's tc_SpinLock is held across the whole move and the list
- * locks nest inside it, as in arm-native's Exec_ReschedTask().
- *
- * oldState is a snapshot. The x86 core (kernel_scheduler.c) changes tc_State
- * without taking tc_SpinLock, so it can still move the task between the
- * snapshot and the Remove(), leaving fromLock naming a list the task has
- * left. Closing that is #1712.
+ * On SMP tc_State and list membership change together under the locks of
+ * both lists, and tc_State is checked again once they are held.
  */
 void X86_HandleReschedTask(struct ExceptionContext *regs)
 {
     struct Task *reschTask = (struct Task *)EXCX_REGB;
     ULONG reschState = (ULONG)EXCX_REGC;
-#if defined(__AROSEXEC_SMP__)
-    ULONG oldState;
-    spinlock_t *fromLock = NULL;
-#endif
 
     D(bug("[Exec:X86] %s(0x%p,%08x)\n", __func__, reschTask, reschState));
 
@@ -309,50 +253,23 @@ void X86_HandleReschedTask(struct ExceptionContext *regs)
     }
 
     EXEC_BLOCK_DISPATCH_INC;
-    EXEC_SPINLOCK_LOCK(&reschTask->tc_SpinLock, NULL, SPINLOCK_MODE_WRITE);
-
-    oldState = reschTask->tc_State;
-
-    /* Only a waiting or new task is made ready. */
-    if (reschState == TS_READY)
+    for (;;)
     {
-        switch (oldState)
-        {
-            case TS_WAIT:
-            case TS_INVALID:
-            case TS_ADDED:
-                break;
-            default:
-                EXEC_SPINLOCK_UNLOCK(&reschTask->tc_SpinLock);
-                EXEC_BLOCK_DISPATCH_DEC;
-                return;
-        }
-    }
+        ULONG state = reschTask->tc_State;
 
-    fromLock = X86_TaskListSpinLock(oldState);
-
-    if (fromLock)
-    {
-        EXEC_SPINLOCK_LOCK(fromLock, NULL, SPINLOCK_MODE_WRITE);
-        Remove(&reschTask->tc_Node);
-        EXEC_SPINLOCK_UNLOCK(fromLock);
+        /* Only a waiting or new task is made ready */
+        if ((reschState == TS_READY) && (state != TS_WAIT) &&
+            (state != TS_INVALID) && (state != TS_ADDED))
+            break;
+        if (exec_TaskMove(reschTask, state,
+                          (reschState == TS_REMOVED) ? TS_TOMBSTONED : reschState))
+            break;
     }
-
-    if (reschState == TS_REMOVED)
-    {
-        reschTask->tc_State = TS_TOMBSTONED;
-    }
-    else
-    {
-        X86_SetTaskState(reschTask, reschState, TRUE);
-    }
-
-    EXEC_SPINLOCK_UNLOCK(&reschTask->tc_SpinLock);
     EXEC_BLOCK_DISPATCH_DEC;
 #else
     if ((reschTask->tc_State != TS_INVALID) && (reschTask->tc_State != TS_RUN))
         Remove(&reschTask->tc_Node);
-    X86_SetTaskState(reschTask, reschState, (BOOL)(reschTask->tc_State != reschState));
+    X86_SetTaskState(reschTask, reschState);
 #endif
 
     return;

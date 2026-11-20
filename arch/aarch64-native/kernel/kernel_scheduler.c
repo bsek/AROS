@@ -100,7 +100,11 @@ BOOL core_Schedule(void)
                 if (core_AffinityMatch(nexttask, cpumask))
                 {
 #endif
-                    if (nexttask->tc_Node.ln_Pri <= task->tc_Node.ln_Pri)
+                    if (
+#if defined(__AROSEXEC_SMP__)
+                        (task->tc_State != TS_SPIN) &&
+#endif
+                        (nexttask->tc_Node.ln_Pri <= task->tc_Node.ln_Pri))
                     {
                         /* If the running task did not used it's whole quantum yet, let it work */
                         if (!FLAG_SCHEDQUANTUM_ISSET)
@@ -115,6 +119,10 @@ BOOL core_Schedule(void)
 #if defined(__AROSEXEC_SMP__)
         KrnSpinUnLock(&PrivExecBase(SysBase)->TaskReadySpinLock);
         EXEC_IRQFIQ_RESTORE(__if);
+
+        /* Nothing else to run: the spinner carries on */
+        if ((!corereschedule) && (task->tc_State == TS_SPIN))
+            task->tc_State = TS_RUN;
 #endif
     }
 
@@ -149,18 +157,60 @@ void core_Switch(void)
     if (GetIntETask(task))
         GetIntETask(task)->iet_QuantumLeft = SCHEDELAPSED_GET;
 
+#if defined(__AROSEXEC_SMP__)
+    __if = EXEC_IRQFIQ_DISABLE();
+    if (FLAG_SCHEDPARK_ISSET)
+    {
+        FLAG_SCHEDPARK_CLEAR;
+        if (task->tc_State == TS_RUN)
+        {
+            /* Wait(): park, then look at the signals again, in case a
+             * Signal() saw TS_RUN and did not wake us */
+            exec_TaskMove(task, TS_RUN, TS_WAIT);
+            __atomic_thread_fence(__ATOMIC_SEQ_CST);
+            if (task->tc_SigRecvd & (task->tc_SigWait | task->tc_SigExcept))
+                exec_TaskMove(task, TS_WAIT, TS_READY);
+        }
+        EXEC_IRQFIQ_RESTORE(__if);
+        return;
+    }
+
     if (task->tc_State == TS_RUN)
     {
         DSCHED(bug("[Kernel:%02d] Switching away from '%s' @ 0x%p\n", cpunum, task->tc_Node.ln_Name, task));
-#if defined(__AROSEXEC_SMP__)
-        /* tc_SpinLock across the whole RUN->READY (state, list) change, or
-         * an observer can see TS_READY while the task is on no list.
-         * Task-lock outer, list-locks inner. IRQ+FIQ off: the IPI and the
-         * timer IRQ take this same lock. */
-        __if = EXEC_IRQFIQ_DISABLE();
-        KrnSpinLock(&task->tc_SpinLock, NULL, SPINLOCK_MODE_WRITE);
-        exec_TaskRemoveRunning(task);
-#endif
+
+        /* if the current task has gone out of stack bounds, suspend it to prevent further damage to the system */
+        if (task->tc_SPReg <= task->tc_SPLower || task->tc_SPReg > task->tc_SPUpper)
+        {
+            bug("[Kernel:%02d] '%s' @ 0x%p went out of stack limits\n", cpunum, task->tc_Node.ln_Name, task);
+            bug("[Kernel:%02d]  - Lower 0x%p, upper 0x%p, SP 0x%p\n", cpunum, task->tc_SPLower, task->tc_SPUpper, task->tc_SPReg);
+
+            task->tc_SigWait    = 0;
+            exec_TaskMove(task, TS_RUN, TS_WAIT);
+
+            Alert(AN_StackProbe);
+        }
+
+        if (task->tc_Flags & TF_SWITCH)
+            AROS_UFC1NR(void, task->tc_Switch, AROS_UFCA(struct ExecBase *, SysBase, A6));
+
+        if (task->tc_State == TS_RUN)
+        {
+            DSCHED(bug("[Kernel:%02d] Setting '%s' @ 0x%p as ready\n", cpunum, task->tc_Node.ln_Name, task));
+            exec_TaskMove(task, TS_RUN, TS_READY);
+        }
+    }
+    else if (task->tc_State == TS_SPIN)
+    {
+        /* Parked by the spinlock fail hook, still on TaskRunning */
+        exec_TaskRelist(task, EXEC_TASKLIST_RUNNING, EXEC_TASKLIST_SPINNING,
+                        TS_SPIN, TS_SPIN);
+    }
+    EXEC_IRQFIQ_RESTORE(__if);
+#else
+    if (task->tc_State == TS_RUN)
+    {
+        DSCHED(bug("[Kernel:%02d] Switching away from '%s' @ 0x%p\n", cpunum, task->tc_Node.ln_Name, task));
         task->tc_State = TS_READY;
 
         /* if the current task has gone out of stack bounds, suspend it to prevent further damage to the system */
@@ -171,11 +221,7 @@ void core_Switch(void)
 
             task->tc_SigWait    = 0;
             task->tc_State      = TS_WAIT;
-#if defined(__AROSEXEC_SMP__)
-            exec_TaskEnqueueWait(task);
-#else
             Enqueue(&SysBase->TaskWait, &task->tc_Node);
-#endif
 
             Alert(AN_StackProbe);
         }
@@ -186,17 +232,10 @@ void core_Switch(void)
         if (task->tc_State == TS_READY)
         {
             DSCHED(bug("[Kernel:%02d] Setting '%s' @ 0x%p as ready\n", cpunum, task->tc_Node.ln_Name, task));
-#if defined(__AROSEXEC_SMP__)
-            exec_TaskEnqueueReady(task);
-#else
             Enqueue(&SysBase->TaskReady, &task->tc_Node);
-#endif
         }
-#if defined(__AROSEXEC_SMP__)
-        KrnSpinUnLock(&task->tc_SpinLock);
-        EXEC_IRQFIQ_RESTORE(__if);
-#endif
     }
+#endif
 }
 
 /* Dispatch a "new" ready task on this cpu */
@@ -204,16 +243,13 @@ struct Task *core_Dispatch(void)
 {
     struct Task *newtask;
     struct Task *task = GET_THIS_TASK;
-    BOOL taskStateLocked = FALSE;
 #if defined(__AROSEXEC_SMP__) || defined(DEBUG)
     int cpunum = GetCPUNumber();
     (void)cpunum;
 #endif
 #if defined(__AROSEXEC_SMP__)
     uint32_t cpumask = (1 << cpunum);
-    BOOL sawContended;
-    /* IRQ+FIQ off for the whole dispatch: it holds the scheduler list
-     * locks and tc_SpinLock, which the IPI and the timer IRQ also take.
+    /* IRQ+FIQ off: the IPI and the timer IRQ take the list locks too.
      * Nestable across the recursive call below. */
     unsigned int __if = EXEC_IRQFIQ_DISABLE();
 #endif
@@ -221,41 +257,70 @@ struct Task *core_Dispatch(void)
     DSCHED(bug("[Kernel:%02d] core_Dispatch()\n", cpunum));
 
 #if defined(__AROSEXEC_SMP__)
-dispatch_rescan:
-    sawContended = FALSE;
-    KrnSpinLock(&PrivExecBase(SysBase)->TaskReadySpinLock, NULL,
-                SPINLOCK_MODE_WRITE);
-#endif
+    /* Ready to running in one step, under both list locks */
+    exec_TaskListsLock(EXEC_TASKLIST_RUNNING, EXEC_TASKLIST_READY);
     for (newtask = (struct Task *)GetHead(&SysBase->TaskReady); newtask != NULL; newtask = (struct Task *)GetSucc(newtask))
     {
-#if defined(__AROSEXEC_SMP__)
         if (core_AffinityMatch(newtask, cpumask))
         {
-            /* Lock before pulling it off the list, so the (state, list)
-             * change is atomic to anyone trusting tc_State. A trylock:
-             * everyone else takes the task lock first (AB-BA). */
-            if (!KrnSpinTryLock(&newtask->tc_SpinLock, SPINLOCK_MODE_WRITE))
-            {
-                sawContended = TRUE;
-                continue;
-            }
-            taskStateLocked = TRUE;
             Remove(&newtask->tc_Node);
+            newtask->tc_State = TS_RUN;
+            AddHead(&PrivExecBase(SysBase)->TaskRunning, &newtask->tc_Node);
             break;
         }
+    }
+    exec_TaskListsUnlock(EXEC_TASKLIST_RUNNING, EXEC_TASKLIST_READY);
+
+    /* Nothing else to run: the current task carries on */
+    if ((!newtask) && (task))
+    {
+        if (task->tc_State == TS_RUN)
+            newtask = task;
+        else if ((task->tc_State == TS_SPIN) &&
+                 exec_TaskRelist(task, EXEC_TASKLIST_SPINNING, EXEC_TASKLIST_RUNNING,
+                                 TS_SPIN, TS_RUN))
+            newtask = task;
+    }
+
+    if (newtask != NULL)
+    {
+        DSCHED(bug("[Kernel:%02d] Preparing to run '%s' @ 0x%p\n",
+            cpunum, newtask->tc_Node.ln_Name, newtask));
+
+        SysBase->DispCount++;
+        IDNESTCOUNT_SET(newtask->tc_IDNestCnt);
+        TLS_SET(ThisTask, newtask);
+        /* Only a fresh slice when the task changes or used its own,
+         * or a fast-dispatching core never expires a quantum. */
+        {
+            struct IntETask *iet = GetIntETask(newtask);
+            ULONG left = iet ? iet->iet_QuantumLeft : 0;
+
+            SCHEDELAPSED_SET(left ? left : SCHEDQUANTUM_GET);
+        }
+        FLAG_SCHEDQUANTUM_CLEAR;
+
+        /* Check the stack of the task we are about to launch. */
+        if ((newtask->tc_SPReg <= newtask->tc_SPLower) ||
+            (newtask->tc_SPReg > newtask->tc_SPUpper))
+        {
+            /* if the new task shouldn't run - force a reschedule */
+            DSCHED(bug("[Kernel:%02d] Skipping '%s' @ 0x%p\n", cpunum, newtask->tc_Node.ln_Name, newtask));
+            exec_TaskMove(newtask, TS_RUN, TS_WAIT);
+            core_Switch();
+            newtask = core_Dispatch();
+        }
+        else
+        {
+            DSCHED(bug("[Kernel:%02d] Launching '%s' @ 0x%p\n", cpunum, newtask->tc_Node.ln_Name, newtask));
+        }
+    }
 #else
+    for (newtask = (struct Task *)GetHead(&SysBase->TaskReady); newtask != NULL; newtask = (struct Task *)GetSucc(newtask))
+    {
         Remove(&newtask->tc_Node);
         break;
-#endif
     }
-#if defined(__AROSEXEC_SMP__)
-    KrnSpinUnLock(&PrivExecBase(SysBase)->TaskReadySpinLock);
-
-    /* Every candidate was momentarily locked elsewhere - rescan rather
-     * than idle with runnable work on the list. */
-    if (!newtask && sawContended)
-        goto dispatch_rescan;
-#endif
 
     if ((!newtask) && (task) && (task->tc_State != TS_WAIT))
         newtask = task;
@@ -283,57 +348,16 @@ dispatch_rescan:
             /* Check the stack of the task we are about to launch. */
             if ((newtask->tc_SPReg <= newtask->tc_SPLower) ||
                 (newtask->tc_SPReg > newtask->tc_SPUpper))
-            {
-#if defined(__AROSEXEC_SMP__)
-                if (!taskStateLocked)
-                {
-                    KrnSpinLock(&newtask->tc_SpinLock, NULL, SPINLOCK_MODE_WRITE);
-                    taskStateLocked = TRUE;
-                }
-#endif
                 newtask->tc_State     = TS_WAIT;
-            }
             else
                 newtask->tc_State     = TS_RUN;
         }
 
-        BOOL launchtask = TRUE;
         if (newtask->tc_State == TS_WAIT)
-        {
-#if defined(__AROSEXEC_SMP__)
-            if (!taskStateLocked)
-            {
-                KrnSpinLock(&newtask->tc_SpinLock, NULL, SPINLOCK_MODE_WRITE);
-                taskStateLocked = TRUE;
-            }
-#endif
-#if defined(__AROSEXEC_SMP__)
-            KrnSpinLock(&PrivExecBase(SysBase)->TaskWaitSpinLock, NULL,
-                        SPINLOCK_MODE_WRITE);
-#endif
-            Enqueue(&SysBase->TaskWait, &newtask->tc_Node);
-#if defined(__AROSEXEC_SMP__)
-            KrnSpinUnLock(&PrivExecBase(SysBase)->TaskWaitSpinLock);
-            KrnSpinUnLock(&newtask->tc_SpinLock);
-            taskStateLocked = FALSE;
-#endif
-            launchtask = FALSE;
-        }
-
-#if defined(__AROSEXEC_SMP__)
-        /* Launch path; the TS_WAIT block already unlocked. */
-        if (taskStateLocked)
-        {
-            KrnSpinUnLock(&newtask->tc_SpinLock);
-            taskStateLocked = FALSE;
-        }
-#endif
-
-        if (!launchtask)
         {
             /* if the new task shouldn't run - force a reschedule */
             DSCHED(bug("[Kernel:%02d] Skipping '%s' @ 0x%p (state %08x)\n", cpunum, newtask->tc_Node.ln_Name, newtask, newtask->tc_State));
-
+            Enqueue(&SysBase->TaskWait, &newtask->tc_Node);
             core_Switch();
             newtask = core_Dispatch();
         }
@@ -342,6 +366,7 @@ dispatch_rescan:
             DSCHED(bug("[Kernel:%02d] Launching '%s' @ 0x%p (state %08x)\n", cpunum, newtask->tc_Node.ln_Name, newtask, newtask->tc_State));
         }
     }
+#endif
     else
     {
         /* Go idle if there is nothing to do */

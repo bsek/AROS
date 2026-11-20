@@ -389,19 +389,6 @@ void cpu_Switch(regs_t *regs)
     /* Cache running task's context */
     STORE_TASKSTATE(task, regs)
 
-#if defined(__AROSEXEC_SMP__)
-    /*
-     * Wait() carries tc_SpinLock across KrnSwitch so no other CPU can
-     * observe (TS_WAIT, on-TaskWait) and dispatch this task before its
-     * context is saved. The context is now stored - release the lock
-     * (see rom/exec/wait.c). Only the Wait path reaches here in TS_WAIT:
-     * interrupts are masked for its whole carry window, so an IRQ/FIQ
-     * entry can never find the current task in TS_WAIT.
-     */
-    if (task->tc_State == TS_WAIT)
-        KrnSpinUnLock(&task->tc_SpinLock);
-#endif
-
     /*
      * iet_private1 == 0 means the task never went through cpu_Dispatch:
      * the boot task and the per-core bootstrap tasks are installed with

@@ -160,7 +160,8 @@ void handle_syscall(void *regs)
         D(bug("[Kernel] ## SWI : ILLEGAL ACCESS!\n"));
         return;
     }
-    if (swi_no <= SC_GETCPUNUMBER || swi_no == SC_REBOOT)
+    if (swi_no <= SC_GETCPUNUMBER || swi_no == SC_REBOOT ||
+        swi_no == SC_RESCHEDTASK || swi_no == SC_SUICIDESWITCH)
     {
         DREGS(cpu_DumpRegs(regs));
 
@@ -174,7 +175,7 @@ void handle_syscall(void *regs)
                  * unprivileged, so Disable() must come through this syscall
                  * to touch the interrupt bits - a raw cpsid in task context
                  * is ignored. The cross-CPU IPI is delivered as an FIQ and
-                 * takes tc_SpinLock / scheduler-list locks via signal_hook;
+                 * takes scheduler-list locks via signal_hook;
                  * if it could fire while a Disable()'d task holds one of
                  * those it would self-deadlock that CPU. Disabling FIQ here
                  * keeps the IPI pending (the BCM2836 mailbox latches it) until
@@ -220,6 +221,23 @@ void handle_syscall(void *regs)
                 asm volatile ("mov pc, #0\n"); // Jump to the reset vector..
                 break;
             }
+
+#if defined(__AROSEXEC_SMP__)
+            /* Run list changes asked for by a task */
+            case SC_RESCHEDTASK:
+            case SC_SUICIDESWITCH:
+            {
+                uint32_t mode = (((uint32_t *)regs)[16]) & 0x1f;
+
+                if (mode != 0x10 && mode != 0x1f)
+                    break;
+                if (swi_no == SC_RESCHEDTASK)
+                    Exec_ReschedTask((struct Task *)((uint32_t *)regs)[0], ((uint32_t *)regs)[1]);
+                else
+                    Exec_SuicideSwitch();
+                break;
+            }
+#endif
 
             case SC_CACHECLEARE:
             {

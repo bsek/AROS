@@ -136,102 +136,39 @@ int Exec_ARMCPUInit(struct ExecBase *SysBase)
 }
 
 #if defined(__AROSEXEC_SMP__)
-/* No TS_SPIN machinery here: our KrnSpinLock never calls its failhook,
- * so spinners just spin. all-pc has the wired-up version. */
-
 /*
- * Move a task to the list matching newState, for krnSysCallReschedTask.
- * Callers MUST NOT hold tc_SpinLock - we take it, so the whole
- * (read state, pick list, mutate, write state) is atomic to observers.
- * Lock order: tc_SpinLock outer, list-locks inner.
+ * krnSysCallReschedTask(), kernel context only (SC_RESCHEDTASK from a
+ * task). Only a parked or new task is made ready: another CPU may have
+ * woken it already.
  */
 void Exec_ReschedTask(struct Task *task, ULONG newState)
 {
-    spinlock_t *fromLock = NULL;
-    /* Raw masking, not Disable(): this also runs from the FIQ handler,
-     * where Disable()'s syscall would nest an exception. */
+    /* Raw masking: this also runs from the FIQ handler */
     unsigned int __if = EXEC_IRQFIQ_DISABLE();
 
-    Kernel_52_KrnSpinLock(&task->tc_SpinLock, NULL, SPINLOCK_MODE_WRITE, NULL);
-
-    if (newState == TS_READY)
+    for (;;)
     {
-        /* Only migrate a parked or freshly added task: another CPU may
-         * have won the wake race already. The signal bits are set, so a
-         * running task sees them anyway. */
-        switch (task->tc_State)
-        {
-            case TS_WAIT:
-            case TS_INVALID:
-            case TS_ADDED:
-                break;
-            default:
-                Kernel_53_KrnSpinUnLock(&task->tc_SpinLock, NULL);
-                EXEC_IRQFIQ_RESTORE(__if);
-                return;
-        }
-    }
+        ULONG state = task->tc_State;
 
-    switch (task->tc_State)
-    {
-        case TS_RUN:
-            fromLock = &PrivExecBase(SysBase)->TaskRunningSpinLock;
+        if ((newState == TS_READY) && (state != TS_WAIT) &&
+            (state != TS_INVALID) && (state != TS_ADDED))
             break;
-        case TS_READY:
-            fromLock = &PrivExecBase(SysBase)->TaskReadySpinLock;
-            break;
-        case TS_WAIT:
-            fromLock = &PrivExecBase(SysBase)->TaskWaitSpinLock;
-            break;
-        default:
-            /* Not on a standard scheduler list. */
+        if (exec_TaskMove(task, state, newState))
             break;
     }
 
-    if (fromLock)
-    {
-        Kernel_52_KrnSpinLock(fromLock, NULL, SPINLOCK_MODE_WRITE, NULL);
-        Remove(&task->tc_Node);
-        Kernel_53_KrnSpinUnLock(fromLock, NULL);
-    }
-
-    task->tc_State = newState;
-
-    switch (newState)
-    {
-        case TS_READY:
-            exec_TaskEnqueueReady(task);
-            break;
-        case TS_WAIT:
-            exec_TaskEnqueueWait(task);
-            break;
-        default:
-            /* TS_REMOVED, TS_TOMBSTONED: no enqueue. */
-            break;
-    }
-
-    Kernel_53_KrnSpinUnLock(&task->tc_SpinLock, NULL);
     EXEC_IRQFIQ_RESTORE(__if);
 }
 
-/* RemTask's self-removal: detach and tombstone for the service task,
- * then return - unlike KrnSwitch() this does NOT dispatch. */
+/* RemTask's self-removal (SC_SUICIDESWITCH): detach and tombstone for
+ * the service task, then return - unlike KrnSwitch() this does NOT
+ * dispatch. */
 void Exec_SuicideSwitch(void)
 {
     struct Task *task = GET_THIS_TASK;
-    unsigned int __fiq = EXEC_FIQ_DISABLE();
 
-    Disable();
-    /* tc_SpinLock outer, list lock inner. */
-    Kernel_52_KrnSpinLock(&task->tc_SpinLock, NULL, SPINLOCK_MODE_WRITE, NULL);
-    Kernel_52_KrnSpinLock(&PrivExecBase(SysBase)->TaskRunningSpinLock, NULL,
-        SPINLOCK_MODE_WRITE, NULL);
-    Remove(&task->tc_Node);
-    Kernel_53_KrnSpinUnLock(&PrivExecBase(SysBase)->TaskRunningSpinLock, NULL);
-    task->tc_State = TS_TOMBSTONED;
-    Kernel_53_KrnSpinUnLock(&task->tc_SpinLock, NULL);
-    Enable();
-    EXEC_FIQ_RESTORE(__fiq);
+    exec_TaskRelist(task, EXEC_TASKLIST_RUNNING, EXEC_TASKLIST_NONE,
+                    task->tc_State, TS_TOMBSTONED);
 }
 
 /* Pin a task that predates EXECF_CPUAffinity to the boot CPU */
@@ -256,10 +193,39 @@ static BOOL Exec_ARMAssignBootMask(struct Task *task)
     return TRUE;
 }
 
+/*
+ * Fail hook for task-context spinlocks, as on all-pc: the task is parked
+ * in TS_SPIN and the scheduler moves it to TaskSpinning.
+ */
+struct Hook Exec_TaskSpinLockFailHook;
+
+AROS_UFH3(void, Exec_TaskSpinLockFailFunc,
+    AROS_UFHA(struct Hook *, h, A0),
+    AROS_UFHA(spinlock_t *, spinLock, A1),
+    AROS_UFHA(void *, unused, A2))
+{
+    AROS_USERFUNC_INIT
+
+    struct Task *spinTask = GET_THIS_TASK;
+    struct IntETask *thisET;
+
+    if (spinTask && (thisET = GetIntETask(spinTask)))
+    {
+        spinTask->tc_State = TS_SPIN;
+        thisET->iet_SpinLock = spinLock;
+    }
+
+    Reschedule();
+
+    AROS_USERFUNC_EXIT
+}
+
 int Exec_ARMCPUSMPInit(struct ExecBase *SysBase)
 {
     struct Task *task;
     BOOL ok;
+
+    Exec_TaskSpinLockFailHook.h_Entry = (HOOKFUNC)Exec_TaskSpinLockFailFunc;
 
     /*
      * Every task that predates EXECF_CPUAffinity gets a mask first (the

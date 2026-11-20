@@ -178,7 +178,17 @@ void krnTrapHandler(struct ExceptionContext *ctx, unsigned long scause,
         if (action == TRAP_RESCHEDULE)
             core_ExitInterrupt(ctx);
         else if (action == TRAP_SYSCALL)
+        {
+#if defined(__AROSEXEC_SMP__)
+            /* Run list changes asked for by a task */
+            if (ctx->x[CTX_REG_A7] == SC_RESCHEDTASK)
+                Exec_ReschedTask((struct Task *)ctx->a0, (ULONG)ctx->a1);
+            else if (ctx->x[CTX_REG_A7] == SC_SUICIDESWITCH)
+                Exec_SuicideSwitch();
+            else
+#endif
             core_SysCall((int)ctx->x[CTX_REG_A7], ctx);
+        }
     }
 
     /*

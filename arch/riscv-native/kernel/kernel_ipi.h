@@ -51,8 +51,10 @@ extern int core_DoCallIPI(struct Hook *hook, void *cpu_mask, int async,
 struct CallIPIEntry;
 
 extern struct CallIPIEntry *core_ClaimCallIPI(int cpu);
-extern void core_CommitCallIPI(struct CallIPIEntry *cie, int cpu,
-                               struct Hook *hook, int nargs, IPTR *args);
+struct Task;
+extern BOOL core_CommitCallIPI(struct CallIPIEntry *cie, int cpu,
+                               struct Hook *hook, int nargs, IPTR *args,
+                               struct Task *task);
 extern void core_AbortCallIPI(struct CallIPIEntry *cie, int cpu);
 extern void core_CancelCallIPIs(APTR hookEntry, IPTR matchArg);
 

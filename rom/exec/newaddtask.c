@@ -242,10 +242,6 @@ static void TaskLaunch(struct Task *parent, struct Task *task, struct Hook *plHo
     task->tc_SigRecvd = 0;
     task->tc_SigExcept = 0;
 
-#if defined(__AROSEXEC_SMP__)
-    EXEC_SPINLOCK_INIT(&task->tc_SpinLock);
-#endif
-
     /* Signals default to all system signals allocated. */
     if (task->tc_SigAlloc == 0)
         task->tc_SigAlloc = SysBase->TaskSigAlloc;

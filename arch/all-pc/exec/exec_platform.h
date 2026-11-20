@@ -96,6 +96,10 @@ extern void Kernel_53_KrnSpinUnLock(spinlock_t *, void *);
 #define FLAG_SCHEDSWITCH_SET            TLS_LOCK_OR_L(Sched.ScheduleFlags, TLSSF_Switch)
 #define FLAG_SCHEDDISPATCH_CLEAR        TLS_LOCK_AND_L(Sched.ScheduleFlags, ~TLSSF_Dispatch)
 #define FLAG_SCHEDDISPATCH_SET          TLS_LOCK_OR_L(Sched.ScheduleFlags, TLSSF_Dispatch)
+/* Wait() asks the next switch to park the task on TaskWait */
+#define FLAG_SCHEDPARK_SET              TLS_LOCK_OR_L(Sched.ScheduleFlags, TLSSF_Park)
+#define FLAG_SCHEDPARK_CLEAR            TLS_LOCK_AND_L(Sched.ScheduleFlags, ~TLSSF_Park)
+#define FLAG_SCHEDPARK_ISSET            ((BOOL)((TLS_GET(Sched.ScheduleFlags) & TLSSF_Park) != 0))
 
 /*
  * Block IRQ-exit dispatch without going through Forbid()/Permit() (Permit's

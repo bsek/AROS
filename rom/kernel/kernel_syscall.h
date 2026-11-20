@@ -26,6 +26,8 @@
 #define SC_CACHECLEARE  0x00B
 #define SC_GETCPUNUMBER 0x00C
 #define SC_USERSTATE    0x00D
+#define SC_RESCHEDTASK  0x00E   /* krnSysCallReschedTask() on SMP */
+#define SC_SUICIDESWITCH 0x00F  /* krnSysCallSwitch() on SMP */
 #define SC_REBOOT	    0x100
 #define SC_POWEROFF	    0x101
 

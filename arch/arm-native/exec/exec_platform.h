@@ -26,6 +26,9 @@ extern void Kernel_53_KrnSpinUnLock(spinlock_t *, void *);
 #endif
 #define EXEC_SPINLOCK_UNLOCK(a) Kernel_53_KrnSpinUnLock((a), NULL)
 
+/* Fail hook for task-context spinlocks (platform_init.c) */
+extern struct Hook Exec_TaskSpinLockFailHook;
+
 /*
  * Store-store barrier for publishing a freshly built structure to readers
  * that walk it without taking a lock. DMB is available unprivileged on
@@ -33,13 +36,29 @@ extern void Kernel_53_KrnSpinUnLock(spinlock_t *, void *);
  */
 #define EXEC_MEMORY_BARRIER()   asm volatile("dmb" ::: "memory")
 
-/*
- * arm-native does not need a syscall for reschedule: the work is just
- * task-list mutation under spinlocks, no privilege change required.
- * Exec_ReschedTask is implemented in arch/arm-native/exec/platform_init.c.
- */
+#include "kernel_syscall.h"
+
+/* Tasks run in USR (or SYS) mode */
+#define EXEC_IS_SUPER() \
+    ({ unsigned int __cpsr, __mode; \
+       asm volatile("mrs %0, cpsr" : "=r"(__cpsr)); \
+       __mode = __cpsr & 0x1f; \
+       ((__mode != 0x10) && (__mode != 0x1f)); })
+
+/* Run list changes are made in kernel context only */
 extern void Exec_ReschedTask(struct Task *, ULONG);
-#define krnSysCallReschedTask(task, state) Exec_ReschedTask((task), (state))
+#define krnSysCallReschedTask(task, state) \
+    do { \
+        if (EXEC_IS_SUPER()) \
+            Exec_ReschedTask((task), (state)); \
+        else \
+        { \
+            register IPTR __r0 asm("r0") = (IPTR)(task); \
+            register IPTR __r1 asm("r1") = (IPTR)(state); \
+            asm volatile("swi %[n]" : : "r"(__r0), "r"(__r1), \
+                [n] "I"(SC_RESCHEDTASK) : "memory", "lr"); \
+        } \
+    } while(0)
 
 /*
  * Route RemTask/ServiceTask through the locked reschedule path. Without
@@ -51,15 +70,13 @@ extern void Exec_ReschedTask(struct Task *, ULONG);
 #define EXEC_REMTASK_NEEDSSWITCH
 
 /*
- * Switch-only primitive for RemTask's self-removal (suicide) path. The
- * task has already set TS_REMOVED; detach it from TaskRunning under the
- * list lock and tombstone it for the service task, then RETURN so
- * RemTask can finish its own teardown and send itself to the service
- * task before the final KrnDispatch. (KrnSwitch would also dispatch and
- * never return, which would strand the half-torn-down task.)
+ * RemTask's self-removal: the kernel detaches and tombstones the task,
+ * then RETURNS so RemTask can finish its teardown (KrnSwitch would
+ * dispatch and never come back).
  */
 extern void Exec_SuicideSwitch(void);
-#define krnSysCallSwitch() Exec_SuicideSwitch()
+#define krnSysCallSwitch() \
+    asm volatile("swi %[n]" : : [n] "I"(SC_SUICIDESWITCH) : "memory", "lr")
 
 #endif
 
@@ -248,6 +265,29 @@ struct Exec_PlatformData
  * can trigger Reschedule() which yields - exactly what we don't want
  * while holding a scheduler list spinlock).
  */
+#if defined(__AROSEXEC_SMP__)
+/* Wait() asks the next switch to park the task on TaskWait */
+#define FLAG_SCHEDPARK_SET \
+    do { \
+        tls_t *__tls; \
+        asm volatile("mrc p15, 0, %0, c13, c0, 3":"=r"(__tls)); \
+        __tls->ScheduleFlags |= TLSSF_Park; \
+    } while(0)
+#define FLAG_SCHEDPARK_CLEAR \
+    do { \
+        tls_t *__tls; \
+        asm volatile("mrc p15, 0, %0, c13, c0, 3":"=r"(__tls)); \
+        __tls->ScheduleFlags &= ~TLSSF_Park; \
+    } while(0)
+#define FLAG_SCHEDPARK_ISSET \
+    ({ \
+        tls_t *__tls; \
+        asm volatile("mrc p15, 0, %0, c13, c0, 3":"=r"(__tls)); \
+        BOOL __ret = (__tls->ScheduleFlags & TLSSF_Park) != 0; \
+        __ret;  \
+    })
+#endif
+
 #define EXEC_BLOCK_DISPATCH_INC \
     do { \
         tls_t *__tls; \
@@ -263,7 +303,7 @@ struct Exec_PlatformData
     } while(0)
 
 /*
- * Mask FIQ across scheduler-list / tc_SpinLock critical sections. On this
+ * Mask FIQ across scheduler-list critical sections. On this
  * platform the ONLY FIQ source is the inter-core mailbox (the IPI). An IPI
  * that lands while this CPU holds a scheduler lock re-enters that lock via
  * bcm2708_fiq_process -> handle_ipi -> signal_hook -> Signal ->

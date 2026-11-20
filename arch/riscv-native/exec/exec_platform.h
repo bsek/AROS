@@ -43,9 +43,25 @@ extern void Kernel_53_KrnSpinUnLock(spinlock_t *, void *);
  */
 #define EXEC_MEMORY_BARRIER()   asm volatile("fence w, w" ::: "memory")
 
-/* No syscall needed: just list mutation under spinlocks */
+#include "kernel_syscall.h"
+
+/* Run list changes are made in kernel context only. Scheduler syscalls
+ * are ebreak with the code in a7 (see kernel_cpu.h). */
+extern int Kernel_13_KrnIsSuper();
 extern void Exec_ReschedTask(struct Task *, ULONG);
-#define krnSysCallReschedTask(task, state) Exec_ReschedTask((task), (state))
+#define krnSysCallReschedTask(task, state) \
+    do { \
+        if (Kernel_13_KrnIsSuper()) \
+            Exec_ReschedTask((task), (state)); \
+        else \
+        { \
+            register IPTR __a0 asm("a0") = (IPTR)(task); \
+            register IPTR __a1 asm("a1") = (IPTR)(state); \
+            asm volatile("addi a7, zero, %[n]\n\tebreak" \
+                : : "r"(__a0), "r"(__a1), [n] "I"(SC_RESCHEDTASK) \
+                : "a7", "memory"); \
+        } \
+    } while(0)
 
 /* Without this RemTask/ServiceTask mutate the scheduler lists unlocked */
 #define EXEC_REMTASK_NEEDSSWITCH
@@ -53,10 +69,12 @@ extern void Exec_ReschedTask(struct Task *, ULONG);
 /* RemTask's suicide path: detach and tombstone, then RETURN so RemTask
  * can finish its teardown (KrnSwitch would never come back) */
 extern void Exec_SuicideSwitch(void);
-#define krnSysCallSwitch() Exec_SuicideSwitch()
+#define krnSysCallSwitch() \
+    asm volatile("addi a7, zero, %[n]\n\tebreak" \
+        : : [n] "I"(SC_SUICIDESWITCH) : "a7", "memory")
 
 /*
- * Interrupt masking around tc_SpinLock / scheduler-list sections. The
+ * Interrupt masking around scheduler-list sections. The
  * IPI is an ordinary software interrupt here (SSI, or MSI in M-mode),
  * masked by the status register's IE bit like every other, so the "FIQ"
  * and "IRQ+FIQ" pairs that rom/exec and the scheduler use are the same
@@ -114,6 +132,11 @@ struct Exec_PlatformData
 #define FLAG_SCHEDQUANTUM_ISSET     ((BOOL)((__RV_TLS()->ScheduleFlags & TLSSF_Quantum) != 0))
 #define FLAG_SCHEDSWITCH_ISSET      ((BOOL)((__RV_TLS()->ScheduleFlags & TLSSF_Switch) != 0))
 #define FLAG_SCHEDDISPATCH_ISSET    ((BOOL)((__RV_TLS()->ScheduleFlags & TLSSF_Dispatch) != 0))
+
+/* Wait() asks the next switch to park the task on TaskWait */
+#define FLAG_SCHEDPARK_SET          do { __RV_TLS()->ScheduleFlags |= TLSSF_Park; } while(0)
+#define FLAG_SCHEDPARK_CLEAR        do { __RV_TLS()->ScheduleFlags &= ~TLSSF_Park; } while(0)
+#define FLAG_SCHEDPARK_ISSET        ((BOOL)((__RV_TLS()->ScheduleFlags & TLSSF_Park) != 0))
 
 /* TDNestCnt is per-CPU TLS, so no atomics. Blocks IRQ-exit dispatch
  * without Forbid()/Permit() */

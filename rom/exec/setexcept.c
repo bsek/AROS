@@ -60,11 +60,7 @@
     struct Task *thisTask = GET_THIS_TASK;
     ULONG old;
 
-    /* Disable() also masks the FIQ that would re-enter tc_SpinLock. */
     Disable();
-#if defined(__AROSEXEC_SMP__)
-    EXEC_SPINLOCK_LOCK(&thisTask->tc_SpinLock, NULL, SPINLOCK_MODE_WRITE);
-#endif
 
     /* Get returncode */
     old = thisTask->tc_SigExcept;
@@ -81,9 +77,6 @@
         /* And order rescheduling */
         Reschedule();
     }
-#if defined(__AROSEXEC_SMP__)
-    EXEC_SPINLOCK_UNLOCK(&thisTask->tc_SpinLock);
-#endif
     Enable();
 
     return old;

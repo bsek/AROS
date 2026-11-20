@@ -73,26 +73,25 @@
     Disable();
 #if defined(__AROSEXEC_SMP__)
     /*
-     * Take the task lock before picking the list lock: tc_State tells us
-     * which list the task is on, and only the task lock keeps it still.
+     * Lock the list tc_State names, then check it again: the kernel moves
+     * a task only under the locks of both lists.
      */
-    EXEC_SPINLOCK_LOCK(&task->tc_SpinLock, NULL, SPINLOCK_MODE_WRITE);
-    switch (task->tc_State)
+    for (;;)
     {
-        case TS_RUN:
-            task_listlock =&PrivExecBase(SysBase)->TaskRunningSpinLock;
+        ULONG state = task->tc_State;
+        int list = exec_TaskListOf(state);
+
+        task_listlock = (list != EXEC_TASKLIST_NONE) ? exec_TaskListLock(list) : NULL;
+        if (!task_listlock)
             break;
-        case TS_WAIT:
-            task_listlock = &PrivExecBase(SysBase)->TaskWaitSpinLock;
+        if (state == TS_READY)
+            EXEC_LOCK_WRITE(task_listlock);
+        else
+            EXEC_LOCK_READ(task_listlock);
+        if (task->tc_State == state)
             break;
-        default:
-            task_listlock = &PrivExecBase(SysBase)->TaskReadySpinLock;
-            break;
+        EXEC_UNLOCK(task_listlock);
     }
-    if (task->tc_State == TS_READY)
-        EXEC_LOCK_WRITE(task_listlock);
-    else
-        EXEC_LOCK_READ(task_listlock);
 #endif
 
     /* Get returncode */
@@ -132,9 +131,9 @@
 
     /* All done. */
 #if defined(__AROSEXEC_SMP__)
-    /* Drop both locks before kicking any scheduler path. */
-    EXEC_UNLOCK(task_listlock);
-    EXEC_SPINLOCK_UNLOCK(&task->tc_SpinLock);
+    /* Drop the lock before kicking any scheduler path. */
+    if (task_listlock)
+        EXEC_UNLOCK(task_listlock);
 
     if (doResched)
     {

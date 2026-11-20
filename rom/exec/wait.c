@@ -66,20 +66,13 @@
     ULONG rcvd;
 
     D(bug("[Exec] Wait(%08lX)\n", signalSet);)
-    /* Disable() also masks the FIQ that would re-enter tc_SpinLock. */
     Disable();
-#if defined(__AROSEXEC_SMP__)
-    EXEC_SPINLOCK_LOCK(&thisTask->tc_SpinLock, NULL, SPINLOCK_MODE_WRITE);
-#endif
 
     /* If at least one of the signals is already set do not wait. */
     while (!(thisTask->tc_SigRecvd & signalSet))
     {
         /* Set the wait signal mask */
         thisTask->tc_SigWait = signalSet;
-
-        D(bug("[Exec] Wait: Moving '%s' @ 0x%p to Task Wait queue\n", thisTask->tc_Node.ln_Name, thisTask);)
-        D(bug("[Exec] Wait: Task state = %08x\n", thisTask->tc_State);)
 
         /*
             Clear TDNestCnt (because Switch() will not care about it),
@@ -89,25 +82,17 @@
         D(bug("[Exec] Wait: Task TDNestCount = %d\n", thisTask->tc_TDNestCnt);)
         TDNESTCOUNT_SET(-1);
 
-        thisTask->tc_State = TS_WAIT;
-
 #if defined(__AROSEXEC_SMP__)
         /*
-         * Move lists and set the state under tc_SpinLock, so an observer
-         * always sees TS_WAIT together with being on TaskWait.
+         * The switch parks us on TaskWait. Until then we stay TS_RUN, so
+         * a Signal() from another CPU comes here by IPI.
          */
-        exec_TaskRemoveRunning(thisTask);
-        exec_TaskEnqueueWait(thisTask);
+        FLAG_SCHEDPARK_SET;
 #else
+        thisTask->tc_State = TS_WAIT;
         /* Move current task to the waiting list. */
         Enqueue(&SysBase->TaskWait, &thisTask->tc_Node);
 #endif
-
-        /*
-         * Keep tc_SpinLock held across KrnSwitch; cpu_Switch drops it
-         * once the context is saved. Releasing it here would let another
-         * core wake and dispatch the task with a stale register frame.
-         */
 
         /* And switch to the next ready task. */
         KrnSwitch();
@@ -119,9 +104,6 @@
         */
         D(bug("[Exec] Wait: Awoken...\n");)
 
-#if defined(__AROSEXEC_SMP__)
-        EXEC_SPINLOCK_LOCK(&thisTask->tc_SpinLock, NULL, SPINLOCK_MODE_WRITE);
-#endif
         /* Restore TDNestCnt. */
         TDNESTCOUNT_SET(thisTask->tc_TDNestCnt);
     }
@@ -131,7 +113,6 @@
     /* And clear them. */
 #if defined(__AROSEXEC_SMP__)
     __AROS_ATOMIC_AND_L(thisTask->tc_SigRecvd, ~signalSet);
-    EXEC_SPINLOCK_UNLOCK(&thisTask->tc_SpinLock);
 #else
     thisTask->tc_SigRecvd &= ~signalSet;
 #endif

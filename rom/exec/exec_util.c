@@ -147,11 +147,11 @@ Exec_InitETask(struct Task *task, struct Task *parent, struct ExecBase *SysBase)
 
         /* Inherit the parent's mask, not the creating core, or affinity
          * narrows to one core per generation. SetTaskAffinity() rewrites
-         * the mask in place, so copy it under the parent's lock. */
+         * the mask in place, so copy it under the parent's ETask lock. */
         if (piet)
         {
+            EXEC_SPINLOCK_LOCK(&piet->iet_TaskLock, NULL, SPINLOCK_MODE_READ);
             Disable();
-            EXEC_SPINLOCK_LOCK(&parent->tc_SpinLock, NULL, SPINLOCK_MODE_READ);
             paff = piet->iet_CpuAffinity;
             if (paff && (IPTR)paff != TASKAFFINITY_ANY)
             {
@@ -161,8 +161,8 @@ Exec_InitETask(struct Task *task, struct Task *parent, struct ExecBase *SysBase)
                     if (KrnCPUInMask(i, paff))
                         KrnGetCPUMask(i, aff);
             }
-            EXEC_SPINLOCK_UNLOCK(&parent->tc_SpinLock);
             Enable();
+            EXEC_SPINLOCK_UNLOCK(&piet->iet_TaskLock);
         }
 
         if ((IPTR)paff == TASKAFFINITY_ANY)

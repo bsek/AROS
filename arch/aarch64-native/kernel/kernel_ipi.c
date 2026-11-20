@@ -137,8 +137,14 @@ struct CallIPIEntry *core_ClaimCallIPI(int cpu)
     }
 }
 
-void core_CommitCallIPI(struct CallIPIEntry *cie, int cpu,
-                        struct Hook *hook, int nargs, IPTR *args)
+/*
+ * With a task given, the call is refused (FALSE, entry freed) if the task
+ * is terminal by the time the queue is locked. Teardown makes the task
+ * terminal before core_CancelCallIPIs() sweeps under the same lock.
+ */
+BOOL core_CommitCallIPI(struct CallIPIEntry *cie, int cpu,
+                        struct Hook *hook, int nargs, IPTR *args,
+                        struct Task *task)
 {
     int srcCpu = GetCPUNumber();
     int i;
@@ -152,6 +158,14 @@ void core_CommitCallIPI(struct CallIPIEntry *cie, int cpu,
         cie->cie_IPIH.ih_Args[i] = args[i];
 
     daif = ipiq_lock(cpu);
+    if (task && ((task->tc_State == TS_INVALID) ||
+                 (task->tc_State == TS_REMOVED) ||
+                 (task->tc_State == TS_TOMBSTONED)))
+    {
+        ADDTAIL((struct List *)&ipi_call_free[cpu], (struct Node *)&cie->cie_Node);
+        ipiq_unlock(cpu, daif);
+        return FALSE;
+    }
     ADDTAIL((struct List *)&ipi_call_queue[cpu], (struct Node *)&cie->cie_Node);
     ipiq_unlock(cpu, daif);
 
@@ -161,6 +175,8 @@ void core_CommitCallIPI(struct CallIPIEntry *cie, int cpu,
             (IPI_CALL_HOOK & 0x0fffffff) | (srcCpu << 28),
             0, 1U << cpu);
     }
+
+    return TRUE;
 }
 
 void core_AbortCallIPI(struct CallIPIEntry *cie, int cpu)
@@ -249,7 +265,7 @@ int core_DoCallIPI(struct Hook *hook, void *cpu_mask, int async,
             continue;
 
         cie = core_ClaimCallIPI(cpu);
-        core_CommitCallIPI(cie, cpu, hook, nargs, args);
+        core_CommitCallIPI(cie, cpu, hook, nargs, args, NULL);
     }
 
     return 1;

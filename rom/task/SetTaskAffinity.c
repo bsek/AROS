@@ -108,8 +108,10 @@
                 KrnGetCPUMask(i, fresh);
     }
 
+    /* The ETask lock guards the mask; taken before Disable() so a
+     * spinning task can still let a switched-out holder run */
+    EXEC_SPINLOCK_LOCK(&iet->iet_TaskLock, NULL, SPINLOCK_MODE_WRITE);
     Disable();
-    EXEC_SPINLOCK_LOCK(&task->tc_SpinLock, NULL, SPINLOCK_MODE_WRITE);
 
     cur = (APTR)iet->iet_CpuAffinity;
     if (cur && (IPTR)cur != TASKAFFINITY_ANY)
@@ -131,8 +133,8 @@
         !KrnCPUInMask(iet->iet_CpuNumber, cur))
         kick = TRUE;
 
-    EXEC_SPINLOCK_UNLOCK(&task->tc_SpinLock);
     Enable();
+    EXEC_SPINLOCK_UNLOCK(&iet->iet_TaskLock);
 
     /* Lost a race with another SetTaskAffinity(); never published */
     if (fresh)

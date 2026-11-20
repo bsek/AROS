@@ -46,36 +46,27 @@ AROS_UFH3(IPTR, signal_hook,
      * handler. Deliver locally instead and let core_ExitInterrupt take
      * the switch on return.
      */
-    EXEC_SPINLOCK_LOCK(&target->tc_SpinLock, NULL, SPINLOCK_MODE_WRITE);
+    __AROS_ATOMIC_OR_L(target->tc_SigRecvd, sigset);
 
     if (target->tc_State == TS_INVALID ||
         target->tc_State == TS_REMOVED ||
         target->tc_State == TS_TOMBSTONED)
-    {
-        __AROS_ATOMIC_OR_L(target->tc_SigRecvd, sigset);
-        EXEC_SPINLOCK_UNLOCK(&target->tc_SpinLock);
         return 0;
-    }
 
-    __AROS_ATOMIC_OR_L(target->tc_SigRecvd, sigset);
+    /* Bits before state; the switch that parks reads them after. */
+    __atomic_thread_fence(__ATOMIC_SEQ_CST);
 
     if (target->tc_SigRecvd & target->tc_SigExcept)
         __AROS_ATOMIC_OR_B(target->tc_Flags, TF_EXCEPT);
 
     if (target->tc_SigRecvd & (target->tc_SigWait | target->tc_SigExcept))
     {
+        /* The reschedule ignores a task that is no longer waiting */
         if (target->tc_State == TS_WAIT)
-        {
-            EXEC_SPINLOCK_UNLOCK(&target->tc_SpinLock);
             krnSysCallReschedTask(target, TS_READY);
-            FLAG_SCHEDSWITCH_SET;
-            return 0;
-        }
-        /* TS_RUN / TS_READY: let the FIQ-exit dispatcher pick it up. */
+        /* Let the FIQ-exit dispatcher pick it up */
         FLAG_SCHEDSWITCH_SET;
     }
-
-    EXEC_SPINLOCK_UNLOCK(&target->tc_SpinLock);
 #else
     /* Ordinary interrupt here, so the full Signal() is safe. */
     Signal(target, sigset);
@@ -94,13 +85,10 @@ void Exec_CancelSignalIPIs(struct Task *task, struct ExecBase *SysBase)
 {
 #if defined(KERNEL_IPI_CALL_CANCELABLE)
     /*
-     * Disable() masks the FIQ hook and the local drain. The empty
-     * lock/unlock waits out a sender mid-commit; later ones see the
-     * terminal state and refuse.
+     * The task is terminal now, and core_CommitCallIPI() checks that
+     * under the queue lock, so nothing new is queued after this sweep.
      */
     Disable();
-    EXEC_SPINLOCK_LOCK(&task->tc_SpinLock, NULL, SPINLOCK_MODE_WRITE);
-    EXEC_SPINLOCK_UNLOCK(&task->tc_SpinLock);
     core_CancelCallIPIs((APTR)signal_hook, (IPTR)task);
     Enable();
 #endif
@@ -210,27 +198,14 @@ void Exec_SignalSlow(struct Task *task, ULONG signalSet, struct ExecBase *SysBas
             struct CallIPIEntry *cie;
 
             /*
-             * The queued call outlives this function, so claim and commit
-             * are split: claim first (it may spin, and must not hold a
-             * task lock), then commit under tc_SpinLock once tc_State is
-             * re-checked, so teardown's sweep cannot miss it.
+             * The queued call outlives this function. The commit refuses
+             * a terminal task under the queue lock, so teardown's sweep
+             * cannot miss it.
              */
             cie = core_ClaimCallIPI(targetcpu);
-
             Disable();
-            EXEC_SPINLOCK_LOCK(&task->tc_SpinLock, NULL, SPINLOCK_MODE_WRITE);
-            if (task->tc_State == TS_INVALID ||
-                task->tc_State == TS_REMOVED ||
-                task->tc_State == TS_TOMBSTONED)
-            {
+            if (!core_CommitCallIPI(cie, targetcpu, &h, 3, args, task))
                 __AROS_ATOMIC_OR_L(task->tc_SigRecvd, signalSet);
-                EXEC_SPINLOCK_UNLOCK(&task->tc_SpinLock);
-                Enable();
-                core_AbortCallIPI(cie, targetcpu);
-                return;
-            }
-            core_CommitCallIPI(cie, targetcpu, &h, 3, args);
-            EXEC_SPINLOCK_UNLOCK(&task->tc_SpinLock);
             Enable();
         }
 #else
@@ -262,13 +237,6 @@ void Exec_SignalSlow(struct Task *task, ULONG signalSet, struct ExecBase *SysBas
         Disable();
 #if defined(__AROSEXEC_SMP__)
         /*
-         * tc_SpinLock covers the state and signal fields as a group.
-         * Release it before any scheduler call - those take it again.
-         * Lock order is task lock, then list lock.
-         */
-        EXEC_SPINLOCK_LOCK(&task->tc_SpinLock, NULL, SPINLOCK_MODE_WRITE);
-
-        /*
          * A task mid-teardown may be on no scheduler list, so
          * rescheduling it would Remove() from the wrong one. Record the
          * signal and leave.
@@ -278,7 +246,6 @@ void Exec_SignalSlow(struct Task *task, ULONG signalSet, struct ExecBase *SysBas
             task->tc_State == TS_TOMBSTONED)
         {
             __AROS_ATOMIC_OR_L(task->tc_SigRecvd, signalSet);
-            EXEC_SPINLOCK_UNLOCK(&task->tc_SpinLock);
             Enable();
             return;
         }
@@ -297,6 +264,8 @@ void Exec_SignalSlow(struct Task *task, ULONG signalSet, struct ExecBase *SysBas
         /* Set the signals in the task structure. */
 #if defined(__AROSEXEC_SMP__)
         __AROS_ATOMIC_OR_L(task->tc_SigRecvd, signalSet);
+        /* Bits before state; the switch that parks reads them after. */
+        __atomic_thread_fence(__ATOMIC_SEQ_CST);
 #else
         task->tc_SigRecvd |= signalSet;
 #endif
@@ -323,7 +292,6 @@ void Exec_SignalSlow(struct Task *task, ULONG signalSet, struct ExecBase *SysBas
                 BOOL sameCpu = (!(PrivExecBase(SysBase)->IntFlags & EXECF_CPUAffinity) ||
                                 (IntETask(task->tc_UnionETask.tc_ETask)->iet_CpuNumber == cpunum));
                 void *targetCpuAffinity = IntETask(task->tc_UnionETask.tc_ETask)->iet_CpuAffinity;
-                EXEC_SPINLOCK_UNLOCK(&task->tc_SpinLock);
                 if (sameCpu)
                 {
                     D(bug("[Exec] %s: calling Reschedule to raise Exception for RUN Task\n", __func__);)
@@ -368,7 +336,6 @@ void Exec_SignalSlow(struct Task *task, ULONG signalSet, struct ExecBase *SysBas
                                       KrnCPUInMask(cpunum, IntETask(task->tc_UnionETask.tc_ETask)->iet_CpuAffinity));
                     void *targetCpuAffinity = IntETask(task->tc_UnionETask.tc_ETask)->iet_CpuAffinity;
 
-                    EXEC_SPINLOCK_UNLOCK(&task->tc_SpinLock);
                     krnSysCallReschedTask(task, TS_READY);
 
                     if (!onThisCpu)
@@ -413,8 +380,6 @@ void Exec_SignalSlow(struct Task *task, ULONG signalSet, struct ExecBase *SysBas
                             bug("[Exec] %s: Rescheduling RUN Task 0x%p '%s' pri %d,  to let 0x%p '%s' process the signal...\n", __func__, thisTask, thisTask->tc_Node.ln_Name, thisTask->tc_Node.ln_Pri, task, task->tc_Node.ln_Name);
                         )
 #if defined(__AROSEXEC_SMP__)
-                        /* Do not re-lock: another core may have freed it. */
-                        EXEC_SPINLOCK_UNLOCK(&task->tc_SpinLock);
                         Reschedule();
                         Enable();
                         return;
@@ -432,8 +397,6 @@ void Exec_SignalSlow(struct Task *task, ULONG signalSet, struct ExecBase *SysBas
                 {
                     void *targetCpuAffinity = IntETask(task->tc_UnionETask.tc_ETask)->iet_CpuAffinity;
                     D(bug("[Exec] %s: Signaling task on another CPU\n", __func__));
-                    /* Do not re-lock: the target core may have freed it. */
-                    EXEC_SPINLOCK_UNLOCK(&task->tc_SpinLock);
                     krnSysCallReschedTask(task, TS_READY);
                     KrnScheduleCPU(targetCpuAffinity);
                     Enable();
@@ -444,9 +407,6 @@ void Exec_SignalSlow(struct Task *task, ULONG signalSet, struct ExecBase *SysBas
             }
         }
 
-#if defined(__AROSEXEC_SMP__)
-        EXEC_SPINLOCK_UNLOCK(&task->tc_SpinLock);
-#endif
         Enable();
 
         D(

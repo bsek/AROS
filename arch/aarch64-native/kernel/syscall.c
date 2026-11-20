@@ -182,7 +182,7 @@ void handle_syscall(void *regs)
 
     D(bug("[Kernel] ## SVC %d @ 0x%p\n", svc_no, ((struct ExceptionContext *)regs)->pc));
 
-    if (svc_no <= SC_USERSTATE || svc_no == SC_REBOOT || svc_no == SC_POWEROFF)
+    if (svc_no <= SC_SUICIDESWITCH || svc_no == SC_REBOOT || svc_no == SC_POWEROFF)
     {
         DREGS(cpu_DumpRegs(regs));
 
@@ -292,6 +292,25 @@ void handle_syscall(void *regs)
                     asm volatile("wfe");
                 break;
             }
+
+#if defined(__AROSEXEC_SMP__)
+            /* Run list changes asked for by a task */
+            case SC_RESCHEDTASK:
+            {
+                struct ExceptionContext *ctx = regs;
+
+                if ((ctx->cpsr & CPUMODE_MASK) == CPUMODE_USER)
+                    Exec_ReschedTask((struct Task *)ctx->x[0], (ULONG)ctx->x[1]);
+                break;
+            }
+
+            case SC_SUICIDESWITCH:
+            {
+                if ((((struct ExceptionContext *)regs)->cpsr & CPUMODE_MASK) == CPUMODE_USER)
+                    Exec_SuicideSwitch();
+                break;
+            }
+#endif
 
             case SC_CACHECLEARE:
             {
