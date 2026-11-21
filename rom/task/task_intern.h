@@ -111,6 +111,23 @@ struct TaskListPrivate
 
 #define KernelBase TaskResBase->trb_KernelBase
 
+/* Guards trb_TaskList, trb_NewTasks and trb_LockedLists */
+static inline void task_ListLock(struct TaskResBase *TaskResBase)
+{
+    Forbid();
+#if defined(__AROSEXEC_SMP__)
+    EXEC_SPINLOCK_LOCK(&TaskResBase->TaskListSpinLock, NULL, SPINLOCK_MODE_WRITE);
+#endif
+}
+
+static inline void task_ListUnlock(struct TaskResBase *TaskResBase)
+{
+#if defined(__AROSEXEC_SMP__)
+    EXEC_SPINLOCK_UNLOCK(&TaskResBase->TaskListSpinLock);
+#endif
+    Permit();
+}
+
 void task_CleanList(struct Task * task, struct TaskResBase *TaskResBase);
 struct TaskListHookEntry *GetHookTypeEntry(struct List *htList, ULONG thType, BOOL create);
 struct TaskListEntry *GetTaskEntry(struct Task *thisTask, struct TaskResBase *TaskResBase);
