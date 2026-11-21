@@ -63,6 +63,8 @@
     if (thisET != NULL)
     {
 #if defined(__AROSEXEC_SMP__)
+        /* Forbid(): an exiting child takes this under Forbid() */
+        Forbid();
         EXEC_SPINLOCK_LOCK(&IntETask(thisET)->iet_TaskLock, NULL, SPINLOCK_MODE_READ);
 #endif
         ForeachNode (&thisET->et_Children, et)
@@ -75,6 +77,7 @@
         }
 #if defined(__AROSEXEC_SMP__)
         EXEC_SPINLOCK_UNLOCK(&IntETask(thisET)->iet_TaskLock);
+        Permit();
 #endif
         if (!retVal)
         {
@@ -150,8 +153,8 @@ Exec_InitETask(struct Task *task, struct Task *parent, struct ExecBase *SysBase)
          * the mask in place, so copy it under the parent's ETask lock. */
         if (piet)
         {
-            EXEC_SPINLOCK_LOCK(&piet->iet_TaskLock, NULL, SPINLOCK_MODE_READ);
             Disable();
+            EXEC_SPINLOCK_LOCK(&piet->iet_TaskLock, NULL, SPINLOCK_MODE_READ);
             paff = piet->iet_CpuAffinity;
             if (paff && (IPTR)paff != TASKAFFINITY_ANY)
             {
@@ -161,8 +164,8 @@ Exec_InitETask(struct Task *task, struct Task *parent, struct ExecBase *SysBase)
                     if (KrnCPUInMask(i, paff))
                         KrnGetCPUMask(i, aff);
             }
-            Enable();
             EXEC_SPINLOCK_UNLOCK(&piet->iet_TaskLock);
+            Enable();
         }
 
         if ((IPTR)paff == TASKAFFINITY_ANY)

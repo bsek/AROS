@@ -118,6 +118,16 @@ void Exec_SignalSlow(struct Task *task, ULONG signalSet, struct ExecBase *SysBas
     struct KernelBase *KernelBase = __kernelBase;
     int cpunum = KrnGetCPUNumber();
 
+    /* Never forward to a task being torn down, as RemTask() may be
+     * waiting for this very call on another CPU */
+    if (task->tc_State == TS_INVALID ||
+        task->tc_State == TS_REMOVED ||
+        task->tc_State == TS_TOMBSTONED)
+    {
+        __AROS_ATOMIC_OR_L(task->tc_SigRecvd, signalSet);
+        return;
+    }
+
     /*
         * # If current CPU number is not the task's CPU and the task is running now, send signal to that task
         *   from CPU which the task is running on.

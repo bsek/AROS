@@ -63,7 +63,12 @@
     while ((flags = (task->tc_SigExcept & task->tc_SigRecvd)))
     {
         task->tc_SigExcept ^= flags;
+#if defined(__AROSEXEC_SMP__)
+        /* Signal() on another CPU may OR bits in meanwhile */
+        __atomic_fetch_and(&task->tc_SigRecvd, ~flags, __ATOMIC_SEQ_CST);
+#else
         task->tc_SigRecvd  ^= flags;
+#endif
 
         Enable();
 

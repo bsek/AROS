@@ -272,6 +272,26 @@ struct Exec_PlatformData
         BOOL __ret = (__tls->ScheduleFlags & TLSSF_Park) != 0; \
         __ret;  \
     })
+/* The fail hook asks the next switch to move the task to TaskSpinning */
+#define FLAG_SCHEDSPIN_SET \
+    do { \
+        tls_t *__tls; \
+        asm volatile("mrs %0, tpidr_el1":"=r"(__tls)); \
+        __tls->ScheduleFlags |= TLSSF_Spin; \
+    } while(0)
+#define FLAG_SCHEDSPIN_CLEAR \
+    do { \
+        tls_t *__tls; \
+        asm volatile("mrs %0, tpidr_el1":"=r"(__tls)); \
+        __tls->ScheduleFlags &= ~TLSSF_Spin; \
+    } while(0)
+#define FLAG_SCHEDSPIN_ISSET \
+    ({ \
+        tls_t *__tls; \
+        asm volatile("mrs %0, tpidr_el1":"=r"(__tls)); \
+        BOOL __ret = (__tls->ScheduleFlags & TLSSF_Spin) != 0; \
+        __ret;  \
+    })
 #endif
 
 /* TDNestCnt is per-CPU TLS, so no atomics. Blocks IRQ-exit dispatch

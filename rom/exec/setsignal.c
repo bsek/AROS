@@ -65,8 +65,17 @@
         sig = &thisTask->tc_SigRecvd;
 
         /* Change only the bits in 'mask' */
+#if defined(__AROSEXEC_SMP__)
+        /* Signal() on another CPU may OR bits in meanwhile */
+        old = __atomic_load_n(sig, __ATOMIC_RELAXED);
+        while (!__atomic_compare_exchange_n(sig, &old,
+                    (old & ~signalSet) | (newSignals & signalSet),
+                    FALSE, __ATOMIC_SEQ_CST, __ATOMIC_RELAXED))
+            ;
+#else
         old = *sig;
         *sig = (old & ~signalSet) | (newSignals & signalSet);
+#endif
 
         Enable();
     }

@@ -104,7 +104,7 @@ BOOL core_Schedule(void)
 #endif
                     if (
 #if defined(__AROSEXEC_SMP__)
-                        (task->tc_State != TS_SPIN) &&
+                        (!FLAG_SCHEDSPIN_ISSET) &&
 #endif
                         (nexttask->tc_Node.ln_Pri <= task->tc_Node.ln_Pri))
                     {
@@ -123,8 +123,8 @@ BOOL core_Schedule(void)
         EXEC_IRQFIQ_RESTORE(__if);
 
         /* Nothing else to run: the spinner carries on */
-        if ((!corereschedule) && (task->tc_State == TS_SPIN))
-            task->tc_State = TS_RUN;
+        if (!corereschedule)
+            FLAG_SCHEDSPIN_CLEAR;
 #endif
     }
 
@@ -146,6 +146,7 @@ void core_Switch(void)
     struct Task *task = GET_THIS_TASK;
 #if defined(__AROSEXEC_SMP__)
     unsigned int __if;
+    BOOL spin;
 #endif
 
     DSCHED(bug("[Kernel:%02d] core_Switch(%08x)\n", cpunum, task->tc_State));
@@ -161,18 +162,13 @@ void core_Switch(void)
 
 #if defined(__AROSEXEC_SMP__)
     __if = EXEC_IRQFIQ_DISABLE();
+    spin = FLAG_SCHEDSPIN_ISSET;
+    FLAG_SCHEDSPIN_CLEAR;
     if (FLAG_SCHEDPARK_ISSET)
     {
         FLAG_SCHEDPARK_CLEAR;
-        if (task->tc_State == TS_RUN)
-        {
-            /* Wait(): park, then look at the signals again, in case a
-             * Signal() saw TS_RUN and did not wake us */
-            exec_TaskMove(task, TS_RUN, TS_WAIT);
-            __atomic_thread_fence(__ATOMIC_SEQ_CST);
-            if (task->tc_SigRecvd & (task->tc_SigWait | task->tc_SigExcept))
-                exec_TaskMove(task, TS_WAIT, TS_READY);
-        }
+        /* Wait(): park, unless a Signal() that saw TS_RUN got in first */
+        exec_TaskPark(task);
         EXEC_IRQFIQ_RESTORE(__if);
         return;
     }
@@ -196,17 +192,17 @@ void core_Switch(void)
         if (task->tc_Flags & TF_SWITCH)
             AROS_UFC1NR(void, task->tc_Switch, AROS_UFCA(struct ExecBase *, SysBase, A6));
 
-        if (task->tc_State == TS_RUN)
+        if (spin)
+        {
+            /* Asked for by the spinlock fail hook */
+            exec_TaskRelist(task, EXEC_TASKLIST_RUNNING, EXEC_TASKLIST_SPINNING,
+                            TS_RUN, TS_SPIN);
+        }
+        else if (task->tc_State == TS_RUN)
         {
             DSCHED(bug("[Kernel:%02d] Setting '%s' @ 0x%p as ready\n", cpunum, task->tc_Node.ln_Name, task));
             exec_TaskMove(task, TS_RUN, TS_READY);
         }
-    }
-    else if (task->tc_State == TS_SPIN)
-    {
-        /* Parked by the spinlock fail hook, still on TaskRunning */
-        exec_TaskRelist(task, EXEC_TASKLIST_RUNNING, EXEC_TASKLIST_SPINNING,
-                        TS_SPIN, TS_SPIN);
     }
     EXEC_IRQFIQ_RESTORE(__if);
 #else

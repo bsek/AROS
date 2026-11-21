@@ -81,6 +81,8 @@
         AddTail(&TaskResBase->trb_LockedLists, &taskList->tlp_Node);
         task_ListUnlock(TaskResBase);
     }
+    else
+        ReleaseSemaphore(&TaskResBase->trb_Sem);
 #else
     Disable();
     if ((taskList = (struct TaskListPrivate *)AllocVec(sizeof(struct TaskListPrivate), MEMF_PUBLIC)) != NULL)

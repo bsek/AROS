@@ -100,6 +100,10 @@ extern void Kernel_53_KrnSpinUnLock(spinlock_t *, void *);
 #define FLAG_SCHEDPARK_SET              TLS_LOCK_OR_L(Sched.ScheduleFlags, TLSSF_Park)
 #define FLAG_SCHEDPARK_CLEAR            TLS_LOCK_AND_L(Sched.ScheduleFlags, ~TLSSF_Park)
 #define FLAG_SCHEDPARK_ISSET            ((BOOL)((TLS_GET(Sched.ScheduleFlags) & TLSSF_Park) != 0))
+/* The fail hook asks the next switch to move the task to TaskSpinning */
+#define FLAG_SCHEDSPIN_SET              TLS_LOCK_OR_L(Sched.ScheduleFlags, TLSSF_Spin)
+#define FLAG_SCHEDSPIN_CLEAR            TLS_LOCK_AND_L(Sched.ScheduleFlags, ~TLSSF_Spin)
+#define FLAG_SCHEDSPIN_ISSET            ((BOOL)((TLS_GET(Sched.ScheduleFlags) & TLSSF_Spin) != 0))
 
 /*
  * Block IRQ-exit dispatch without going through Forbid()/Permit() (Permit's

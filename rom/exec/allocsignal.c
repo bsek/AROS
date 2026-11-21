@@ -130,7 +130,11 @@ LONG AllocTaskSignal(struct Task *thisTask, LONG signalNum, struct ExecBase *Sys
     }
 #endif
 
+#if defined(__AROSEXEC_SMP__)
+    __atomic_fetch_and(&thisTask->tc_SigRecvd, ~mask1, __ATOMIC_SEQ_CST);
+#else
     thisTask->tc_SigRecvd  &= ~mask1;
+#endif
 
 #if defined(__AROSEXEC_SMP__)
     if (thisTask->tc_UnionETask.tc_ETask)

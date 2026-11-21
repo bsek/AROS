@@ -66,6 +66,7 @@
     void *remoteCpuAffinity = NULL;
 #endif
     BYTE old;
+    ULONG state;
 
     D(bug("[Exec] SetTaskPri(0x%p, %d)\n", task, priority);)
 
@@ -78,8 +79,10 @@
      */
     for (;;)
     {
-        ULONG state = task->tc_State;
-        int list = exec_TaskListOf(state);
+        int list;
+
+        state = task->tc_State;
+        list = exec_TaskListOf(state);
 
         task_listlock = (list != EXEC_TASKLIST_NONE) ? exec_TaskListLock(list) : NULL;
         if (!task_listlock)
@@ -92,6 +95,9 @@
             break;
         EXEC_UNLOCK(task_listlock);
     }
+    /* Decide on the state we saw: with no list it was not locked */
+#else
+    state = task->tc_State;
 #endif
 
     /* Get returncode */
@@ -101,10 +107,10 @@
     task->tc_Node.ln_Pri = priority;
 
     /* Check if the task is willing to run. */
-    if (task->tc_State != TS_WAIT)
+    if (state != TS_WAIT)
     {
         /* If it is in the ready list remove and reinsert it. */
-        if (task->tc_State == TS_READY)
+        if (state == TS_READY)
         {
             Remove(&task->tc_Node);
             Enqueue(&SysBase->TaskReady, &task->tc_Node);
@@ -113,7 +119,7 @@
 #if defined(__AROSEXEC_SMP__)
         if (IntETask(task->tc_UnionETask.tc_ETask)->iet_CpuNumber == cpunum)
             doResched = (task->tc_Node.ln_Pri > thisTask->tc_Node.ln_Pri);
-        else if (task->tc_State == TS_RUN)
+        else if (state == TS_RUN)
         {
             /* Read the affinity while still locked - the ETask can be
              * freed the moment we let go. */

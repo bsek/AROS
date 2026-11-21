@@ -260,11 +260,31 @@ static inline BOOL exec_TaskMove(struct Task *task, ULONG from, ULONG to)
                            from, to);
 }
 
-/* Change a task's state and lists, from whatever it is now */
-static inline void exec_TaskSetState(struct Task *task, ULONG newState)
+/*
+ * Wait()'s park, from core_Switch(): RUN to WAIT, or to READY if a signal
+ * it waits for is already there. All under the locks, so no other CPU can
+ * wake, run and free the task before we are done with it.
+ */
+static inline void exec_TaskPark(struct Task *task)
 {
-    while (!exec_TaskMove(task, task->tc_State, newState))
-        ;
+    exec_TaskListsLock(EXEC_TASKLIST_RUNNING, EXEC_TASKLIST_READY);
+    EXEC_SPINLOCK_LOCK(exec_TaskListLock(EXEC_TASKLIST_WAIT), NULL, SPINLOCK_MODE_WRITE);
+    if (task->tc_State == TS_RUN)
+    {
+        Remove(&task->tc_Node);
+        /* Pairs with Signal(): it ORs the bits, fences, reads the state */
+        task->tc_State = TS_WAIT;
+        __atomic_thread_fence(__ATOMIC_SEQ_CST);
+        if (task->tc_SigRecvd & (task->tc_SigWait | task->tc_SigExcept))
+        {
+            task->tc_State = TS_READY;
+            Enqueue(&SysBase->TaskReady, &task->tc_Node);
+        }
+        else
+            Enqueue(&SysBase->TaskWait, &task->tc_Node);
+    }
+    EXEC_SPINLOCK_UNLOCK(exec_TaskListLock(EXEC_TASKLIST_WAIT));
+    exec_TaskListsUnlock(EXEC_TASKLIST_RUNNING, EXEC_TASKLIST_READY);
 }
 
 #if defined(_ETASK_H)

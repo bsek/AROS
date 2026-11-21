@@ -38,6 +38,7 @@ typedef struct tls
 #define TLSSF_Switch    (1 << 1)
 #define TLSSF_Dispatch  (1 << 2)
 #define TLSSF_Park      (1 << 3)        /* Wait(): park on the next switch */
+#define TLSSF_Spin      (1 << 4)        /* Fail hook: spin on the next switch */
 
 #define TLS_OFFSET(name) ((char *)&(((tls_t *)0)->name)-(char *)0)
 

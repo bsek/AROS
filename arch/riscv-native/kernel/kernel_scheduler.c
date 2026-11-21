@@ -159,15 +159,8 @@ void core_Switch(void)
     if (FLAG_SCHEDPARK_ISSET)
     {
         FLAG_SCHEDPARK_CLEAR;
-        if (task->tc_State == TS_RUN)
-        {
-            /* Wait(): park, then look at the signals again, in case a
-             * Signal() saw TS_RUN and did not wake us */
-            exec_TaskMove(task, TS_RUN, TS_WAIT);
-            __atomic_thread_fence(__ATOMIC_SEQ_CST);
-            if (task->tc_SigRecvd & (task->tc_SigWait | task->tc_SigExcept))
-                exec_TaskMove(task, TS_WAIT, TS_READY);
-        }
+        /* Wait(): park, unless a Signal() that saw TS_RUN got in first */
+        exec_TaskPark(task);
         EXEC_IRQFIQ_RESTORE(__if);
         return;
     }

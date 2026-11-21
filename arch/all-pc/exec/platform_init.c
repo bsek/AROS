@@ -52,29 +52,19 @@ AROS_UFH3(void, Exec_TaskSpinLockFailFunc,
 
     DSPIN(bug("[Exec:X86] %s()\n", __func__));
 
-    /* Park only if we switch away now, or the task runs on in TS_SPIN */
-    if ((TDNESTCOUNT_GET >= 0) || (IDNESTCOUNT_GET >= 0))
-        spinTask = NULL;
-
-    if (spinTask)
+    /* Only if we switch away now. Disable() keeps us on this CPU, whose
+     * flag we set, until the switch. */
+    if ((TDNESTCOUNT_GET < 0) && (IDNESTCOUNT_GET < 0))
     {
-        thisET = GetIntETask(spinTask);
-        if (thisET)
-        {
-            DSPIN(bug("[Exec:X86] %s: Setting task @ 0x%p to spinning...\n", __func__, spinTask));
-
-            /* tell the scheduler that the task is waiting on a spinlock */
-            spinTask->tc_State = TS_SPIN;
-
+        DSPIN(bug("[Exec:X86] %s: Setting task @ 0x%p to spinning...\n", __func__, spinTask));
+        Disable();
+        if (spinTask && (thisET = GetIntETask(spinTask)))
             thisET->iet_SpinLock = spinLock;
-
-        }
-    }
-    DSPIN(bug("[Exec:X86] %s: Forcing Reschedule...\n", __func__));
-
-    /* schedule us away for now .. */
-    if (spinTask)
+        /* tell the scheduler that the task is waiting on a spinlock */
+        FLAG_SCHEDSPIN_SET;
         Reschedule();
+        Enable();
+    }
 
     AROS_USERFUNC_EXIT
 }

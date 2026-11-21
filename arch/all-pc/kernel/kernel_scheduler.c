@@ -124,7 +124,7 @@ BOOL core_Schedule(void)
 #endif
                      if (
 #if defined(__AROSEXEC_SMP__)
-                            (task->tc_State != TS_SPIN) &&
+                            (!FLAG_SCHEDSPIN_ISSET) &&
 
 #endif
                             (nexttask->tc_Node.ln_Pri <= task->tc_Node.ln_Pri))
@@ -145,8 +145,9 @@ BOOL core_Schedule(void)
         }
 
 #if defined(__AROSEXEC_SMP__)
-        if ((!corereschedule) && (task->tc_State == TS_SPIN))
-            task->tc_State = TS_RUN;
+        /* Nothing else to run: the spinner carries on */
+        if (!corereschedule)
+            FLAG_SCHEDSPIN_CLEAR;
 #endif
     }
 
@@ -162,7 +163,7 @@ BOOL core_Schedule(void)
 /*
     Switch the currently running task on this cpu
     if it is running , switch it to the ready state
-    on SMP builds, if exec has set TS_SPIN,
+    on SMP builds, if the fail hook asked for it,
     switch it to the spinning list.
 */
 void core_Switch(void)
@@ -172,6 +173,11 @@ void core_Switch(void)
     ULONG showAlert = 0;
     BOOL doSwitch = TRUE;
     struct ETask * taskEtask = NULL;
+#if defined(__AROSEXEC_SMP__)
+    BOOL spin = FLAG_SCHEDSPIN_ISSET;
+
+    FLAG_SCHEDSPIN_CLEAR;
+#endif
 
     DSCHED(bug("[Kernel]" DEBUGFUNCCOLOR_SET " %s()" DEBUGCOLOR_RESET "\n", __func__);)
 
@@ -215,12 +221,8 @@ void core_Switch(void)
         FLAG_SCHEDPARK_CLEAR;
         if (task->tc_State == TS_RUN)
         {
-            /* Wait(): park, then look at the signals again, in case a
-             * Signal() saw TS_RUN and did not wake us */
-            exec_TaskMove(task, TS_RUN, TS_WAIT);
-            __atomic_thread_fence(__ATOMIC_SEQ_CST);
-            if (task->tc_SigRecvd & (task->tc_SigWait | task->tc_SigExcept))
-                exec_TaskMove(task, TS_WAIT, TS_READY);
+            /* Wait(): park, unless a Signal() that saw TS_RUN got in first */
+            exec_TaskPark(task);
             return;
         }
     }
@@ -231,13 +233,6 @@ void core_Switch(void)
             /* RemTask() removing itself */
             exec_TaskRelist(task, EXEC_TASKLIST_RUNNING, EXEC_TASKLIST_NONE,
                             TS_REMOVED, TS_TOMBSTONED);
-            break;
-
-        case TS_SPIN:
-            /* Parked by the spinlock fail hook, still on TaskRunning */
-            DSCHED(bug("[Kernel:%03u]" DEBUGCOLOR_SET " %s: Setting '%s' @ 0x%p to spin" DEBUGCOLOR_RESET "\n", cpuNo, __func__, task->tc_Node.ln_Name, task);)
-            exec_TaskRelist(task, EXEC_TASKLIST_RUNNING, EXEC_TASKLIST_SPINNING,
-                            TS_SPIN, TS_SPIN);
             break;
 
         case TS_RUN:
@@ -257,8 +252,18 @@ void core_Switch(void)
                 if (task->tc_Flags & TF_SWITCH)
                     AROS_UFC1NR(void, task->tc_Switch, AROS_UFCA(struct ExecBase *, SysBase, A6));
 
-                DSCHED(bug("[Kernel:%03u]" DEBUGCOLOR_SET " %s: Setting '%s' @ 0x%p as ready" DEBUGCOLOR_RESET "\n", cpuNo, __func__, task->tc_Node.ln_Name, task);)
-                exec_TaskMove(task, TS_RUN, TS_READY);
+                if (spin)
+                {
+                    /* Asked for by the spinlock fail hook */
+                    DSCHED(bug("[Kernel:%03u]" DEBUGCOLOR_SET " %s: Setting '%s' @ 0x%p to spin" DEBUGCOLOR_RESET "\n", cpuNo, __func__, task->tc_Node.ln_Name, task);)
+                    exec_TaskRelist(task, EXEC_TASKLIST_RUNNING, EXEC_TASKLIST_SPINNING,
+                                    TS_RUN, TS_SPIN);
+                }
+                else
+                {
+                    DSCHED(bug("[Kernel:%03u]" DEBUGCOLOR_SET " %s: Setting '%s' @ 0x%p as ready" DEBUGCOLOR_RESET "\n", cpuNo, __func__, task->tc_Node.ln_Name, task);)
+                    exec_TaskMove(task, TS_RUN, TS_READY);
+                }
             }
             break;
     }

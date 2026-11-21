@@ -135,14 +135,18 @@ void Exec_ReschedTask(struct Task *task, ULONG newState)
 void Exec_SuicideSwitch(void)
 {
     struct Task *task = GET_THIS_TASK;
+    /* SWI entry masks IRQ only, and the FIQ drain takes list locks */
+    unsigned int __if = EXEC_IRQFIQ_DISABLE();
 
     exec_TaskRelist(task, EXEC_TASKLIST_RUNNING, EXEC_TASKLIST_NONE,
                     task->tc_State, TS_TOMBSTONED);
+
+    EXEC_IRQFIQ_RESTORE(__if);
 }
 
 /*
- * Fail hook for task-context spinlocks, as on all-pc: the task is parked
- * in TS_SPIN and the scheduler moves it to TaskSpinning.
+ * Fail hook for task-context spinlocks: the next switch moves the task
+ * to TaskSpinning in TS_SPIN, and exec_TaskUnspin() brings it back.
  */
 struct Hook Exec_TaskSpinLockFailHook;
 
@@ -156,15 +160,16 @@ AROS_UFH3(void, Exec_TaskSpinLockFailFunc,
     struct Task *spinTask = GET_THIS_TASK;
     struct IntETask *thisET;
 
-    /* Park only if we switch away now, or the task runs on in TS_SPIN */
+    /* Only if we switch away now. Disable() keeps us on this CPU, whose
+     * flag we set, until the switch. */
     if ((TDNESTCOUNT_GET < 0) && (IDNESTCOUNT_GET < 0))
     {
+        Disable();
         if (spinTask && (thisET = GetIntETask(spinTask)))
-        {
-            spinTask->tc_State = TS_SPIN;
             thisET->iet_SpinLock = spinLock;
-        }
+        FLAG_SCHEDSPIN_SET;
         Reschedule();
+        Enable();
     }
 
     AROS_USERFUNC_EXIT

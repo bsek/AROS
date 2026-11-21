@@ -257,14 +257,6 @@ struct Exec_PlatformData
         BOOL __ret = (__tls->ScheduleFlags & TLSSF_Dispatch); \
         __ret;  \
     })
-/*
- * Plain (non-atomic) TDNestCnt bumps. TDNestCnt lives in per-CPU TLS,
- * so concurrent updates from other cores aren't possible. Used by the
- * scheduler-list helpers in rom/exec/exec_intern.h to block IRQ-exit
- * dispatch without going through Forbid()/Permit() (Permit's decrement
- * can trigger Reschedule() which yields - exactly what we don't want
- * while holding a scheduler list spinlock).
- */
 #if defined(__AROSEXEC_SMP__)
 /* Wait() asks the next switch to park the task on TaskWait */
 #define FLAG_SCHEDPARK_SET \
@@ -286,8 +278,30 @@ struct Exec_PlatformData
         BOOL __ret = (__tls->ScheduleFlags & TLSSF_Park) != 0; \
         __ret;  \
     })
+/* The fail hook asks the next switch to move the task to TaskSpinning */
+#define FLAG_SCHEDSPIN_SET \
+    do { \
+        tls_t *__tls; \
+        asm volatile("mrc p15, 0, %0, c13, c0, 3":"=r"(__tls)); \
+        __tls->ScheduleFlags |= TLSSF_Spin; \
+    } while(0)
+#define FLAG_SCHEDSPIN_CLEAR \
+    do { \
+        tls_t *__tls; \
+        asm volatile("mrc p15, 0, %0, c13, c0, 3":"=r"(__tls)); \
+        __tls->ScheduleFlags &= ~TLSSF_Spin; \
+    } while(0)
+#define FLAG_SCHEDSPIN_ISSET \
+    ({ \
+        tls_t *__tls; \
+        asm volatile("mrc p15, 0, %0, c13, c0, 3":"=r"(__tls)); \
+        BOOL __ret = (__tls->ScheduleFlags & TLSSF_Spin) != 0; \
+        __ret;  \
+    })
 #endif
 
+/* TDNestCnt is per-CPU TLS, so no atomics. Blocks IRQ-exit dispatch
+ * without Forbid()/Permit(). */
 #define EXEC_BLOCK_DISPATCH_INC \
     do { \
         tls_t *__tls; \
