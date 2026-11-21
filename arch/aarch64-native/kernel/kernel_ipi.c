@@ -79,6 +79,7 @@ static inline void ipiq_unlock(int cpu, uint64_t daif)
  * can no longer find queued. Single writer per CPU. */
 static volatile APTR       ipi_call_exec_func[4];
 static volatile IPTR       ipi_call_exec_arg1[4];
+static volatile int        ipi_call_draining[4];
 
 static void core_HandleCallHookIPI(int cpu);
 
@@ -108,6 +109,8 @@ void core_IPIInit(void)
  * other. Break that by draining ours inline while we spin, as also in
  * an interrupt handler (FIQ masked, IDNestCnt unchanged).
  *
+ * Not from inside a drain: the canceller tracks one running call per CPU.
+ *
  * Call with NO task spinlock held: the drain runs hooks that take them.
  */
 static inline int core_FIQMasked(void)
@@ -132,7 +135,8 @@ struct CallIPIEntry *core_ClaimCallIPI(int cpu)
         if (cie)
             return cie;
 
-        if (IDNESTCOUNT_GET >= 0 || core_FIQMasked())
+        if ((IDNESTCOUNT_GET >= 0 || core_FIQMasked()) &&
+            !ipi_call_draining[srcCpu])
             core_HandleCallHookIPI(srcCpu);
     }
 }
@@ -276,6 +280,7 @@ static void core_HandleCallHookIPI(int cpu)
     /* Block dispatch across the drain: the hooks call Enable()/Reschedule(),
      * which would switch tasks from inside this FIQ handler. */
     EXEC_BLOCK_DISPATCH_INC;
+    ipi_call_draining[cpu] = 1;
 
     for (;;)
     {
@@ -310,6 +315,7 @@ static void core_HandleCallHookIPI(int cpu)
         ipiq_unlock(cpu, daif);
     }
 
+    ipi_call_draining[cpu] = 0;
     EXEC_BLOCK_DISPATCH_DEC;
 }
 

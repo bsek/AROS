@@ -290,23 +290,7 @@ struct Exec_PlatformData
         __tls->TDNestCnt--; \
     } while(0)
 
-/* Mask FIQ (here: the inter-core IPI) across scheduler-list and
- * task state sections - the IPI re-enters those locks via signal_hook.
- * The pair nests; the mailbox latches the IPI meanwhile. */
-#define EXEC_FIQ_DISABLE() \
-    ({ unsigned long __daif; \
-       asm volatile("mrs %0, daif\n\tmsr daifset, #1" : "=r"(__daif) :: "memory"); \
-       (unsigned int)(__daif & 0x40); })
-
-#define EXEC_FIQ_RESTORE(prevF) \
-    do { if (!(prevF)) asm volatile("msr daifclr, #1" ::: "memory"); } while(0)
-
-/* The Signal IPI arrives as an FIQ, so signal_hook must deliver inline
- * rather than call the full Signal(). */
-#define __AROSEXEC_IPI_RESTRICTED_CTX__
-
-/* Raw masking for code reachable from the FIQ handler, where Disable()'s
- * syscall would nest an exception on the handler's stack. */
+/* Raw IRQ+FIQ masking for the kernel-side scheduler code. Nests. */
 #define EXEC_IRQFIQ_DISABLE() \
     ({ unsigned long __daif; \
        asm volatile("mrs %0, daif\n\tmsr daifset, #3" : "=r"(__daif) :: "memory"); \

@@ -36,10 +36,7 @@ static void TaskLaunch(struct Task *parent, struct Task *task, struct Hook *plHo
     Enqueue(&SysBase->TaskReady, &task->tc_Node);
 #else
     task->tc_State = TS_INVALID;
-    /* Disable() masks the FIQ that would re-enter the scheduler locks. */
-    Disable();
     krnSysCallReschedTask(task, TS_READY);
-    Enable();
 #endif
 
     /*
@@ -106,9 +103,7 @@ static void TaskLaunch(struct Task *parent, struct Task *task, struct Hook *plHo
     {
        bug("[Exec] TaskLaunch: Unable to Launch on the selected CPU\n");
         // TODO: Free up all the task data ..
-        Disable();
         krnSysCallReschedTask(task, TS_REMOVED);
-        Enable();
         if (GetETask(task))
             KrnDeleteContext(GetETask(task)->et_RegFrame);
         CleanupETask(task);

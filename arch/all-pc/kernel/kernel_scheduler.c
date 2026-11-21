@@ -101,6 +101,8 @@ BOOL core_Schedule(void)
         else if (!(task->tc_Flags & TF_EXCEPT))
         {
 #if defined(__AROSEXEC_SMP__)
+            /* Idle CPUs only get here, so spinners are woken from here too */
+            exec_TaskUnspin();
             KrnSpinLock(&PrivExecBase(SysBase)->TaskReadySpinLock, NULL,
                         SPINLOCK_MODE_READ);
 #endif
@@ -324,6 +326,8 @@ struct Task *core_Dispatch(void)
     DSCHED(bug("[Kernel:%03u]" DEBUGFUNCCOLOR_SET " %s()" DEBUGCOLOR_RESET "\n", cpuNo, __func__);)
 
 #if defined(__AROSEXEC_SMP__)
+    exec_TaskUnspin();
+
     /* Ready to running in one step, under both list locks */
     exec_TaskListsLock(EXEC_TASKLIST_RUNNING, EXEC_TASKLIST_READY);
     for (newtask = (struct Task *)GetHead(&SysBase->TaskReady); newtask != NULL; newtask = (struct Task *)GetSucc(newtask))

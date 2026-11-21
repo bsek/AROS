@@ -71,9 +71,11 @@ BOOL core_Schedule(void)
     if (!(task->tc_Flags & TF_EXCEPT))
     {
 #if defined(__AROSEXEC_SMP__)
-        /* FIQ off: an IPI re-entering this read lock as a write would
-         * self-deadlock this CPU. See EXEC_FIQ_DISABLE in exec_platform.h. */
-        unsigned int __fiq = EXEC_FIQ_DISABLE();
+        /* IRQ+FIQ off: the IPI and the timer IRQ take this lock as a
+         * write, and re-entering it self-deadlocks this CPU. */
+        unsigned int __if = EXEC_IRQFIQ_DISABLE();
+        /* Idle CPUs only get here, so spinners are woken from here too */
+        exec_TaskUnspin();
         KrnSpinLock(&PrivExecBase(SysBase)->TaskReadySpinLock, NULL,
                     SPINLOCK_MODE_READ);
 #endif
@@ -115,7 +117,7 @@ BOOL core_Schedule(void)
         }
 #if defined(__AROSEXEC_SMP__)
         KrnSpinUnLock(&PrivExecBase(SysBase)->TaskReadySpinLock);
-        EXEC_FIQ_RESTORE(__fiq);
+        EXEC_IRQFIQ_RESTORE(__if);
 
         /* Nothing else to run: the spinner carries on */
         if ((!corereschedule) && (task->tc_State == TS_SPIN))
@@ -140,7 +142,7 @@ void core_Switch(void)
 #endif
     struct Task *task = GET_THIS_TASK;
 #if defined(__AROSEXEC_SMP__)
-    unsigned int __fiq;
+    unsigned int __if;
 #endif
 
     DSCHED(bug("[Kernel:%02d] core_Switch(%08x)\n", cpunum, task->tc_State));
@@ -161,7 +163,7 @@ void core_Switch(void)
         GetIntETask(task)->iet_QuantumLeft = SCHEDELAPSED_GET;
 
 #if defined(__AROSEXEC_SMP__)
-    __fiq = EXEC_FIQ_DISABLE();
+    __if = EXEC_IRQFIQ_DISABLE();
     if (FLAG_SCHEDPARK_ISSET)
     {
         FLAG_SCHEDPARK_CLEAR;
@@ -174,7 +176,7 @@ void core_Switch(void)
             if (task->tc_SigRecvd & (task->tc_SigWait | task->tc_SigExcept))
                 exec_TaskMove(task, TS_WAIT, TS_READY);
         }
-        EXEC_FIQ_RESTORE(__fiq);
+        EXEC_IRQFIQ_RESTORE(__if);
         return;
     }
 
@@ -209,7 +211,7 @@ void core_Switch(void)
         exec_TaskRelist(task, EXEC_TASKLIST_RUNNING, EXEC_TASKLIST_SPINNING,
                         TS_SPIN, TS_SPIN);
     }
-    EXEC_FIQ_RESTORE(__fiq);
+    EXEC_IRQFIQ_RESTORE(__if);
 #else
     if (task->tc_State == TS_RUN)
     {
@@ -252,14 +254,16 @@ struct Task *core_Dispatch(void)
 #endif
 #if defined(__AROSEXEC_SMP__)
     uint32_t cpumask = (1 << cpunum);
-    /* FIQ off: the IPI takes the list locks too. Nestable across the
+    /* IRQ+FIQ off: the IPI takes the list locks too. Nestable across the
      * recursive call below. */
-    unsigned int __fiq = EXEC_FIQ_DISABLE();
+    unsigned int __if = EXEC_IRQFIQ_DISABLE();
 #endif
 
     DSCHED(bug("[Kernel:%02d] core_Dispatch()\n", cpunum));
 
 #if defined(__AROSEXEC_SMP__)
+    exec_TaskUnspin();
+
     /* Ready to running in one step, under both list locks */
     exec_TaskListsLock(EXEC_TASKLIST_RUNNING, EXEC_TASKLIST_READY);
     for (newtask = (struct Task *)GetHead(&SysBase->TaskReady); newtask != NULL; newtask = (struct Task *)GetSucc(newtask))
@@ -384,7 +388,7 @@ struct Task *core_Dispatch(void)
     }
 
 #if defined(__AROSEXEC_SMP__)
-    EXEC_FIQ_RESTORE(__fiq);
+    EXEC_IRQFIQ_RESTORE(__if);
 #endif
     return newtask;
 }
@@ -445,7 +449,7 @@ void core_TaskCPUUsage(void)
     struct Task *t;
     ULONG now;
 #if defined(__AROSEXEC_SMP__)
-    unsigned int __fiq;
+    unsigned int __if;
 #endif
 
     if (!SysBase || !__arm_arosintern.ARMI_GetTime)
@@ -457,7 +461,7 @@ void core_TaskCPUUsage(void)
     core_TaskUsageStamp = now;
 
 #if defined(__AROSEXEC_SMP__)
-    __fiq = EXEC_FIQ_DISABLE();
+    __if = EXEC_IRQFIQ_DISABLE();
 
     KrnSpinLock(&PrivExecBase(SysBase)->TaskRunningSpinLock, NULL, SPINLOCK_MODE_READ);
     ForeachNode(&PrivExecBase(SysBase)->TaskRunning, t)
@@ -487,6 +491,6 @@ void core_TaskCPUUsage(void)
 #if defined(__AROSEXEC_SMP__)
     KrnSpinUnLock(&PrivExecBase(SysBase)->TaskWaitSpinLock);
 
-    EXEC_FIQ_RESTORE(__fiq);
+    EXEC_IRQFIQ_RESTORE(__if);
 #endif
 }

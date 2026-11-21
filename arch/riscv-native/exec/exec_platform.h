@@ -74,22 +74,11 @@ extern void Exec_SuicideSwitch(void);
         : : [n] "I"(SC_SUICIDESWITCH) : "a7", "memory")
 
 /*
- * Interrupt masking around scheduler-list sections. The
- * IPI is an ordinary software interrupt here (SSI, or MSI in M-mode),
- * masked by the status register's IE bit like every other, so the "FIQ"
- * and "IRQ+FIQ" pairs that rom/exec and the scheduler use are the same
- * operation. They nest: each returns the previous enable state for its
- * restore.
- *
- * Because the IPI is an ordinary interrupt, signal_hook may call the
- * full Signal(): __AROSEXEC_IPI_RESTRICTED_CTX__ is not defined.
+ * Interrupt masking for the kernel-side scheduler code. The IPI is an
+ * ordinary interrupt here, so IRQ+FIQ is just the IE bit. Nests.
  */
-#define EXEC_FIQ_DISABLE()          rv_intr_disable()
-
-#define EXEC_FIQ_RESTORE(prev)      rv_intr_restore(prev)
-
-#define EXEC_IRQFIQ_DISABLE()       EXEC_FIQ_DISABLE()
-#define EXEC_IRQFIQ_RESTORE(prev)   EXEC_FIQ_RESTORE(prev)
+#define EXEC_IRQFIQ_DISABLE()       rv_intr_disable()
+#define EXEC_IRQFIQ_RESTORE(prev)   rv_intr_restore(prev)
 
 #include "tls.h"
 

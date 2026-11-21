@@ -16,7 +16,14 @@ AROS_LH0I(void, KrnSti,
 {
     AROS_LIBFUNC_INIT
 
-    krnSysCall(SC_STI);
+    unsigned long spsel;
+
+    /* Handlers run at EL1h and may not trap again */
+    asm volatile("mrs %0, spsel" : "=r"(spsel));
+    if (spsel & 1)
+        asm volatile("msr daifclr, #3" ::: "memory");
+    else
+        krnSysCall(SC_STI);
 
     AROS_LIBFUNC_EXIT
 }

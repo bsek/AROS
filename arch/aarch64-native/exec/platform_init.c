@@ -209,13 +209,16 @@ AROS_UFH3(void, Exec_TaskSpinLockFailFunc,
     struct Task *spinTask = GET_THIS_TASK;
     struct IntETask *thisET;
 
-    if (spinTask && (thisET = GetIntETask(spinTask)))
+    /* Park only if we switch away now, or the task runs on in TS_SPIN */
+    if ((TDNESTCOUNT_GET < 0) && (IDNESTCOUNT_GET < 0))
     {
-        spinTask->tc_State = TS_SPIN;
-        thisET->iet_SpinLock = spinLock;
+        if (spinTask && (thisET = GetIntETask(spinTask)))
+        {
+            spinTask->tc_State = TS_SPIN;
+            thisET->iet_SpinLock = spinLock;
+        }
+        Reschedule();
     }
-
-    Reschedule();
 
     AROS_USERFUNC_EXIT
 }

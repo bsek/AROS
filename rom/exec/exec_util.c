@@ -393,11 +393,7 @@ BOOL Exec_CheckTask(struct Task *task, struct ExecBase *SysBase)
         return FALSE;
 
 #if defined(__AROSEXEC_SMP__)
-    /*
-     * Disable(), not Forbid(): the FIQ-delivered IPI takes these same
-     * locks for writing, and a writer spins while a reader holds them.
-     * Only Disable() masks that FIQ.
-     */
+    /* Disable(): interrupts on this CPU write these lists */
     Disable();
     EXEC_SPINLOCK_LOCK(&PrivExecBase(SysBase)->TaskRunningSpinLock, NULL, SPINLOCK_MODE_READ);
     ForeachNode(&PrivExecBase(SysBase)->TaskRunning, t)

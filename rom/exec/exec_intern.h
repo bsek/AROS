@@ -17,17 +17,6 @@
 #include <exec_platform.h>
 
 /*
- * Mask the IPI's FIQ around scheduler-list critical sections.
- * arm-native defines real versions in exec_platform.h (the IPI that delivers
- * cross-CPU Signal arrives as an FIQ and would re-enter these locks on the
- * same CPU via signal_hook). Arches without an FIQ-delivered IPI get no-ops.
- */
-#ifndef EXEC_FIQ_DISABLE
-#define EXEC_FIQ_DISABLE()      (0)
-#define EXEC_FIQ_RESTORE(x)     do { (void)(x); } while (0)
-#endif
-
-/*
  * Store-store barrier, for publishing a freshly built structure to a reader
  * that walks it lock-free. SMP arches define a real one in exec_platform.h;
  * on single-CPU builds there is no other observer, so a no-op is correct.
@@ -277,6 +266,37 @@ static inline void exec_TaskSetState(struct Task *task, ULONG newState)
     while (!exec_TaskMove(task, task->tc_State, newState))
         ;
 }
+
+#if defined(_ETASK_H)
+/*
+ * Make spinners whose lock has no writer ready again. They retry the
+ * lock when run, and the fail hook parks them again if it is still busy.
+ */
+static inline void exec_TaskUnspin(void)
+{
+    struct Task *task, *next;
+
+    if (IsListEmpty(&PrivExecBase(SysBase)->TaskSpinning))
+        return;
+
+    exec_TaskListsLock(EXEC_TASKLIST_READY, EXEC_TASKLIST_SPINNING);
+    ForeachNodeSafe(&PrivExecBase(SysBase)->TaskSpinning, task, next)
+    {
+        struct IntETask *iet = GetIntETask(task);
+        spinlock_t *lock = iet ? iet->iet_SpinLock : NULL;
+
+        if (!lock || !(lock->lock & SPINLOCKF_WRITE))
+        {
+            if (iet)
+                iet->iet_SpinLock = NULL;
+            Remove(&task->tc_Node);
+            task->tc_State = TS_READY;
+            Enqueue(&SysBase->TaskReady, &task->tc_Node);
+        }
+    }
+    exec_TaskListsUnlock(EXEC_TASKLIST_READY, EXEC_TASKLIST_SPINNING);
+}
+#endif
 
 #endif /* __AROSEXEC_SMP__ */
 

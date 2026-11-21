@@ -51,6 +51,11 @@ AROS_UFH3(void, Exec_TaskSpinLockFailFunc,
     struct IntETask *thisET;
 
     DSPIN(bug("[Exec:X86] %s()\n", __func__));
+
+    /* Park only if we switch away now, or the task runs on in TS_SPIN */
+    if ((TDNESTCOUNT_GET >= 0) || (IDNESTCOUNT_GET >= 0))
+        spinTask = NULL;
+
     if (spinTask)
     {
         thisET = GetIntETask(spinTask);
@@ -68,7 +73,8 @@ AROS_UFH3(void, Exec_TaskSpinLockFailFunc,
     DSPIN(bug("[Exec:X86] %s: Forcing Reschedule...\n", __func__));
 
     /* schedule us away for now .. */
-    Reschedule();
+    if (spinTask)
+        Reschedule();
 
     AROS_USERFUNC_EXIT
 }

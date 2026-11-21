@@ -303,48 +303,8 @@ struct Exec_PlatformData
     } while(0)
 
 /*
- * Mask FIQ across scheduler-list critical sections. On this
- * platform the ONLY FIQ source is the inter-core mailbox (the IPI). An IPI
- * that lands while this CPU holds a scheduler lock re-enters that lock via
- * bcm2708_fiq_process -> handle_ipi -> signal_hook -> Signal ->
- * Exec_ReschedTask on the SAME CPU and self-deadlocks (TaskReadySpinLock
- * read held by core_Schedule vs the IPI's write acquire). EXEC_BLOCK_DISPATCH
- * stops the dispatcher but not FIQ, so it does not cover this.
- *
- * EXEC_FIQ_DISABLE returns the prior F bit and disables FIQ; EXEC_FIQ_RESTORE
- * re-enables FIQ only if it was enabled on entry, so the pair nests safely
- * (an already-in-FIQ caller stays masked). The mailbox SET register latches
- * the pending IPI; bcm2708_fiq_process drains it the moment FIQ is unmasked,
- * so nothing is lost - delivery is just deferred to the end of the section.
- */
-#define EXEC_FIQ_DISABLE() \
-    ({ unsigned int __cpsr; \
-       asm volatile("mrs %0, cpsr\n\tcpsid f" : "=r"(__cpsr) :: "memory"); \
-       (__cpsr & 0x40); })
-
-#define EXEC_FIQ_RESTORE(prevF) \
-    do { if (!(prevF)) asm volatile("cpsie f" ::: "memory"); } while(0)
-
-/*
- * The cross-CPU Signal IPI is delivered as an FIQ on this platform, so its
- * hook (signal_hook in rom/exec/signal.c) runs in restricted interrupt
- * context: it must NOT call the full Signal() (Disable()/Enable() issue svc
- * syscalls that nest on the FIQ SVC stack, and Reschedule() would switch
- * tasks from inside the handler). signal_hook therefore delivers inline.
- * Arches whose Signal IPI arrives as an ordinary interrupt leave this
- * undefined and signal_hook just calls Signal().
- */
-#define __AROSEXEC_IPI_RESTRICTED_CTX__
-
-/*
- * Raw IRQ+FIQ mask/restore (privileged only). Used by scheduler primitives
- * that are reachable from the FIQ/IPI handler (Exec_ReschedTask) where the
- * exec Disable()/Enable() path is unusable: Disable() always issues a
- * KrnCli svc, and that svc nests an exception on the FIQ-handler SVC stack.
- * Raw cpsid avoids the syscall. Saves and restores the prior I|F bits so it
- * nests and leaves an already-masked caller masked. In USER mode cpsid is a
- * no-op, but every such caller already holds interrupts off (Signal Disable's
- * first, the IPI handler runs FIQ/IRQ-masked), so it is safe there too.
+ * Raw IRQ+FIQ mask/restore for the kernel-side scheduler code. Nests:
+ * returns the prior I|F bits. A no-op in USR mode.
  */
 #define EXEC_IRQFIQ_DISABLE() \
     ({ unsigned int __cpsr; \

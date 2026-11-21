@@ -39,38 +39,7 @@ AROS_UFH3(IPTR, signal_hook,
         bug("[Exec] CPU%03d: Using IPI to do Signal(%p, %08x), SysBase=%p\n", cpunum, target, sigset, SysBase);
     );
 
-#if defined(__AROSEXEC_IPI_RESTRICTED_CTX__)
-    /*
-     * Delivered as an FIQ here, so the full Signal() is out: it needs
-     * Disable()/Enable() syscalls and may reschedule from inside this
-     * handler. Deliver locally instead and let core_ExitInterrupt take
-     * the switch on return.
-     */
-    __AROS_ATOMIC_OR_L(target->tc_SigRecvd, sigset);
-
-    if (target->tc_State == TS_INVALID ||
-        target->tc_State == TS_REMOVED ||
-        target->tc_State == TS_TOMBSTONED)
-        return 0;
-
-    /* Bits before state; the switch that parks reads them after. */
-    __atomic_thread_fence(__ATOMIC_SEQ_CST);
-
-    if (target->tc_SigRecvd & target->tc_SigExcept)
-        __AROS_ATOMIC_OR_B(target->tc_Flags, TF_EXCEPT);
-
-    if (target->tc_SigRecvd & (target->tc_SigWait | target->tc_SigExcept))
-    {
-        /* The reschedule ignores a task that is no longer waiting */
-        if (target->tc_State == TS_WAIT)
-            krnSysCallReschedTask(target, TS_READY);
-        /* Let the FIQ-exit dispatcher pick it up */
-        FLAG_SCHEDSWITCH_SET;
-    }
-#else
-    /* Ordinary interrupt here, so the full Signal() is safe. */
     Signal(target, sigset);
-#endif
 
     return 0;
 
@@ -202,8 +171,8 @@ void Exec_SignalSlow(struct Task *task, ULONG signalSet, struct ExecBase *SysBas
              * a terminal task under the queue lock, so teardown's sweep
              * cannot miss it.
              */
-            cie = core_ClaimCallIPI(targetcpu);
             Disable();
+            cie = core_ClaimCallIPI(targetcpu);
             if (!core_CommitCallIPI(cie, targetcpu, &h, 3, args, task))
                 __AROS_ATOMIC_OR_L(task->tc_SigRecvd, signalSet);
             Enable();

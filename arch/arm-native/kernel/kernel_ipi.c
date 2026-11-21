@@ -75,6 +75,7 @@ static BOOL                ipi_call_inited = FALSE;
  */
 static volatile APTR       ipi_call_exec_func[4];
 static volatile IPTR       ipi_call_exec_arg1[4];
+static volatile int        ipi_call_draining[4];
 
 static void core_HandleCallHookIPI(int cpu);
 
@@ -96,28 +97,16 @@ void core_IPIInit(void)
 }
 
 /*
- * Claim a free pool entry for the given target. If the pool is
- * momentarily exhausted, the target already has IPI_CALL_HOOK
- * entries queued (an IPI was sent for each) and drains them back to
- * its free list from its FIQ handler. Spin until one frees rather
- * than dropping the call: the hook is signal_hook, so a dropped IPI
- * is a lost wakeup that hangs the waiting task forever.
+ * Claim a free entry for the target, spinning rather than dropping the
+ * call - a dropped IPI is a lost wakeup that hangs a task forever.
  *
- * The claim only runs in task/IRQ context (signal_hook does its work
- * inline and never calls Signal(), so the FIQ path never re-enters
- * here). With FIQ unmasked the target always drains promptly. The one
- * cycle left is Signal() under Disable(): FIQ is masked here, so this
- * CPU cannot drain its own inbound queue - two Disable()-d CPUs
- * cross-signalling with exhausted pools would wait on each other's
- * drains forever. Break it by draining our own queue inline while we
- * spin: that refills OUR pool, unblocking the peer, whose Enable()
- * eventually refills the pool we are waiting for. Safe precisely
- * because FIQ is masked - the FIQ drain cannot run concurrently, so
- * the executing-slot publication keeps its single writer per CPU.
+ * Call under Disable(): the queue lock is also taken by this CPU's FIQ
+ * drain. That also stops this CPU draining its own inbound queue, so two
+ * CPUs cross-signalling with empty pools would wait on each other. Break
+ * that by draining ours inline while we spin, but not from inside a drain:
+ * the canceller tracks one running call per CPU.
  *
- * Corollary: call this with NO task spinlock held. The drains that
- * refill pools run hooks that take task spinlocks, so spinning here
- * while holding one could deadlock.
+ * Call with NO task spinlock held: the drain runs hooks that take them.
  */
 struct CallIPIEntry *core_ClaimCallIPI(int cpu)
 {
@@ -133,7 +122,7 @@ struct CallIPIEntry *core_ClaimCallIPI(int cpu)
         if (cie)
             return cie;
 
-        if (IDNESTCOUNT_GET >= 0)
+        if ((IDNESTCOUNT_GET >= 0) && !ipi_call_draining[srcCpu])
             core_HandleCallHookIPI(srcCpu);
     }
 }
@@ -280,16 +269,13 @@ int core_DoCallIPI(struct Hook *hook, void *cpu_mask, int async,
 static void core_HandleCallHookIPI(int cpu)
 {
     /*
-     * Block dispatch across the whole drain. The hooks here (signal_hook ->
+     * Block dispatch across the whole drain: the hooks (signal_hook ->
      * Signal()) call Enable()/Reschedule(), which would otherwise switch
-     * tasks *now* - from inside this FIQ handler, on the nested SVC stack -
-     * corrupting the interrupted context. With dispatch blocked, Signal()
-     * only sets FLAG_SCHEDSWITCH; the switch is taken cleanly by
-     * core_ExitInterrupt when this FIQ returns to a task context. (The
-     * scheduler-list lock re-entrancy this used to expose is handled by the
-     * EXEC_FIQ_DISABLE masking in the scheduler critical sections.)
+     * tasks from inside this FIQ handler. The switch is taken by
+     * core_ExitInterrupt when the FIQ returns to a task.
      */
     EXEC_BLOCK_DISPATCH_INC;
+    ipi_call_draining[cpu] = 1;
 
     for (;;)
     {
@@ -335,6 +321,7 @@ static void core_HandleCallHookIPI(int cpu)
         EXEC_SPINLOCK_UNLOCK(&ipi_call_queue_lock[cpu]);
     }
 
+    ipi_call_draining[cpu] = 0;
     EXEC_BLOCK_DISPATCH_DEC;
 }
 

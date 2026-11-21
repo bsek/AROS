@@ -98,11 +98,7 @@
             task->tc_State = TS_REMOVED;
             Remove(&task->tc_Node);
 #else
-            /* Disable(), not Forbid(): only it masks the FIQ whose
-             * signal_hook would re-enter these same locks. */
-            Disable();
             krnSysCallReschedTask(task, TS_REMOVED);
-            Enable();
 #endif
         }
 

@@ -16,7 +16,14 @@ AROS_LH0I(void, KrnCli,
 {
     AROS_LIBFUNC_INIT
 
-    krnSysCall(SC_CLI);
+    unsigned int cpsr;
+
+    /* Privileged modes mask directly, a nested swi would clobber lr_svc */
+    asm volatile("mrs %0, cpsr" : "=r"(cpsr));
+    if ((cpsr & 0x1f) != 0x10)
+        asm volatile("cpsid if" ::: "memory");
+    else
+        krnSysCall(SC_CLI);
 
     AROS_LIBFUNC_EXIT
 }

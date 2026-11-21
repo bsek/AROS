@@ -79,14 +79,16 @@ int Kernel_13_KrnIsSuper();
     AROS_LIBFUNC_INIT
 
 #if defined(KRNSPIN_ATOMICS)
+    /* Kernel context takes none of the task path (no owner, no hook) */
+    struct Task *me = NULL;
+
+    if (((mode == SPINLOCK_MODE_WRITE) || failhook) && !Kernel_13_KrnIsSuper())
+        me = GET_THIS_TASK;
+
     if (mode == SPINLOCK_MODE_WRITE)
     {
-        struct Task *me = NULL;
         BYTE old_pri = 0;
         BOOL priority_changed = FALSE, can_drop;
-
-        if (!Kernel_13_KrnIsSuper())
-            me = GET_THIS_TASK;
 
         /* Under Disable() or Forbid() we keep the CPU anyway */
         can_drop = (me && (IDNESTCOUNT_GET < 0) && (TDNESTCOUNT_GET < 0));
@@ -97,7 +99,7 @@ int Kernel_13_KrnIsSuper();
 
             krnSpinPause(lock, ~0);
 
-            if (failhook)
+            if (failhook && me)
                 CALLHOOKPKT(failhook, (APTR)lock, 0);
 
             /* Let a lower priority owner get the CPU */
@@ -123,7 +125,7 @@ int Kernel_13_KrnIsSuper();
         {
             krnSpinPause(lock, KRNSPIN_BUSY_FOR_READ);
 
-            if (failhook)
+            if (failhook && me)
                 CALLHOOKPKT(failhook, (APTR)lock, 0);
         }
     }
